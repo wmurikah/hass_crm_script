@@ -492,6 +492,17 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
+// Session injected by Code.gs doGet()
+const SESSION = (function() {
+  try { return JSON.parse('<?= SESSION ?>'); }
+  catch(e) { return {}; }
+})();
+
+// Redirect if no valid session
+if (!SESSION || !SESSION.token) {
+  window.location.href = window.location.href.split('?')[0];
+}
+
 const AFFILIATE_MAP={KE:{code:'HPK',name:'Kenya'},UG:{code:'HPU',name:'Uganda'},TZ:{code:'HPT',name:'Tanzania'},RW:{code:'HPR',name:'Rwanda'},SS:{code:'HSS',name:'South Sudan'},ZM:{code:'HPZ',name:'Zambia'},DRC:{code:'HPC',name:'DR Congo'},HTW:{code:'HTW',name:'Terminal'}};
 let currentCustomer=null, currentContact=null;
 
@@ -595,9 +606,22 @@ function changePassword(){
   }).processRequest({service:'auth',action:'changePassword',currentPassword:document.getElementById('curPwd').value,newPassword:n});
 }
 
-function doLogout(){google.script.run.withSuccessHandler(function(){google.script.host.close();}).processRequest({service:'auth',action:'logout'});}
+function doLogout(){
+  var token = sessionStorage.getItem('hass_token') || (SESSION && SESSION.token) || '';
+  sessionStorage.clear();
+  if (typeof google !== 'undefined' && google.script && token) {
+    google.script.run.handlePortalAuth({ action: 'logout', token: token });
+  }
+  var base = window.location.href.split('?')[0];
+  window.location.href = base;
+}
 
-document.addEventListener('DOMContentLoaded',function(){showPage('dashboard');});
+document.addEventListener('DOMContentLoaded',function(){
+  showPage('dashboard');
+  // Populate user greeting
+  var nameEl = document.getElementById('customerName');
+  if (nameEl) nameEl.textContent = SESSION.name || 'Customer';
+});
 
 /* ===== Consumption Analytics ===== */
 let currentPeriod = 'month';

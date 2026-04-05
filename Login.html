@@ -908,25 +908,40 @@ body {
 (function() {
   'use strict';
 
-  /* ── Logo loading ── */
+  /* ── Page load: logo, session check, server error ── */
   document.addEventListener('DOMContentLoaded', function() {
-    try {
+    // Load logo from Drive
+    if (typeof google !== 'undefined' && google.script) {
+      google.script.run.withSuccessHandler(function(url) {
+        if (url) {
+          document.querySelectorAll('.brand-logo').forEach(function(el){ el.src = url; });
+          var img = document.getElementById('logo');
+          if (img) { img.src = url; img.style.display = 'inline'; }
+          var fallback = document.getElementById('logoFallback');
+          if (fallback) fallback.style.display = 'none';
+        }
+      }).getLogoUrl();
+    }
+
+    // If already have a valid token, redirect immediately
+    var storedToken = sessionStorage.getItem('hass_token');
+    if (storedToken && typeof google !== 'undefined' && google.script) {
       google.script.run
-        .withSuccessHandler(function(url) {
-          if (url) {
-            var img = document.getElementById('logo');
-            img.src = url;
-            img.style.display = 'inline';
-            document.getElementById('logoFallback').style.display = 'none';
+        .withSuccessHandler(function(session) {
+          if (session && session.valid) {
+            redirectByRole(session);
+          } else {
+            sessionStorage.removeItem('hass_token');
           }
         })
-        .withFailureHandler(function() {
-          /* Fallback text already visible */
-        })
-        .getLogoUrl();
-    } catch (e) {
-      /* Running outside GAS - fallback text stays visible */
+        .handlePortalAuth({ action: 'checkSession', token: storedToken });
     }
+
+    // Show any server-side error passed via template
+    var serverError = '<?= errorMessage ?>';
+    if (serverError) showLoginError(serverError);
+
+    setupStrengthMeter();
   });
 
   /* ── Toggle password visibility ── */
@@ -1065,20 +1080,7 @@ body {
     var accountType = document.getElementById('accountType').value;
     var emailVal = document.getElementById('loginEmail').value.trim();
     var passwordVal = document.getElementById('loginPassword').value;
-    var rememberMe = document.getElementById('rememberMe').checked;
-
-    var payload = {
-      service: 'auth',
-      action: 'login',
-      email: emailVal,
-      password: passwordVal,
-      accountType: accountType,
-      rememberMe: rememberMe
-    };
-
-    if (accountType === 'Corporate Account') {
-      payload.corporateName = document.getElementById('loginCorpName').value.trim();
-    }
+    var corpName = document.getElementById('loginCorpName') ? document.getElementById('loginCorpName').value.trim() : '';
 
     setLoginLoading(true);
     hideLoginError();
@@ -1088,6 +1090,12 @@ body {
         .withSuccessHandler(function(result) {
           setLoginLoading(false);
           if (result && result.success) {
+            sessionStorage.setItem('hass_token',    result.token);
+            sessionStorage.setItem('hass_userId',   result.userId);
+            sessionStorage.setItem('hass_role',     result.role);
+            sessionStorage.setItem('hass_userType', result.userType);
+            sessionStorage.setItem('hass_name',     result.name);
+            if (result.customerId) sessionStorage.setItem('hass_customerId', result.customerId);
             window.location.href = result.redirectUrl;
           } else {
             var errorMsg = (result && result.error) ? result.error : 'Login failed. Please check your credentials.';
@@ -1097,16 +1105,32 @@ body {
         })
         .withFailureHandler(function(err) {
           setLoginLoading(false);
-          showLoginError('Connection error. Please try again.');
+          showLoginError('Connection error. Please check your internet and try again.');
           shakeCard();
         })
-        .handleAuthRequest(payload);
+        .handlePortalAuth({
+          action:        'login',
+          email:         emailVal,
+          password:      passwordVal,
+          accountType:   accountType,
+          corporateName: corpName
+        });
     } catch (e) {
       setLoginLoading(false);
       showLoginError('Unable to connect to the server. Please try again later.');
       shakeCard();
     }
   });
+
+  /* ── Redirect by role after valid session ── */
+  function redirectByRole(session) {
+    var base = window.location.href.split('?')[0];
+    if (session.userType === 'STAFF') {
+      window.location.href = base + '?page=staff&token=' + session.token;
+    } else {
+      window.location.href = base + '?page=portal&token=' + session.token;
+    }
+  }
 
   /* ── SSO handler ── */
   window.handleSso = function(provider) {
@@ -1320,8 +1344,7 @@ body {
           showSignupError('Verification failed. Please try again.');
           shakeCard();
         })
-        .handleAuthRequest({
-          service: 'auth',
+        .handlePortalAuth({
           action: 'verifyAccount',
           companyName: companyName,
           accountNumber: accountNumber
@@ -1493,17 +1516,6 @@ body {
       extraFields.jobTitle = document.getElementById('signupJobTitle').value.trim();
     }
 
-    var payload = {
-      service: 'auth',
-      action: 'signup',
-      accountType: accountType,
-      name: document.getElementById('signupName').value.trim(),
-      email: document.getElementById('signupEmail').value.trim(),
-      phone: document.getElementById('phoneCountryCode').value + document.getElementById('signupPhone').value.trim(),
-      password: document.getElementById('signupPassword').value,
-      extraFields: extraFields
-    };
-
     var btn = document.getElementById('signupBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Creating account...';
@@ -1528,7 +1540,17 @@ body {
           showSignupError('Sign up failed. Please try again.');
           shakeCard();
         })
-        .handleAuthRequest(payload);
+        .handlePortalAuth({
+          action:             'signup',
+          accountType:        accountType,
+          name:               document.getElementById('signupName').value.trim(),
+          email:              document.getElementById('signupEmail').value.trim(),
+          phone:              (document.getElementById('phoneCountryCode') ? document.getElementById('phoneCountryCode').value : '+254') + document.getElementById('signupPhone').value.trim(),
+          password:           document.getElementById('signupPassword').value,
+          verifiedCustomerId: window._verifiedCustomerId || '',
+          jobTitle:           document.getElementById('signupJobTitle') ? document.getElementById('signupJobTitle').value.trim() : '',
+          extraFields:        extraFields
+        });
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Create Account';
@@ -1593,8 +1615,7 @@ body {
           showForgotError('Could not send reset link. Please check your email address.');
           shakeCard();
         })
-        .handleAuthRequest({
-          service: 'auth',
+        .handlePortalAuth({
           action: 'requestPasswordReset',
           email: email
         });
