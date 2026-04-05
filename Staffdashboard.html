@@ -6,539 +6,551 @@
 <title>Hass Petroleum - Staff Dashboard</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/feather-icons"></script>
 <style>
 :root {
-  --hp-navy-900: #0D1442; --hp-navy-800: #1A237E; --hp-navy-700: #283593; --hp-navy-600: #3949AB;
-  --hp-orange-600: #E65100; --hp-orange-500: #FF6F00; --hp-orange-400: #FF8F00;
-  --hp-sidebar-width: 260px; --hp-header-height: 64px;
-  --bs-primary: #1A237E; --bs-primary-rgb: 26,35,126;
-  --bs-font-sans-serif: 'DM Sans', system-ui, -apple-system, sans-serif;
-  --bs-body-bg: #f1f5f9; --bs-body-color: #1e293b;
-  --bs-border-color: #e2e8f0; --bs-card-border-color: #e2e8f0; --bs-card-bg: #ffffff;
+  --navy-900: #0D1442;
+  --navy-800: #1A237E;
+  --navy-700: #283593;
+  --orange-500: #FF6F00;
+  --orange-600: #E65100;
+  --slate-50:  #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-600: #64748b;
+  --slate-800: #1e293b;
+  --green-500: #16a34a;
+  --red-500:   #dc2626;
+  --amber-500: #d97706;
 }
-body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); margin: 0; }
-.hp-sidebar { width: var(--hp-sidebar-width); background: linear-gradient(180deg, var(--hp-navy-900) 0%, var(--hp-navy-800) 100%); color: #fff; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1040; display: flex; flex-direction: column; }
-.hp-logo-mark { width: 40px; height: 40px; background: linear-gradient(135deg, var(--hp-orange-500), var(--hp-orange-600)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Space Mono', monospace; font-weight: 700; color: #fff; font-size: 18px; box-shadow: 0 4px 12px rgba(255,111,0,0.35); }
-.hp-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin: 2px 10px; border-radius: 8px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); cursor: pointer; transition: all 0.15s; text-decoration: none; }
-.hp-nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
-.hp-nav-item.active { background: var(--hp-orange-500); color: #fff; box-shadow: 0 2px 8px rgba(255,111,0,0.3); }
-.hp-main { margin-left: var(--hp-sidebar-width); }
-.hp-header { height: var(--hp-header-height); background: #ffffff; border-bottom: 1px solid var(--bs-border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 1030; }
-.hp-content { padding: 24px; }
-.hp-card { background: #ffffff; border: 1px solid var(--bs-border-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
-.hp-card-header { padding: 16px 20px; border-bottom: 1px solid var(--bs-border-color); display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 15px; color: #1e293b; }
-.hp-kpi { background: #fff; border: 1px solid var(--bs-border-color); border-radius: 10px; padding: 18px 20px; }
-.hp-kpi .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 8px; }
-.hp-kpi .value { font-family: 'Space Mono', monospace; font-size: 26px; font-weight: 700; line-height: 1; color: #1e293b; }
-.hp-kpi .sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
-.btn-hp-primary { background: var(--hp-orange-500); color: #fff; border: none; font-weight: 600; }
-.btn-hp-primary:hover { background: var(--hp-orange-600); color: #fff; box-shadow: 0 4px 12px rgba(255,111,0,0.25); }
-.btn-hp-navy { background: var(--hp-navy-800); color: #fff; border: none; font-weight: 600; }
-.btn-hp-navy:hover { background: var(--hp-navy-900); color: #fff; }
-.hp-table th { background: #f8fafc; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748b; border-bottom: 2px solid var(--bs-border-color); padding: 10px 14px; white-space: nowrap; }
-.hp-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #475569; }
-.hp-table tbody tr:hover td { background: #f8fafc; }
-.hp-table .cell-primary { font-weight: 600; color: #1e293b; }
-.hp-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; }
-.hp-badge-new { background: #e0f2fe; color: #0284c7; } .hp-badge-open { background: #fef3c7; color: #d97706; }
-.hp-badge-prog { background: rgba(26,35,126,0.1); color: #1A237E; } .hp-badge-done { background: #dcfce7; color: #16a34a; }
-.hp-badge-closed { background: #f1f5f9; color: #64748b; } .hp-badge-escd { background: #fee2e2; color: #dc2626; }
-.hp-badge-crit { background: #fee2e2; color: #dc2626; } .hp-badge-high { background: #fef3c7; color: #d97706; }
-.hp-badge-med { background: #e0f2fe; color: #0284c7; } .hp-badge-low { background: #f1f5f9; color: #64748b; }
-.hp-sla-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; width: 100px; }
-.hp-sla-fill { height: 100%; border-radius: 3px; }
-.hp-sla-ok { background: #22c55e; } .hp-sla-warn { background: #f59e0b; } .hp-sla-crit { background: #ef4444; }
-.hp-modal-header { background: #f8fafc; border-bottom: 1px solid var(--bs-border-color); }
-.hp-form-label { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
-.form-control:focus, .form-select:focus { border-color: var(--hp-navy-700); box-shadow: 0 0 0 3px rgba(40,53,147,0.12); }
-.hp-toast { min-width: 300px; border-radius: 8px; font-weight: 500; }
-.hp-thread { background: #f8fafc; border-radius: 10px; padding: 16px; max-height: 360px; overflow-y: auto; }
-.hp-bubble-customer { background: var(--hp-navy-800); color: #fff; border-radius: 12px; padding: 10px 14px; max-width: 75%; margin-bottom: 10px; }
-.hp-bubble-agent { background: #ffffff; border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 10px 14px; max-width: 75%; color: #334155; margin-bottom: 10px; margin-left: auto; }
-.hp-bubble-internal { background: #fef3c7; border-left: 3px solid var(--hp-orange-500); border-radius: 8px; padding: 10px 14px; color: #92400e; font-size: 13px; margin-bottom: 10px; }
-.hp-page { display: none; } .hp-page.active { display: block; }
-.report-card { background: #fff; border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 24px; text-align: center; transition: all 0.15s; }
-.report-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-.report-card .icon { font-size: 32px; margin-bottom: 12px; }
-.report-card .title { font-weight: 600; font-size: 15px; color: #1e293b; margin-bottom: 6px; }
-.report-card .desc { font-size: 12px; color: #64748b; margin-bottom: 16px; }
-::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 
-/* Chat Panel Layout */
-.ticket-detail-split { display:grid; grid-template-columns:1fr 360px; gap:0; align-items:start; height:100%; }
-.ticket-detail-left { overflow-y:auto; height:100%; border-right:1px solid #e2e8f0; padding-right:0; }
-.ticket-detail-right { height:100%; display:flex; flex-direction:column; background:#f8fafc; overflow:hidden; }
-@media(max-width:1100px){ .ticket-detail-split { grid-template-columns:1fr; } .ticket-detail-right { height:auto; border-top:1px solid #e2e8f0; } }
+*, *::before, *::after { box-sizing: border-box; }
+body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: var(--slate-50); }
 
-/* Customer Profile Card */
-.staff-customer-profile { padding:14px 16px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:12px; }
-.profile-avatar { width:40px; height:40px; border-radius:10px; background:#e0e7ff; color:#3730a3; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.profile-info { flex:1; min-width:0; }
-.profile-company { font-size:13px; font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.profile-account { font-size:11px; color:#64748b; margin-top:2px; }
-.profile-stats { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid #e2e8f0; background:#fff; }
-.profile-stat { padding:10px 8px; text-align:center; border-right:1px solid #e2e8f0; }
-.profile-stat:last-child { border-right:none; }
-.profile-stat-value { font-size:13px; font-weight:700; color:#1e293b; font-family:'Space Mono',monospace; }
-.profile-stat-label { font-size:10px; color:#94a3b8; margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
+/* ── App Grid ── */
+#app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  grid-template-rows: 56px 1fr;
+  min-height: 100vh;
+  background: var(--slate-50);
+}
 
-/* Quick Actions */
-.staff-quick-actions { padding:8px 12px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.qa-btn { display:flex; align-items:center; gap:5px; padding:5px 10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; color:#1e293b; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
-.qa-btn:hover { border-color:#1A237E; color:#1A237E; }
-.qa-btn-escalate:hover { border-color:#dc2626; color:#dc2626; }
-.qa-status-select { padding:5px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:11px; font-weight:600; color:#1e293b; background:#fff; cursor:pointer; font-family:inherit; }
+#sidebar {
+  grid-row: 1 / -1;
+  grid-column: 1;
+  background: var(--navy-900);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+}
 
-/* Chat Tabs */
-.staff-chat-tabs { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; flex-shrink:0; }
-.staff-tab { flex:1; padding:10px 8px; border:none; background:none; font-size:13px; font-weight:500; color:#64748b; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:5px; }
-.staff-tab:hover { color:#1e293b; }
-.staff-tab.active { color:#1A237E; border-bottom-color:#1A237E; font-weight:600; }
-.tab-badge { min-width:16px; height:16px; border-radius:8px; background:#dc2626; color:#fff; font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; padding:0 4px; }
+#topbar {
+  grid-row: 1;
+  grid-column: 2;
+  background: #fff;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+}
 
-/* Chat Messages */
-.staff-chat-messages { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; background:#f8fafc; }
-.staff-chat-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#94a3b8; font-size:13px; padding:20px; }
-.staff-chat-input-area { border-top:1px solid #e2e8f0; padding:10px 12px; background:#fff; flex-shrink:0; }
-.staff-input-row { margin-bottom:8px; }
-.staff-chat-textarea { width:100%; border:1.5px solid #e2e8f0; border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; resize:none; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
-.staff-chat-textarea:focus { border-color:#1A237E; }
-.staff-input-actions { display:flex; align-items:center; justify-content:space-between; }
-.input-hint { font-size:11px; color:#94a3b8; }
-.staff-send-btn { padding:7px 16px; background:#1A237E; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s; }
-.staff-send-btn:hover { background:#283593; }
+#mainContent {
+  grid-row: 2;
+  grid-column: 2;
+  overflow-y: auto;
+  padding: 24px;
+}
 
-/* Internal Notes */
-.msg { max-width:85%; }
-.msg-customer { align-self:flex-end; }
-.msg-agent { align-self:flex-start; }
-.msg-internal { align-self:stretch; border-radius:10px; overflow:hidden; border:1px solid #fde68a; }
-.internal-note-header { background:#fef3c7; padding:6px 12px; display:flex; align-items:center; gap:6px; font-size:11px; color:#92400e; }
-.lock-icon { font-size:12px; }
-.internal-label { font-weight:700; font-size:11px; }
-.note-author { margin-left:auto; font-weight:600; }
-.internal-bubble { background:#fefce8; padding:10px 14px; font-size:13px; color:#1e293b; line-height:1.5; }
-.customer-bubble { background:var(--hp-navy-800); color:#fff; border-radius:12px 12px 4px 12px; padding:10px 14px; font-size:13px; line-height:1.5; }
-.customer-bubble .msg-author { font-size:11px; font-weight:600; opacity:0.8; margin-bottom:3px; }
-.customer-bubble .msg-time { font-size:10px; opacity:0.6; margin-top:4px; }
-.agent-bubble { background:#fff; border:1px solid #e2e8f0; border-radius:12px 12px 12px 4px; padding:10px 14px; font-size:13px; color:#334155; line-height:1.5; }
-.agent-bubble .msg-author { font-size:11px; font-weight:600; color:#1A237E; margin-bottom:3px; }
-.agent-bubble .msg-time { font-size:10px; color:#94a3b8; margin-top:4px; }
+/* ── Sidebar ── */
+.sidebar-header {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
 
-/* Notes Tab */
-.notes-tab-content { display:flex; flex-direction:column; flex:1; min-height:0; }
-.notes-history { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
-.notes-input-area { padding:12px; border-top:1px solid #e2e8f0; background:#fff; flex-shrink:0; }
-.staff-note-textarea { width:100%; border:1.5px solid #fde68a; border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; resize:none; outline:none; background:#fefce8; box-sizing:border-box; }
-.staff-note-textarea:focus { border-color:#f59e0b; }
-.notes-input-actions { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
-.notes-warning { display:flex; align-items:center; gap:4px; font-size:11px; color:#92400e; }
-.staff-note-btn { padding:7px 16px; background:#f59e0b; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.sidebar-brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.3px;
+}
 
-/* History Tab */
-.history-tab-content { flex:1; overflow-y:auto; background:#f8fafc; }
-.history-ticket-item { padding:10px 14px; border-bottom:1px solid #e2e8f0; cursor:pointer; transition:background 0.15s; background:#fff; }
-.history-ticket-item:hover { background:#f0f4ff; }
-.history-ticket-num { font-size:11px; font-weight:700; color:#1A237E; margin-bottom:3px; }
-.history-ticket-subject { font-size:12px; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.history-ticket-meta { display:flex; gap:6px; margin-top:4px; align-items:center; }
-.history-status-badge { font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600; }
-.history-ticket-date { font-size:10px; color:#94a3b8; margin-left:auto; }
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
 
-/* Notification Nudge */
-.notif-nudge { background:#f0f4ff; border-bottom:1px solid #c7d2fe; padding:8px 14px; display:flex; align-items:center; gap:8px; font-size:12px; color:#3730a3; flex-shrink:0; }
-.notif-nudge button { padding:3px 8px; border-radius:4px; border:1px solid #c7d2fe; background:#fff; font-size:11px; cursor:pointer; }
-.sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.sidebar-brand span { font-weight: 600; font-size: 15px; }
-.sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
-.sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
-.nav-section { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.4); padding: 16px 20px 6px; }
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.3);
+  padding: 16px 16px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  color: rgba(255,255,255,0.65);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.nav-item:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.nav-item.active {
+  background: rgba(255,111,0,0.15);
+  color: #FF6F00;
+  border-left: 3px solid #FF6F00;
+  padding-left: 13px;
+}
+
+.nav-item.active svg { color: #FF6F00; }
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--red-500);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.nav-badge.live {
+  background: var(--green-500);
+}
+
+/* ── Sidebar User ── */
+.sidebar-user {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--orange-500);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-info { min-width: 0; flex: 1; }
+
+.user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.user-role {
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
+}
+
+.logout-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.logout-btn:hover { color: var(--orange-500); }
+
+/* ── Topbar ── */
+.topbar-select {
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--slate-800);
+  background: #fff;
+  cursor: pointer;
+}
+
+.topbar-icon-btn {
+  position: relative;
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--slate-600);
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.topbar-icon-btn:hover { background: var(--slate-100); }
+
+.topbar-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--red-500);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+
+.topbar-user:hover { background: var(--slate-100); }
+
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--navy-800);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Page sections ── */
+.page-section { display: none; }
+
+.page-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  background: #fff;
+  border: 2px dashed var(--slate-200);
+  border-radius: 12px;
+  color: var(--slate-600);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* ── Mobile hamburger ── */
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--slate-800);
+  padding: 8px;
+  cursor: pointer;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 99;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  #app {
+    grid-template-columns: 1fr;
+  }
+  #sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 240px;
+    z-index: 100;
+    transform: translateX(-100%);
+  }
+  #sidebar.open {
+    transform: translateX(0);
+  }
+  #sidebar.open + .sidebar-overlay {
+    display: block;
+  }
+  #topbar {
+    grid-column: 1;
+  }
+  #mainContent {
+    grid-column: 1;
+  }
+  .mobile-menu-btn {
+    display: block;
+  }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--slate-100); }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 </style>
 </head>
 <body>
-<!-- Sidebar -->
-<aside class="hp-sidebar">
-  <div class="sidebar-brand"><div class="hp-logo-mark">HP</div><span>Staff Portal</span></div>
-  <nav class="sidebar-nav">
-    <a class="hp-nav-item active" onclick="showPage('overview')" data-page="overview">&#9776; Overview</a>
-    <div class="nav-section">Tickets</div>
-    <a class="hp-nav-item" onclick="showPage('myqueue')" data-page="myqueue">&#128203; My Queue</a>
-    <a class="hp-nav-item" onclick="showPage('alltickets')" data-page="alltickets">&#127915; All Tickets</a>
-    <a class="hp-nav-item" onclick="showPage('escalated')" data-page="escalated">&#9888; Escalated</a>
-    <div class="nav-section">Operations</div>
-    <a class="hp-nav-item" onclick="showPage('orders')" data-page="orders">&#128230; Orders</a>
-    <a class="hp-nav-item" onclick="showPage('customers')" data-page="customers">&#128101; Customers</a>
-    <a class="hp-nav-item" onclick="showPage('reports')" data-page="reports">&#128202; Reports</a>
-    <div class="nav-section">Admin</div>
-    <a class="hp-nav-item" onclick="showPage('knowledge')" data-page="knowledge">&#128218; Knowledge Base</a>
-    <a class="hp-nav-item" onclick="showPage('settings')" data-page="settings">&#9881; Settings</a>
-  </nav>
-  <div class="sidebar-footer"><a class="hp-nav-item" onclick="doLogout()">&#10140; Logout</a></div>
-</aside>
 
-<!-- Main -->
-<div class="hp-main">
-  <header class="hp-header">
-    <h5 id="pageTitle" class="mb-0 fw-bold">Overview</h5>
-    <div class="d-flex align-items-center gap-3">
-      <select class="form-select form-select-sm" style="width:auto" id="affiliateFilter" onchange="filterByAffiliate(this.value)">
-        <option value="">&#127757; All Affiliates</option>
-        <option value="KE">&#127472;&#127466; HPK &mdash; Kenya</option>
-        <option value="UG">&#127482;&#127468; HPU &mdash; Uganda</option>
-        <option value="TZ">&#127481;&#127487; HPT &mdash; Tanzania</option>
-        <option value="RW">&#127479;&#127484; HPR &mdash; Rwanda</option>
-        <option value="SS">&#127480;&#127480; HSS &mdash; South Sudan</option>
-        <option value="ZM">&#127487;&#127474; HPZ &mdash; Zambia</option>
-        <option value="DRC">&#127464;&#127465; HPC &mdash; DR Congo</option>
-        <option value="HTW">&#127981; HTW &mdash; Terminal</option>
-      </select>
-      <span class="text-muted" style="font-size:13px" id="staffUser">Staff</span>
+<div id="app">
+
+  <!-- ── Sidebar ── -->
+  <nav id="sidebar">
+    <div class="sidebar-header">
+      <img src="" id="sidebarLogo" style="width:36px;height:36px;object-fit:contain;border-radius:50%;" alt="">
+      <span class="sidebar-brand">Hass Portal</span>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-item" id="nav-dashboard" data-page="dashboard" onclick="showPage('dashboard')">
+        <i data-feather="grid" style="width:16px;height:16px;"></i>
+        Dashboard
+      </div>
+      <div class="nav-item" id="nav-sla" data-page="sla" onclick="showPage('sla')">
+        <i data-feather="bar-chart-2" style="width:16px;height:16px;"></i>
+        SLA Analytics
+        <span class="nav-badge live">LIVE</span>
+      </div>
+      <div class="nav-item" id="nav-orders" data-page="orders" onclick="showPage('orders')">
+        <i data-feather="package" style="width:16px;height:16px;"></i>
+        Orders
+      </div>
+      <div class="nav-item" id="nav-customers" data-page="customers" onclick="showPage('customers')">
+        <i data-feather="users" style="width:16px;height:16px;"></i>
+        Customers
+      </div>
+      <div class="nav-item" id="nav-tickets" data-page="tickets" onclick="showPage('tickets')">
+        <i data-feather="message-square" style="width:16px;height:16px;"></i>
+        Support Tickets
+        <span class="nav-badge" id="ticketBadge" style="display:none"></span>
+      </div>
+      <div class="nav-item" id="nav-chat" data-page="chat" onclick="showPage('chat')">
+        <i data-feather="message-circle" style="width:16px;height:16px;"></i>
+        Team Chat
+        <span class="nav-badge" id="chatBadge" style="display:none"></span>
+      </div>
+
+      <div class="nav-section-label">ADMINISTRATION</div>
+
+      <div class="nav-item" id="nav-users" data-page="users" onclick="showPage('users')">
+        <i data-feather="shield" style="width:16px;height:16px;"></i>
+        Users &amp; Roles
+      </div>
+      <div class="nav-item" id="nav-reports" data-page="reports" onclick="showPage('reports')">
+        <i data-feather="file-text" style="width:16px;height:16px;"></i>
+        Reports
+      </div>
+      <div class="nav-item" id="nav-settings" data-page="settings" onclick="showPage('settings')">
+        <i data-feather="settings" style="width:16px;height:16px;"></i>
+        Settings
+      </div>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sidebarAvatar">JO</div>
+      <div class="user-info">
+        <div class="user-name" id="sidebarName">Loading...</div>
+        <div class="user-role" id="sidebarRole"></div>
+      </div>
+      <button class="logout-btn" onclick="logoutUser()" title="Sign out">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+  <!-- ── Topbar ── -->
+  <header id="topbar">
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <h1 id="pageTitle" style="font-size:18px;font-weight:700;color:#0D1442;margin:0;flex:1;">Dashboard</h1>
+
+    <select id="affiliateFilter" class="topbar-select" onchange="onAffiliateChange(this.value)">
+      <option value="ALL">All Affiliates</option>
+      <option value="KE">HPK Kenya</option>
+      <option value="UG">HPU Uganda</option>
+      <option value="TZ">HPT Tanzania</option>
+      <option value="RW">HPR Rwanda</option>
+      <option value="SS">HSS South Sudan</option>
+      <option value="ZM">HPZ Zambia</option>
+      <option value="DRC">HPC DRC</option>
+      <option value="HTW">HTW Terminal</option>
+    </select>
+
+    <button class="topbar-icon-btn" onclick="toggleNotifications()" id="notifBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <span class="topbar-badge" id="notifCount" style="display:none">0</span>
+    </button>
+
+    <div class="topbar-user" onclick="toggleUserMenu()">
+      <div class="topbar-avatar" id="topbarAvatar">JO</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#1e293b;" id="topbarName">Loading</div>
+        <div style="font-size:11px;color:#64748b;" id="topbarRole"></div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
     </div>
   </header>
-  <div class="hp-content">
 
-    <!-- Overview -->
-    <div class="hp-page active" id="page-overview">
-      <div class="row g-3 mb-4">
-        <div class="col-md-3"><div class="hp-kpi"><div class="label">Open Tickets</div><div class="value" id="kpiOpenTix">0</div><div class="sub">Across all queues</div></div></div>
-        <div class="col-md-3"><div class="hp-kpi"><div class="label">Pending Orders</div><div class="value" id="kpiPendOrd">0</div><div class="sub">Awaiting approval</div></div></div>
-        <div class="col-md-3"><div class="hp-kpi"><div class="label">SLA Breaches</div><div class="value" id="kpiSLA">0</div><div class="sub">Today</div></div></div>
-        <div class="col-md-3"><div class="hp-kpi"><div class="label">Active Customers</div><div class="value" id="kpiCusts">0</div><div class="sub">Total active</div></div></div>
-      </div>
-      <div class="row g-3 mb-4">
-        <div class="col-md-6"><div class="hp-card"><div class="hp-card-header">Tickets by Status</div><div class="p-4 text-center text-muted" style="min-height:200px">Chart placeholder</div></div></div>
-        <div class="col-md-6"><div class="hp-card"><div class="hp-card-header">Orders This Week</div><div class="p-4 text-center text-muted" style="min-height:200px">Chart placeholder</div></div></div>
-      </div>
-      <div class="hp-card">
-        <div class="hp-card-header">Recent Activity</div>
-        <div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Time</th><th>Type</th><th>Description</th><th>User</th></tr></thead>
-        <tbody id="activityBody"><tr><td colspan="4" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div>
-      </div>
+  <!-- ── Main Content ── -->
+  <main id="mainContent">
+
+    <div class="page-section" id="page-dashboard">
+      <div class="page-placeholder">Dashboard — loaded by SD-2 prompt</div>
     </div>
 
-    <!-- My Queue -->
-    <div class="hp-page" id="page-myqueue">
-      <h5 class="mb-4 fw-bold">My Queue</h5>
-      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-        <thead><tr><th>Ticket #</th><th>Customer</th><th>Subject</th><th>Priority</th><th>Status</th><th>SLA</th><th>Created</th></tr></thead>
-        <tbody id="myQueueBody"><tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-      </table></div></div>
+    <div class="page-section" id="page-sla">
+      <div class="page-placeholder">SLA Analytics — loaded by SD-2 prompt</div>
     </div>
 
-    <!-- All Tickets -->
-    <div class="hp-page" id="page-alltickets">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h5 class="mb-0 fw-bold">All Tickets</h5>
-        <div class="d-flex gap-2">
-          <select class="form-select form-select-sm" style="width:auto" id="filterStatus"><option value="">All Status</option><option>NEW</option><option>OPEN</option><option>IN_PROGRESS</option><option>ESCALATED</option><option>RESOLVED</option><option>CLOSED</option></select>
-          <select class="form-select form-select-sm" style="width:auto" id="filterPriority"><option value="">All Priority</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
-        </div>
-      </div>
-      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-        <thead><tr><th>Ticket #</th><th>Customer</th><th>Subject</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Created</th></tr></thead>
-        <tbody id="allTicketsBody"><tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-      </table></div></div>
+    <div class="page-section" id="page-orders">
+      <div class="page-placeholder">Orders — loaded by SD-3 prompt</div>
     </div>
 
-    <!-- Escalated -->
-    <div class="hp-page" id="page-escalated">
-      <h5 class="mb-4 fw-bold">Escalated Tickets</h5>
-      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-        <thead><tr><th>Ticket #</th><th>Customer</th><th>Subject</th><th>Priority</th><th>Level</th><th>Escalated</th><th>Reason</th></tr></thead>
-        <tbody id="escalatedBody"><tr><td colspan="7" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-      </table></div></div>
+    <div class="page-section" id="page-customers">
+      <div class="page-placeholder">Customers — loaded by SD-3 prompt</div>
     </div>
 
-    <!-- Orders -->
-    <div class="hp-page" id="page-orders">
-      <h5 class="mb-4 fw-bold">Orders</h5>
-      <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tabPending">Pending Approval</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabInProgress">In Progress</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tabCompleted">Completed</a></li>
-      </ul>
-      <div class="tab-content">
-        <div class="tab-pane fade show active" id="tabPending">
-          <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-            <thead><tr><th>Order #</th><th>Customer</th><th>Amount</th><th>Country</th><th>Date</th><th>Actions</th></tr></thead>
-            <tbody id="pendingOrdersBody"><tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-          </table></div></div>
-        </div>
-        <div class="tab-pane fade" id="tabInProgress">
-          <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-            <thead><tr><th>Order #</th><th>Customer</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
-            <tbody id="progressOrdersBody"><tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-          </table></div></div>
-        </div>
-        <div class="tab-pane fade" id="tabCompleted">
-          <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-            <thead><tr><th>Order #</th><th>Customer</th><th>Amount</th><th>Delivered</th></tr></thead>
-            <tbody id="completedOrdersBody"><tr><td colspan="4" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-          </table></div></div>
-        </div>
-      </div>
+    <div class="page-section" id="page-tickets">
+      <div class="page-placeholder">Support Tickets — loaded by SD-4 prompt</div>
     </div>
 
-    <!-- Customers -->
-    <div class="hp-page" id="page-customers">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h5 class="mb-0 fw-bold">Customers</h5>
-        <input type="text" class="form-control form-control-sm" style="width:250px" id="customerSearch" placeholder="Search customers..." oninput="searchCustomers(this.value)">
-      </div>
-      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0">
-        <thead><tr><th>Account #</th><th>Company</th><th>Country</th><th>Segment</th><th>Credit Used</th><th>Status</th></tr></thead>
-        <tbody id="customersBody"><tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr></tbody>
-      </table></div></div>
+    <div class="page-section" id="page-chat">
+      <div class="page-placeholder">Team Chat — loaded by SD-5 prompt</div>
     </div>
 
-    <!-- Reports -->
-    <div class="hp-page" id="page-reports">
-      <h5 class="mb-4 fw-bold">Reports</h5>
-      <div class="row g-3">
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#128200;</div><div class="title">SLA Performance</div><div class="desc">Track SLA compliance across teams and countries</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#128230;</div><div class="title">Order Volume</div><div class="desc">Order trends by country, product, and period</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#128101;</div><div class="title">Customer Activity</div><div class="desc">Customer engagement and activity metrics</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#127915;</div><div class="title">Ticket Resolution</div><div class="desc">Resolution times, categories, and trends</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#128176;</div><div class="title">Revenue by Country</div><div class="desc">Revenue breakdown across affiliates</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-        <div class="col-md-4"><div class="report-card"><div class="icon">&#128100;</div><div class="title">Agent Performance</div><div class="desc">Individual agent metrics and workload</div><button class="btn btn-sm btn-hp-navy">Generate</button></div></div>
-      </div>
+    <div class="page-section" id="page-users">
+      <div class="page-placeholder">Users &amp; Roles — loaded by SD-6 prompt</div>
     </div>
 
-    <!-- Knowledge Base -->
-    <div class="hp-page" id="page-knowledge">
-      <h5 class="mb-4 fw-bold">Knowledge Base</h5>
-      <div class="hp-card"><div class="hp-card-header"><span>Articles</span><button class="btn btn-sm btn-hp-primary">+ New Article</button></div>
-      <div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Updated</th></tr></thead>
-      <tbody id="kbBody"><tr><td colspan="4" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div></div>
+    <div class="page-section" id="page-reports">
+      <div class="page-placeholder">Reports — loaded by SD-6 prompt</div>
     </div>
 
-    <!-- Settings -->
-    <div class="hp-page" id="page-settings">
-      <h5 class="mb-4 fw-bold">Settings</h5>
-      <div class="hp-card"><div class="hp-card-header">System Configuration</div><div class="p-4">
-        <div class="row g-3">
-          <div class="col-md-6"><label class="hp-form-label">Default Country</label><select class="form-select form-select-sm" id="settingCountry"><option value="KE">HPK &mdash; Kenya</option><option value="UG">HPU &mdash; Uganda</option><option value="TZ">HPT &mdash; Tanzania</option><option value="RW">HPR &mdash; Rwanda</option><option value="SS">HSS &mdash; South Sudan</option><option value="ZM">HPZ &mdash; Zambia</option><option value="DRC">HPC &mdash; DR Congo</option><option value="HTW">HTW &mdash; Terminal</option></select></div>
-          <div class="col-md-6"><label class="hp-form-label">Default Currency</label><input type="text" class="form-control form-control-sm" value="KES"></div>
-          <div class="col-md-6"><label class="hp-form-label">Session Timeout (hours)</label><input type="number" class="form-control form-control-sm" value="24"></div>
-          <div class="col-md-6"><label class="hp-form-label">Max Login Attempts</label><input type="number" class="form-control form-control-sm" value="5"></div>
-        </div>
-        <div class="mt-3"><button class="btn btn-hp-primary btn-sm">Save Settings</button></div>
-      </div></div>
+    <div class="page-section" id="page-settings">
+      <div class="page-placeholder">Settings — loaded by SD-6 prompt</div>
     </div>
-  </div>
+
+  </main>
+
 </div>
 
-<!-- Ticket Detail Modal -->
-<div class="modal fade" id="ticketModal" tabindex="-1"><div class="modal-dialog" style="max-width:1100px"><div class="modal-content">
-  <div class="modal-header hp-modal-header">
-    <h6 class="modal-title fw-bold" id="tmTitle">Ticket Details</h6>
-    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-  </div>
-  <div class="modal-body p-0" style="height:70vh;overflow:hidden;">
-    <div id="ticketDetailView" class="ticket-detail-split" style="height:100%;">
-      <!-- Left Column: Existing Ticket Detail -->
-      <div class="ticket-detail-left" id="ticketDetailLeft" style="padding:20px;">
-        <div class="row g-3 mb-3" id="tmFields">
-          <div class="col-md-4"><div class="hp-form-label">Customer</div><div id="tmCustomer">-</div></div>
-          <div class="col-md-4"><div class="hp-form-label">Contact</div><div id="tmContact">-</div></div>
-          <div class="col-md-4"><div class="hp-form-label">Category</div><div id="tmCategory">-</div></div>
-          <div class="col-md-4"><div class="hp-form-label">Priority</div><div id="tmPriority">-</div></div>
-          <div class="col-md-4"><div class="hp-form-label">Assigned To</div><div id="tmAssigned">-</div></div>
-          <div class="col-md-4"><div class="hp-form-label">Created</div><div id="tmCreated">-</div></div>
-        </div>
-        <div class="hp-thread" id="tmThread">
-          <div class="hp-bubble-customer"><strong>Customer</strong><br>Sample message from customer</div>
-          <div class="hp-bubble-agent"><strong>Agent</strong><br>Sample reply from agent</div>
-          <div class="hp-bubble-internal"><strong>Internal Note</strong><br>This is an internal note</div>
-        </div>
-        <div class="mt-3">
-          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="tmInternal"><label class="form-check-label" for="tmInternal" style="font-size:13px">Internal note (not visible to customer)</label></div>
-          <textarea class="form-control form-control-sm" id="tmReply" rows="3" placeholder="Type your reply..."></textarea>
-        </div>
-      </div>
-      <!-- Right Column: Chat Panel -->
-      <div class="ticket-detail-right" id="staffChatPanel">
-        <!-- Notification Nudge -->
-        <div class="notif-nudge" id="notifNudge" style="display:none"><span>Enable notifications to get alerted on new messages</span><button onclick="requestNotificationPermission(); this.parentElement.style.display='none'">Enable</button><button onclick="this.parentElement.style.display='none'">Dismiss</button></div>
-        <!-- Customer Profile -->
-        <div class="staff-customer-profile" id="staffCustomerProfile"><div class="profile-avatar" id="profileAvatar">--</div><div class="profile-info"><div class="profile-company" id="profileCompany">No ticket selected</div><div class="profile-account" id="profileAccount"></div></div></div>
-        <div class="profile-stats" id="profileStats" style="display:none"><div class="profile-stat"><div class="profile-stat-value" id="profileCredit">--</div><div class="profile-stat-label">Avail. Credit</div></div><div class="profile-stat"><div class="profile-stat-value" id="profileOpenTickets">--</div><div class="profile-stat-label">Open Tickets</div></div><div class="profile-stat"><div class="profile-stat-value" id="profileLastOrder">--</div><div class="profile-stat-label">Last Order</div></div></div>
-        <!-- Quick Actions -->
-        <div class="staff-quick-actions" id="staffQuickActions" style="display:none"><button class="qa-btn" onclick="staffAssignToMe()" title="Assign to me"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Assign to Me</button><select class="qa-status-select" id="qaStatusSelect" onchange="staffChangeStatus(this.value)"><option value="">Change Status</option><option value="OPEN">Open</option><option value="IN_PROGRESS">In Progress</option><option value="PENDING_CUSTOMER">Pending Customer</option><option value="RESOLVED">Resolved</option><option value="CLOSED">Closed</option></select><button class="qa-btn qa-btn-escalate" onclick="staffEscalate()" title="Escalate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg> Escalate</button></div>
-        <!-- Chat Tabs -->
-        <div class="staff-chat-tabs"><button class="staff-tab active" data-tab="chat" onclick="switchStaffTab('chat',this)">Chat<span class="tab-badge" id="chatTabBadge" style="display:none">0</span></button><button class="staff-tab" data-tab="notes" onclick="switchStaffTab('notes',this)">Notes</button><button class="staff-tab" data-tab="history" onclick="switchStaffTab('history',this)">History</button></div>
-        <!-- Chat Tab Content -->
-        <div id="staffTabChat" style="display:flex;flex-direction:column;flex:1;min-height:0;">
-          <div class="staff-chat-messages" id="staffChatMessages"><div class="staff-chat-empty" id="staffChatEmpty"><p>Select a ticket to view the conversation.</p></div></div>
-          <div class="staff-chat-input-area" id="staffChatInputArea" style="display:none"><div class="staff-input-row"><textarea id="staffChatInput" class="staff-chat-textarea" placeholder="Reply to customer..." rows="2" onkeydown="staffChatKeyDown(event)" oninput="staffChatInputResize(this)"></textarea></div><div class="staff-input-actions"><span class="input-hint">Shift+Enter for new line, Enter to send</span><button class="staff-send-btn" onclick="staffSendMessage(false)">Send to Customer</button></div></div>
-        </div>
-        <!-- Notes Tab Content -->
-        <div class="notes-tab-content" id="staffTabNotes" style="display:none"><div class="notes-history" id="staffNotesHistory"></div><div class="notes-input-area"><textarea id="staffNoteInput" class="staff-note-textarea" placeholder="Type an internal note... Only staff can see this." rows="4"></textarea><div class="notes-input-actions"><span class="notes-warning"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Not visible to customer</span><button class="staff-note-btn" onclick="staffPostNote()">Post Note</button></div></div></div>
-        <!-- History Tab Content -->
-        <div class="history-tab-content" id="staffTabHistory" style="display:none"><div id="customerTicketHistory"><div class="history-loading" style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">Select a ticket to see customer history.</div></div></div>
-      </div>
-    </div>
-  </div>
-  <div class="modal-footer">
-    <div class="d-flex gap-2 me-auto">
-      <select class="form-select form-select-sm" style="width:auto" id="tmStatus"><option>OPEN</option><option>IN_PROGRESS</option><option>PENDING_CUSTOMER</option><option>RESOLVED</option><option>CLOSED</option></select>
-      <select class="form-select form-select-sm" style="width:auto" id="tmAssignee"><option value="">Assign to...</option></select>
-    </div>
-    <button class="btn btn-sm btn-outline-secondary" onclick="saveDraft()">Save Draft</button>
-    <button class="btn btn-sm btn-hp-primary" onclick="sendReply()">Send Reply</button>
-  </div>
-</div></div></div>
-
-<!-- Toast -->
-<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100"><div class="toast hp-toast" id="appToast" role="alert"><div class="toast-body" id="toastBody"></div></div></div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// Session injected by Code.gs doGet()
-const SESSION = (function() {
-  try { return JSON.parse('<?= SESSION ?>'); }
-  catch(e) { return {}; }
+/* ── Session Bootstrap ── */
+var SESSION = (function(){
+  try { return JSON.parse('<?= SESSION ?>'); } catch(e) { return {}; }
 })();
+if (!SESSION || !SESSION.token) { window.location.href = window.location.href.split('?')[0]; }
 
-// Redirect if no valid session
-if (!SESSION || !SESSION.token) {
-  window.location.href = window.location.href.split('?')[0];
+/* ── State ── */
+var currentPage = 'dashboard';
+var currentAffiliate = 'ALL';
+
+/* ── Page Switching ── */
+function showPage(name) {
+  document.querySelectorAll('.page-section').forEach(function(el){
+    el.style.display = 'none';
+  });
+  var target = document.getElementById('page-' + name);
+  if (target) target.style.display = 'block';
+
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    el.classList.toggle('active', el.dataset.page === name);
+  });
+
+  var titles = {
+    dashboard:'Dashboard', sla:'SLA Analytics', orders:'Orders',
+    customers:'Customers', tickets:'Support Tickets', chat:'Team Chat',
+    users:'Users & Roles', reports:'Reports', settings:'Settings'
+  };
+  var titleEl = document.getElementById('pageTitle');
+  if (titleEl) titleEl.textContent = titles[name] || name;
+
+  currentPage = name;
+
+  // Hide affiliate filter on admin pages
+  var afFilter = document.getElementById('affiliateFilter');
+  if (afFilter) afFilter.style.visibility = ['users','settings'].includes(name) ? 'hidden' : 'visible';
+
+  // Close mobile sidebar
+  closeSidebar();
 }
 
-const AFFILIATE_MAP={KE:{code:'HPK',name:'Kenya'},UG:{code:'HPU',name:'Uganda'},TZ:{code:'HPT',name:'Tanzania'},RW:{code:'HPR',name:'Rwanda'},SS:{code:'HSS',name:'South Sudan'},ZM:{code:'HPZ',name:'Zambia'},DRC:{code:'HPC',name:'DR Congo'},HTW:{code:'HTW',name:'Terminal'}};
-let currentUser=null, currentCountry='';
-
-function showPage(id){
-  document.querySelectorAll('.hp-page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.hp-nav-item').forEach(n=>n.classList.remove('active'));
-  var pg=document.getElementById('page-'+id); if(pg) pg.classList.add('active');
-  var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
-  var t={overview:'Overview',myqueue:'My Queue',alltickets:'All Tickets',escalated:'Escalated',
-    orders:'Orders',customers:'Customers',reports:'Reports',knowledge:'Knowledge Base',settings:'Settings'};
-  document.getElementById('pageTitle').textContent=t[id]||id;
-}
-
-function filterByAffiliate(code){
-  currentCountry=code;
-  var label=code?(AFFILIATE_MAP[code]?AFFILIATE_MAP[code].code+' \u2014 '+AFFILIATE_MAP[code].name:code):'All Affiliates';
-  showToast('Filtering by '+label,'info');
-}
-
-function showToast(msg,type){
-  var t=document.getElementById('appToast'),b=document.getElementById('toastBody');
-  b.textContent=msg; t.className='toast hp-toast bg-'+(type==='error'?'danger':type==='success'?'success':'primary')+' text-white';
-  new bootstrap.Toast(t,{delay:3000}).show();
-}
-
-function getStatusBadge(s){
-  var m={NEW:'new',OPEN:'open',IN_PROGRESS:'prog',RESOLVED:'done',CLOSED:'closed',DELIVERED:'done',
-    SUBMITTED:'new',PENDING_APPROVAL:'open',APPROVED:'prog',SCHEDULED:'prog',IN_TRANSIT:'prog',
-    CANCELLED:'closed',REJECTED:'escd',ESCALATED:'escd',PENDING:'open',PAID:'done'};
-  return '<span class="hp-badge hp-badge-'+(m[s]||'closed')+'">'+s+'</span>';
-}
-
-function getPriorityBadge(p){
-  var m={CRITICAL:'crit',HIGH:'high',MEDIUM:'med',LOW:'low'};
-  return '<span class="hp-badge hp-badge-'+(m[p]||'low')+'">'+p+'</span>';
-}
-
-function getSLABar(pct){
-  var cls=pct>=80?'hp-sla-ok':pct>=50?'hp-sla-warn':'hp-sla-crit';
-  return '<div class="hp-sla-bar"><div class="hp-sla-fill '+cls+'" style="width:'+Math.min(100,pct)+'%"></div></div>';
-}
-
-function formatCurrency(a,c){c=c||'KES';return c+' '+Number(a||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function formatDate(d){if(!d)return'-';try{return new Date(d).toLocaleDateString();}catch(e){return d;}}
-
-function openTicketModal(ticketId){
-  document.getElementById('tmTitle').textContent='Loading...';
-  new bootstrap.Modal(document.getElementById('ticketModal')).show();
-  google.script.run.withSuccessHandler(function(r){
-    if(r.success){
-      document.getElementById('tmTitle').textContent=r.ticket.ticket_number+' - '+r.ticket.subject;
-      document.getElementById('tmCustomer').textContent=r.customer?.company_name||'-';
-      document.getElementById('tmContact').textContent=r.contact?.name||'-';
-      document.getElementById('tmCategory').textContent=r.ticket.category||'-';
-      document.getElementById('tmPriority').innerHTML=getPriorityBadge(r.ticket.priority);
-      document.getElementById('tmAssigned').textContent=r.assignee?.name||'Unassigned';
-      document.getElementById('tmCreated').textContent=formatDate(r.ticket.created_at);
-      var thread='';
-      (r.comments||[]).forEach(function(c){
-        var cls=c.is_internal?'hp-bubble-internal':c.author_type==='CUSTOMER'?'hp-bubble-customer':'hp-bubble-agent';
-        thread+='<div class="'+cls+'"><strong>'+c.author_name+'</strong><br>'+c.content+'</div>';
-      });
-      document.getElementById('tmThread').innerHTML=thread||'<p class="text-muted">No comments yet</p>';
-    }
-  }).processRequest({service:'database',action:'ticketDetail',ticketId:ticketId});
-}
-
-function approveOrder(orderId){
-  google.script.run.withSuccessHandler(function(r){
-    if(r.success) showToast('Order approved','success'); else showToast(r.error||'Failed','error');
-  }).processRequest({service:'orders',action:'approve',orderId:orderId,context:{actorType:'AGENT',actorId:currentUser?.user_id}});
-}
-
-function rejectOrder(orderId){
-  var reason=prompt('Rejection reason:');
-  if(!reason) return;
-  google.script.run.withSuccessHandler(function(r){
-    if(r.success) showToast('Order rejected','success'); else showToast(r.error||'Failed','error');
-  }).processRequest({service:'orders',action:'reject',orderId:orderId,reason:reason,context:{actorType:'AGENT',actorId:currentUser?.user_id}});
-}
-
-function sendReply(){
-  var reply=document.getElementById('tmReply').value;
-  if(!reply.trim()){showToast('Enter a reply','error');return;}
-  showToast('Sending reply...','info');
-}
-
-function saveDraft(){showToast('Draft saved','success');}
-
-function searchCustomers(q){
-  if(q.length<2) return;
-  google.script.run.withSuccessHandler(function(r){
-    if(r.success&&r.data){
-      var html='';
-      r.data.forEach(function(c){
-        html+='<tr><td class="cell-primary">'+c.account_number+'</td><td>'+c.company_name+'</td>'+
-          '<td>'+(AFFILIATE_MAP[c.country_code]?AFFILIATE_MAP[c.country_code].code:c.country_code)+'</td><td>'+(c.segment_id||'-')+'</td>'+
-          '<td>'+formatCurrency(c.credit_used)+'</td><td>'+getStatusBadge(c.status)+'</td></tr>';
-      });
-      document.getElementById('customersBody').innerHTML=html||'<tr><td colspan="6" class="text-center text-muted py-4">No results</td></tr>';
-    }
-  }).processRequest({service:'customers',action:'search',searchText:q,searchFields:['company_name','account_number']});
-}
-
-function doLogout(){
-  var token = sessionStorage.getItem('hass_token') || (SESSION && SESSION.token) || '';
-  sessionStorage.clear();
-  if (typeof google !== 'undefined' && google.script && token) {
-    google.script.run.handleAuthRequest({ action: 'logout', token: token });
-  }
-  var base = window.location.href.split('?')[0];
-  window.location.href = base;
-}
-
-document.addEventListener('DOMContentLoaded',function(){
-  showPage('overview');
-
-  // Role-based visibility
+/* ── Role-Based Nav Visibility ── */
+function applyRoleVisibility() {
   var role = SESSION.role || '';
-  if (role !== 'SUPER_ADMIN') {
-    document.querySelectorAll('.requires-super-admin').forEach(function(el){ el.style.display='none'; });
-  }
-  var mgmtRoles = ['SUPER_ADMIN','GROUP_HEAD','CS_MANAGER','BD_MANAGER'];
-  if (mgmtRoles.indexOf(role) === -1) {
-    document.querySelectorAll('.requires-management').forEach(function(el){ el.style.display='none'; });
-  }
+  var adminRoles = ['SUPER_ADMIN','GROUP_HEAD','CS_MANAGER'];
+  var reportRoles = ['SUPER_ADMIN','GROUP_HEAD','CS_MANAGER','BD_MANAGER'];
 
-  // Show user name/role in header
-  var nameEl = document.getElementById('staffUserName');
-  if (nameEl) nameEl.textContent = SESSION.name || SESSION.userId;
-  var roleEl = document.getElementById('staffUserRole');
-  if (roleEl) roleEl.textContent = formatRole(SESSION.role);
-});
+  var usersNav   = document.getElementById('nav-users');
+  var reportsNav = document.getElementById('nav-reports');
+  var settingsNav= document.getElementById('nav-settings');
 
+  if (usersNav)    usersNav.style.display    = adminRoles.includes(role)  ? 'flex' : 'none';
+  if (reportsNav)  reportsNav.style.display  = reportRoles.includes(role) ? 'flex' : 'none';
+  if (settingsNav) settingsNav.style.display = role === 'SUPER_ADMIN'     ? 'flex' : 'none';
+}
+
+/* ── Affiliate Filter ── */
+function onAffiliateChange(val) { currentAffiliate = val; refreshCurrentPage(); }
+function refreshCurrentPage() { showPage(currentPage); }
+
+/* ── Mobile Sidebar ── */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+/* ── Notification / User Menu stubs ── */
+function toggleNotifications() {}
+function toggleUserMenu() {}
+
+/* ── Role Formatter ── */
 function formatRole(role) {
   var map = {
     'SUPER_ADMIN':'Super Admin','GROUP_HEAD':'Group Head',
@@ -549,356 +561,42 @@ function formatRole(role) {
   return map[role] || role;
 }
 
-/* ===== Chat Panel State ===== */
-let staffActiveTicketId = null;
-let staffActiveCustomerId = null;
-let staffActiveTicketData = null;
-let staffPollInterval = null;
-let staffLastFetchTime = null;
-let staffUnreadCount = 0;
-let staffCurrentTab = 'chat';
-let notifPermissionGranted = false;
-
-/* SESSION is now injected at the top of this script block via template */
-
-/* ===== Chat Panel Functions ===== */
-
-function loadStaffChatPanel(ticket) {
-  staffActiveTicketId = ticket.ticket_id;
-  staffActiveCustomerId = ticket.customer_id;
-  staffActiveTicketData = ticket;
-  stopStaffPolling();
-  updateStaffCustomerProfile(ticket);
-  document.getElementById('staffQuickActions').style.display = 'flex';
-  document.getElementById('staffChatInputArea').style.display = 'block';
-  switchStaffTab('chat', document.querySelector('.staff-tab[data-tab="chat"]'));
-  loadStaffChatMessages(ticket.ticket_id);
-  loadCustomerTicketHistory(ticket.customer_id);
-  startStaffPolling(ticket.ticket_id);
-  // Show notification nudge if permission not yet granted
-  if ('Notification' in window && Notification.permission === 'default') {
-    document.getElementById('notifNudge').style.display = 'flex';
-  }
+/* ── Logout ── */
+function logoutUser() {
+  var token = SESSION.token || '';
+  if (token) google.script.run.handleAuthRequest({ action:'logout', token:token });
+  sessionStorage.clear();
+  window.location.href = window.location.href.split('?')[0];
 }
 
-function updateStaffCustomerProfile(ticket) {
-  var avatar = document.getElementById('profileAvatar');
-  var company = document.getElementById('profileCompany');
-  company.textContent = ticket.customer_id || 'Customer';
-  avatar.textContent = '--';
-  google.script.run.withSuccessHandler(renderStaffProfile).handleOrderRequest({
-    service: 'customers', action: 'getCustomerForChat', customerId: ticket.customer_id
-  });
+/* ── Init ── */
+function initDashboard() {
+  google.script.run.withSuccessHandler(function(info) {
+    var name = info.name || SESSION.userId;
+    var role = info.role || SESSION.role;
+    var initials = name.split(' ').map(function(w){ return w[0]; }).join('').substring(0,2).toUpperCase();
+
+    document.getElementById('sidebarName').textContent  = name;
+    document.getElementById('sidebarRole').textContent  = formatRole(role);
+    document.getElementById('sidebarAvatar').textContent= initials;
+    document.getElementById('topbarName').textContent   = name;
+    document.getElementById('topbarRole').textContent   = formatRole(role);
+    document.getElementById('topbarAvatar').textContent = initials;
+
+    // Load logo
+    google.script.run.withSuccessHandler(function(url){
+      if (url) document.getElementById('sidebarLogo').src = url;
+    }).getLogoUrl();
+
+    applyRoleVisibility();
+    showPage('dashboard');
+
+  }).handleAuthRequest({ action:'getStaffInfo', userId: SESSION.userId, token: SESSION.token });
 }
 
-function renderStaffProfile(result) {
-  if (!result || !result.success) return;
-  var c = result.customer;
-  var initials = (c.trading_name || c.company_name || '--').substring(0, 2).toUpperCase();
-  document.getElementById('profileAvatar').textContent = initials;
-  document.getElementById('profileCompany').textContent = c.company_name || '--';
-  document.getElementById('profileAccount').textContent = (c.account_number || '') + (c.country_code ? ' | ' + c.country_code : '');
-  if (c.credit_limit !== undefined) {
-    var avail = (c.credit_limit || 0) - (c.credit_used || 0);
-    var curr = c.currency || 'KES';
-    document.getElementById('profileCredit').textContent = curr + ' ' + Number(avail).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  }
-  document.getElementById('profileOpenTickets').textContent = c.open_tickets_count || '--';
-  document.getElementById('profileLastOrder').textContent = c.last_order_date ? formatDate(c.last_order_date) : '--';
-  document.getElementById('profileStats').style.display = 'grid';
-}
-
-function switchStaffTab(tabName, btn) {
-  staffCurrentTab = tabName;
-  document.querySelectorAll('.staff-tab').forEach(function(t) { t.classList.remove('active'); });
-  if (btn) btn.classList.add('active');
-  document.getElementById('staffTabChat').style.display = 'none';
-  document.getElementById('staffTabNotes').style.display = 'none';
-  document.getElementById('staffTabHistory').style.display = 'none';
-  var tabId = 'staffTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1);
-  var tabEl = document.getElementById(tabId);
-  if (tabEl) tabEl.style.display = tabName === 'history' ? 'block' : 'flex';
-  if (tabName === 'chat') {
-    staffUnreadCount = 0;
-    var badge = document.getElementById('chatTabBadge');
-    badge.style.display = 'none';
-    badge.textContent = '0';
-  }
-  if (tabName === 'notes') {
-    var noteInput = document.getElementById('staffNoteInput');
-    if (noteInput) noteInput.focus();
-  }
-}
-
-function loadStaffChatMessages(ticketId) {
-  var container = document.getElementById('staffChatMessages');
-  container.innerHTML = '<div class="staff-chat-empty"><p>Loading messages...</p></div>';
-  google.script.run.withSuccessHandler(onStaffMessagesLoaded).withFailureHandler(onStaffChatError).handleTicketRequest({
-    service: 'tickets', action: 'getComments', ticketId: ticketId
-  });
-}
-
-function onStaffMessagesLoaded(result) {
-  var container = document.getElementById('staffChatMessages');
-  container.innerHTML = '';
-  if (!result || !result.success) {
-    container.innerHTML = '<div class="staff-chat-empty"><p>Failed to load messages.</p></div>';
-    return;
-  }
-  var comments = result.comments || [];
-  var notesContainer = document.getElementById('staffNotesHistory');
-  notesContainer.innerHTML = '';
-  if (comments.length === 0) {
-    container.innerHTML = '<div class="staff-chat-empty"><p>No messages yet. Start the conversation.</p></div>';
-    return;
-  }
-  comments.forEach(function(msg) {
-    appendStaffChatMessage(msg, true);
-  });
-  staffLastFetchTime = new Date().toISOString();
-  scrollStaffChatToBottom();
-}
-
-function appendStaffChatMessage(msg, skipScroll) {
-  var container = document.getElementById('staffChatMessages');
-  var empty = document.getElementById('staffChatEmpty');
-  if (empty) empty.style.display = 'none';
-  var time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-  var html = '';
-  if (msg.is_internal) {
-    html = '<div class="msg msg-internal"><div class="internal-note-header"><span class="lock-icon">&#128274;</span><span class="internal-label">Internal Note</span><span class="msg-time">' + time + '</span><span class="note-author">' + (msg.author_name || 'Staff') + '</span></div><div class="internal-bubble">' + escapeHtml(msg.content) + '</div></div>';
-    // Also add to notes tab
-    var notesContainer = document.getElementById('staffNotesHistory');
-    if (notesContainer) {
-      var noteDiv = document.createElement('div');
-      noteDiv.innerHTML = html;
-      notesContainer.appendChild(noteDiv.firstChild);
-    }
-  } else if (msg.author_type === 'CUSTOMER') {
-    html = '<div class="msg msg-customer"><div class="customer-bubble"><div class="msg-author">' + (msg.author_name || 'Customer') + '</div>' + escapeHtml(msg.content) + '<div class="msg-time">' + time + '</div></div></div>';
-  } else {
-    html = '<div class="msg msg-agent"><div class="agent-bubble"><div class="msg-author">' + (msg.author_name || 'Agent') + '</div>' + escapeHtml(msg.content) + '<div class="msg-time">' + time + '</div></div></div>';
-  }
-  var div = document.createElement('div');
-  div.innerHTML = html;
-  container.appendChild(div.firstChild);
-  if (!skipScroll) scrollStaffChatToBottom();
-}
-
-function escapeHtml(text) {
-  var d = document.createElement('div');
-  d.textContent = text || '';
-  return d.innerHTML;
-}
-
-function staffSendMessage(isInternal) {
-  var inputId = isInternal ? 'staffNoteInput' : 'staffChatInput';
-  var input = document.getElementById(inputId);
-  var content = (input.value || '').trim();
-  if (!content || !staffActiveTicketId) return;
-  // Optimistic append
-  var optimistic = {
-    content: content,
-    author_type: 'AGENT',
-    author_name: SESSION.name || 'You',
-    is_internal: isInternal,
-    created_at: new Date().toISOString()
-  };
-  appendStaffChatMessage(optimistic);
-  input.value = '';
-  if (!isInternal) staffChatInputResize(input);
-  google.script.run.withSuccessHandler(onStaffMessageSent).withFailureHandler(onStaffChatError).handleTicketRequest({
-    service: 'tickets', action: 'addComment', ticketId: staffActiveTicketId,
-    comment: {
-      content: content, author_type: 'AGENT', author_id: SESSION.userId,
-      author_name: SESSION.name, channel: 'PORTAL', is_internal: isInternal
-    }
-  });
-}
-
-function staffPostNote() { staffSendMessage(true); }
-
-function onStaffMessageSent(result) {
-  if (!result || !result.success) showStaffToast('Failed to send message');
-}
-
-function startStaffPolling(ticketId) {
-  stopStaffPolling();
-  staffPollInterval = setInterval(function() {
-    google.script.run.withSuccessHandler(onStaffNewMessages).handleTicketRequest({
-      service: 'tickets', action: 'getNewComments', ticketId: ticketId, since: staffLastFetchTime
-    });
-  }, 15000);
-}
-
-function stopStaffPolling() {
-  if (staffPollInterval) { clearInterval(staffPollInterval); staffPollInterval = null; }
-}
-
-function onStaffNewMessages(result) {
-  if (!result || !result.success || !result.newComments || !result.newComments.length) return;
-  result.newComments.forEach(function(msg) {
-    appendStaffChatMessage(msg);
-    if (msg.author_type === 'CUSTOMER') onNewCustomerMessage(msg);
-  });
-  staffLastFetchTime = result.checkedAt || new Date().toISOString();
-}
-
-function onNewCustomerMessage(msg) {
-  // Play notification sound
-  try {
-    var audio = new Audio('data:audio/wav;base64,UklGRl9vT19teleQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU' + 'AAAAAA');
-    // Minimal beep using oscillator as fallback
-    try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 440;
-      gain.gain.value = 0.4;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.1);
-    } catch(e) {}
-  } catch(e) {}
-  // Browser notification
-  if (notifPermissionGranted) {
-    try {
-      new Notification('New message from ' + (msg.author_name || 'Customer'), {
-        body: (msg.content || '').substring(0, 80),
-        tag: staffActiveTicketId
-      });
-    } catch(e) {}
-  }
-  // Update badge if not on chat tab
-  if (staffCurrentTab !== 'chat') {
-    staffUnreadCount++;
-    var badge = document.getElementById('chatTabBadge');
-    badge.textContent = staffUnreadCount;
-    badge.style.display = 'flex';
-  }
-}
-
-function requestNotificationPermission() {
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'granted') { notifPermissionGranted = true; return; }
-  if (Notification.permission !== 'denied') {
-    Notification.requestPermission().then(function(p) { notifPermissionGranted = p === 'granted'; });
-  }
-}
-
-function loadCustomerTicketHistory(customerId) {
-  google.script.run.withSuccessHandler(renderCustomerHistory).handleTicketRequest({
-    service: 'tickets', action: 'getByCustomer', customerId: customerId, limit: 15
-  });
-}
-
-function renderCustomerHistory(result) {
-  var container = document.getElementById('customerTicketHistory');
-  if (!result || !result.success || !result.tickets || !result.tickets.length) {
-    container.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">No ticket history.</div>';
-    return;
-  }
-  var statusColors = {
-    OPEN: { bg: '#e0f2fe', color: '#0369a1' }, IN_PROGRESS: { bg: '#e0f2fe', color: '#0369a1' },
-    RESOLVED: { bg: '#dcfce7', color: '#16a34a' }, CLOSED: { bg: '#f1f5f9', color: '#64748b' },
-    ESCALATED: { bg: '#fee2e2', color: '#dc2626' }, NEW: { bg: '#e0f2fe', color: '#0369a1' },
-    PENDING_CUSTOMER: { bg: '#fef3c7', color: '#d97706' }
-  };
-  var html = '';
-  result.tickets.forEach(function(t) {
-    var isCurrent = t.ticket_id === staffActiveTicketId;
-    var sc = statusColors[t.status] || { bg: '#f1f5f9', color: '#64748b' };
-    html += '<div class="history-ticket-item" onclick="viewTicketFromHistory(\'' + t.ticket_id + '\')" style="' + (isCurrent ? 'border-left:3px solid #1A237E;' : '') + '">';
-    html += '<div class="history-ticket-num">' + (t.ticket_number || t.ticket_id) + '</div>';
-    html += '<div class="history-ticket-subject">' + escapeHtml(t.subject || '') + '</div>';
-    html += '<div class="history-ticket-meta"><span class="history-status-badge" style="background:' + sc.bg + ';color:' + sc.color + ';">' + (t.status || '--') + '</span>';
-    html += '<span class="history-ticket-date">' + formatDate(t.updated_at || t.created_at) + '</span></div></div>';
-  });
-  container.innerHTML = html;
-}
-
-function staffAssignToMe() {
-  if (!staffActiveTicketId) return;
-  google.script.run.withSuccessHandler(function(r) {
-    if (r && r.success) showStaffToast('Ticket assigned to you');
-  }).handleTicketRequest({
-    service: 'tickets', action: 'assign', ticketId: staffActiveTicketId, assignTo: SESSION.userId
-  });
-}
-
-function staffChangeStatus(newStatus) {
-  if (!newStatus || !staffActiveTicketId) return;
-  google.script.run.withSuccessHandler(function(r) {
-    if (r && r.success) {
-      showStaffToast('Status updated to ' + newStatus);
-      document.getElementById('qaStatusSelect').value = '';
-    }
-  }).handleTicketRequest({
-    service: 'tickets', action: 'updateStatus', ticketId: staffActiveTicketId,
-    status: newStatus, agentId: SESSION.userId
-  });
-}
-
-function staffEscalate() {
-  if (!staffActiveTicketId) return;
-  if (!confirm('Escalate this ticket to management?')) return;
-  staffChangeStatus('ESCALATED');
-}
-
-function staffChatKeyDown(event) {
-  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); staffSendMessage(false); }
-}
-
-function staffChatInputResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
-function scrollStaffChatToBottom() {
-  var el = document.getElementById('staffChatMessages');
-  if (el) el.scrollTop = el.scrollHeight;
-}
-
-function showStaffToast(msg) { showToast(msg, 'error'); }
-
-function onStaffChatError(err) {
-  showStaffToast('Chat error: ' + (err.message || 'Unknown error'));
-}
-
-function viewTicketFromHistory(ticketId) { openTicketModal(ticketId); }
-
-/* Hook into existing openTicketModal to load chat panel */
-var _origOpenTicketModal = openTicketModal;
-openTicketModal = function(ticketId) {
-  document.getElementById('tmTitle').textContent = 'Loading...';
-  new bootstrap.Modal(document.getElementById('ticketModal')).show();
-  google.script.run.withSuccessHandler(function(r) {
-    if (r.success) {
-      document.getElementById('tmTitle').textContent = r.ticket.ticket_number + ' - ' + r.ticket.subject;
-      document.getElementById('tmCustomer').textContent = r.customer?.company_name || '-';
-      document.getElementById('tmContact').textContent = r.contact?.name || '-';
-      document.getElementById('tmCategory').textContent = r.ticket.category || '-';
-      document.getElementById('tmPriority').innerHTML = getPriorityBadge(r.ticket.priority);
-      document.getElementById('tmAssigned').textContent = r.assignee?.name || 'Unassigned';
-      document.getElementById('tmCreated').textContent = formatDate(r.ticket.created_at);
-      var thread = '';
-      (r.comments || []).forEach(function(c) {
-        var cls = c.is_internal ? 'hp-bubble-internal' : c.author_type === 'CUSTOMER' ? 'hp-bubble-customer' : 'hp-bubble-agent';
-        thread += '<div class="' + cls + '"><strong>' + c.author_name + '</strong><br>' + c.content + '</div>';
-      });
-      document.getElementById('tmThread').innerHTML = thread || '<p class="text-muted">No comments yet</p>';
-      // Load chat panel with ticket data
-      loadStaffChatPanel(r.ticket);
-      requestNotificationPermission();
-    }
-  }).processRequest({ service: 'database', action: 'ticketDetail', ticketId: ticketId });
-};
-
-/* Stop polling when modal closes */
-document.getElementById('ticketModal').addEventListener('hidden.bs.modal', function() {
-  stopStaffPolling();
-  staffActiveTicketId = null;
+document.addEventListener('DOMContentLoaded', function(){
+  feather.replace();
+  initDashboard();
 });
 </script>
 </body>
