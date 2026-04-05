@@ -68,12 +68,14 @@ body {
 
 /* ── Card ── */
 .auth-card {
-  background: #ffffff;
-  max-width: 560px;
-  width: min(560px, 95vw);
-  padding: 36px 48px;
+  max-width: 580px;
+  width: min(580px, 94vw);
+  padding: 38px 52px 32px;
   border-radius: 20px;
-  box-shadow: 0 12px 48px rgba(13,20,66,0.18);
+  box-shadow: 0 12px 48px rgba(13, 20, 66, 0.16), 0 2px 8px rgba(0,0,0,0.08);
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
   animation: cardEntrance 0.45s ease-out both;
 }
 
@@ -115,15 +117,15 @@ body {
 
 /* ── Headings ── */
 .auth-heading {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
-  color: var(--navy-900);
-  text-align: center;
+  color: #0D1442;
   margin-bottom: 4px;
+  text-align: center;
 }
 .auth-subheading {
   font-size: 13px;
-  color: var(--slate-600);
+  color: #64748b;
   text-align: center;
   margin-bottom: 28px;
 }
@@ -586,6 +588,138 @@ body {
 .btn-close-policy { padding:9px 24px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; color:#1e293b; font-family:inherit; transition:background 0.15s; }
 .btn-close-policy:hover { background:#e2e8f0; }
 
+/* ── Signup 2-col grid ── */
+.signup-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 520px) {
+  .signup-grid-2 { grid-template-columns: 1fr; }
+  .auth-card { padding: 32px 24px 28px; }
+}
+
+/* ── LOGIN TRANSITION OVERLAY ─────────────────────────────── */
+#loginTransition {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  pointer-events: all;
+}
+
+.lt-wave {
+  position: absolute;
+  inset: 0;
+  background: #0D1442;
+  transform: translateY(100%);
+  animation: ltWaveRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes ltWaveRise {
+  0%   { transform: translateY(100%) skewY(3deg); }
+  100% { transform: translateY(0%) skewY(0deg); }
+}
+
+.lt-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  animation: ltContentIn 0.4s ease 0.45s forwards;
+}
+
+@keyframes ltContentIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.lt-logo-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.lt-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.lt-welcome {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.lt-role {
+  font-size: 13px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 400;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  min-height: 18px;
+}
+
+.lt-bar-wrap {
+  width: 200px;
+  height: 3px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.lt-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #FF6F00, #FFB300);
+  border-radius: 2px;
+  transition: width 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.lt-status {
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 2px;
+  min-height: 16px;
+}
+
+/* Exit animation class — added by JS before redirect */
+#loginTransition.lt-exit .lt-wave {
+  animation: ltWaveFall 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes ltWaveFall {
+  from { transform: translateY(0%) skewY(0deg); }
+  to   { transform: translateY(-100%) skewY(-2deg); }
+}
+
+#loginTransition.lt-exit .lt-content {
+  animation: ltContentOut 0.35s ease forwards;
+}
+
+@keyframes ltContentOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-12px); }
+}
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   .auth-card {
@@ -789,44 +923,48 @@ body {
 
         <!-- Standard fields wrapper (for corporate step 2 hiding) -->
         <div id="standardFieldsWrap">
-          <!-- Full Name -->
-          <div class="field-group">
-            <label class="auth-label" for="signupName">Full Name <span style="color:var(--error)">*</span></label>
-            <input class="auth-input" type="text" id="signupName" required placeholder="Your full name" autocomplete="name">
-            <div class="field-error" id="signupNameError"></div>
-          </div>
-
-          <!-- Email -->
-          <div class="field-group">
-            <label class="auth-label" for="signupEmail">Email Address <span style="color:var(--error)">*</span></label>
-            <input class="auth-input" type="email" id="signupEmail" required placeholder="you@company.com" autocomplete="email">
-            <div class="field-error" id="signupEmailError"></div>
-          </div>
-
-          <!-- Phone -->
-          <div class="field-group">
-            <label class="auth-label" for="signupPhone">Phone Number <span style="color:var(--error)">*</span></label>
-            <div class="phone-input-wrap">
-              <select id="phoneCountryCode" class="country-code-select">
-                <option value="+254">+254 KE</option>
-                <option value="+256">+256 UG</option>
-                <option value="+255">+255 TZ</option>
-                <option value="+250">+250 RW</option>
-                <option value="+211">+211 SS</option>
-                <option value="+260">+260 ZM</option>
-                <option value="+243">+243 DRC</option>
-                <option value="+971">+971 UAE</option>
-              </select>
-              <input class="auth-input" type="tel" id="signupPhone" required placeholder="712 345 678">
+          <div class="signup-grid-2">
+            <!-- Full Name -->
+            <div class="field-group">
+              <label class="auth-label" for="signupName">Full Name <span style="color:var(--error)">*</span></label>
+              <input class="auth-input" type="text" id="signupName" required placeholder="Your full name" autocomplete="name">
+              <div class="field-error" id="signupNameError"></div>
             </div>
-            <div class="field-error" id="signupPhoneError"></div>
+
+            <!-- Email -->
+            <div class="field-group">
+              <label class="auth-label" for="signupEmail">Email Address <span style="color:var(--error)">*</span></label>
+              <input class="auth-input" type="email" id="signupEmail" required placeholder="you@company.com" autocomplete="email">
+              <div class="field-error" id="signupEmailError"></div>
+            </div>
           </div>
 
-          <!-- Job Title (Corporate step 2) -->
-          <div class="field-group" id="jobTitleField" style="display:none">
-            <label class="auth-label" for="signupJobTitle">Job Title <span style="color:var(--error)">*</span></label>
-            <input class="auth-input" type="text" id="signupJobTitle" required placeholder="e.g. Procurement Manager">
-            <div class="field-error" id="signupJobTitleError"></div>
+          <div class="signup-grid-2">
+            <!-- Phone -->
+            <div class="field-group">
+              <label class="auth-label" for="signupPhone">Phone Number <span style="color:var(--error)">*</span></label>
+              <div class="phone-input-wrap">
+                <select id="phoneCountryCode" class="country-code-select">
+                  <option value="+254">+254 KE</option>
+                  <option value="+256">+256 UG</option>
+                  <option value="+255">+255 TZ</option>
+                  <option value="+250">+250 RW</option>
+                  <option value="+211">+211 SS</option>
+                  <option value="+260">+260 ZM</option>
+                  <option value="+243">+243 DRC</option>
+                  <option value="+971">+971 UAE</option>
+                </select>
+                <input class="auth-input" type="tel" id="signupPhone" required placeholder="712 345 678">
+              </div>
+              <div class="field-error" id="signupPhoneError"></div>
+            </div>
+
+            <!-- Job Title (Corporate step 2) -->
+            <div class="field-group" id="jobTitleField" style="display:none">
+              <label class="auth-label" for="signupJobTitle">Job Title <span style="color:var(--error)">*</span></label>
+              <input class="auth-input" type="text" id="signupJobTitle" required placeholder="e.g. Procurement Manager">
+              <div class="field-error" id="signupJobTitleError"></div>
+            </div>
           </div>
         </div>
 
@@ -1250,16 +1388,17 @@ body {
     try {
       google.script.run
         .withSuccessHandler(function(result) {
-          setLoginLoading(false);
           if (result && result.success) {
             sessionStorage.setItem('hass_token',    result.token);
             sessionStorage.setItem('hass_userId',   result.userId);
             sessionStorage.setItem('hass_role',     result.role);
             sessionStorage.setItem('hass_userType', result.userType);
-            sessionStorage.setItem('hass_name',     result.name);
+            sessionStorage.setItem('hass_name',     result.name || '');
             if (result.customerId) sessionStorage.setItem('hass_customerId', result.customerId);
-            window.location.href = result.redirectUrl;
+            setLoginLoading(false);
+            playLoginTransition(result);
           } else {
+            setLoginLoading(false);
             var errorMsg = (result && result.error) ? result.error : 'Login failed. Please check your credentials.';
             showLoginError(errorMsg);
             shakeCard();
@@ -1821,8 +1960,83 @@ body {
   /* ── Initialize strength meter ── */
   setupStrengthMeter();
 
+  /* ── Login transition animation ── */
+  window.playLoginTransition = function(result) {
+    var overlay  = document.getElementById('loginTransition');
+    var welcome  = document.getElementById('ltWelcome');
+    var roleEl   = document.getElementById('ltRole');
+    var bar      = document.getElementById('ltBar');
+    var statusEl = document.getElementById('ltStatus');
+    var ltLogo   = document.getElementById('ltLogo');
+
+    // Copy the logo src from the main page logo
+    var mainLogo = document.getElementById('logo');
+    if (mainLogo && mainLogo.src) ltLogo.src = mainLogo.src;
+
+    // Personalise the message
+    var name = (result.name || '').trim();
+    welcome.textContent = name ? 'Welcome, ' + name.split(' ')[0] : 'Welcome back';
+
+    // Format role for display
+    var roleMap = {
+      'SUPER_ADMIN':     'Super Administrator',
+      'GROUP_HEAD':      'Group Head',
+      'CS_MANAGER':      'Customer Service Manager',
+      'CS_SUPERVISOR':   'Customer Service Supervisor',
+      'CS_AGENT':        'Customer Service Agent',
+      'BD_MANAGER':      'Business Development Manager',
+      'BD_REP':          'Business Development Representative',
+      'FINANCE_OFFICER': 'Finance Officer',
+      'CUSTOMER':        'Customer Portal'
+    };
+    roleEl.textContent = roleMap[result.role] || result.role || '';
+
+    // Show the overlay
+    overlay.style.display = 'flex';
+
+    // Animate the progress bar after wave settles
+    setTimeout(function() {
+      bar.style.width = '75%';
+      statusEl.textContent = 'Loading your workspace...';
+    }, 600);
+
+    setTimeout(function() {
+      bar.style.width = '95%';
+      statusEl.textContent = 'Almost ready...';
+    }, 1100);
+
+    // Exit and redirect
+    setTimeout(function() {
+      bar.style.width = '100%';
+      statusEl.textContent = 'Done';
+    }, 1450);
+
+    setTimeout(function() {
+      overlay.classList.add('lt-exit');
+      setTimeout(function() {
+        window.location.href = result.redirectUrl;
+      }, 480);
+    }, 1600);
+  };
+
 })();
 </script>
+
+<!-- Login Transition Overlay -->
+<div id='loginTransition' aria-live='polite' aria-label='Signing in' style='display:none'>
+  <div class='lt-wave'></div>
+  <div class='lt-content'>
+    <div class='lt-logo-wrap'>
+      <img id='ltLogo' src='' alt='Hass Petroleum Group' class='lt-logo'>
+    </div>
+    <div class='lt-welcome' id='ltWelcome'>Welcome back</div>
+    <div class='lt-role' id='ltRole'></div>
+    <div class='lt-bar-wrap'>
+      <div class='lt-bar' id='ltBar'></div>
+    </div>
+    <div class='lt-status' id='ltStatus'>Loading your workspace...</div>
+  </div>
+</div>
 
 </body>
 </html>
