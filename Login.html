@@ -934,7 +934,7 @@ body {
             sessionStorage.removeItem('hass_token');
           }
         })
-        .handlePortalAuth({ action: 'checkSession', token: storedToken });
+        .handleAuthRequest({ action: 'checkSession', token: storedToken });
     }
 
     // Show any server-side error passed via template
@@ -1108,7 +1108,7 @@ body {
           showLoginError('Connection error. Please check your internet and try again.');
           shakeCard();
         })
-        .handlePortalAuth({
+        .handleAuthRequest({
           action:        'login',
           email:         emailVal,
           password:      passwordVal,
@@ -1344,7 +1344,7 @@ body {
           showSignupError('Verification failed. Please try again.');
           shakeCard();
         })
-        .handlePortalAuth({
+        .handleAuthRequest({
           action: 'verifyAccount',
           companyName: companyName,
           accountNumber: accountNumber
@@ -1540,7 +1540,7 @@ body {
           showSignupError('Sign up failed. Please try again.');
           shakeCard();
         })
-        .handlePortalAuth({
+        .handleAuthRequest({
           action:             'signup',
           accountType:        accountType,
           name:               document.getElementById('signupName').value.trim(),
@@ -1615,7 +1615,7 @@ body {
           showForgotError('Could not send reset link. Please check your email address.');
           shakeCard();
         })
-        .handlePortalAuth({
+        .handleAuthRequest({
           action: 'requestPasswordReset',
           email: email
         });
