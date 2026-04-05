@@ -356,6 +356,17 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .pct-good { background:#dcfce7; color:#15803d; }
 .pct-warn { background:#fef3c7; color:#92400e; }
 .pct-bad { background:#fee2e2; color:#dc2626; }
+.sla-dimension-toggle { display:grid; grid-template-columns:1fr 1fr; gap:0; background:#f1f5f9; border-radius:12px; padding:4px; margin-bottom:20px; }
+.dim-btn { display:flex; flex-direction:column; align-items:center; gap:4px; padding:14px 20px; border:none; border-radius:10px; background:transparent; color:#64748b; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.2s; }
+.dim-btn svg { color:inherit; }
+.dim-btn .dim-subtitle { font-size:11px; font-weight:400; color:inherit; opacity:0.8; }
+.dim-btn.active { background:#1A237E; color:#fff; box-shadow:0 2px 12px rgba(26,35,126,0.25); }
+.dim-btn.active .dim-subtitle { opacity:0.75; }
+.dim-btn:hover:not(.active) { background:#e2e8f0; color:#1e293b; }
+.leaderboard-row-1st { background:#fefce8; }
+.leaderboard-medal { font-size:16px; width:24px; text-align:center; }
+.leaderboard-bar { height:4px; background:#e2e8f0; border-radius:2px; margin-top:3px; }
+.leaderboard-bar-fill { height:100%; background:#16a34a; border-radius:2px; transition:width 0.6s; }
 @media(max-width:900px){.sla-kpis{grid-template-columns:repeat(2,1fr);} .sla-charts-row{grid-template-columns:1fr;}}
 
 /* ── Users & Roles Page ── */
@@ -487,6 +498,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 @media(max-width:900px){.dash-stat-row{grid-template-columns:repeat(2,1fr);}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
 
@@ -624,65 +637,179 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
     <div class="page-section" id="page-sla">
 
+      <!-- SLA Dimension Toggle -->
+      <div class="sla-dimension-toggle">
+        <button class="dim-btn active" id="dimInternal" onclick="setSLADimension('internal')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          Internal SLA
+          <span class="dim-subtitle">PO and LA staff approval performance</span>
+        </button>
+        <button class="dim-btn" id="dimExternal" onclick="setSLADimension('external')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          External SLA
+          <span class="dim-subtitle">Customer response and resolution times</span>
+        </button>
+      </div>
+
       <!-- SLA Controls -->
       <div class="sla-controls">
         <div class="period-tabs" id="slaPeriodTabs">
-          <button class="period-tab active" data-period="month" onclick="loadSLAData('month',this)">This Month</button>
-          <button class="period-tab" data-period="quarter" onclick="loadSLAData('quarter',this)">This Quarter</button>
-          <button class="period-tab" data-period="ytd" onclick="loadSLAData('ytd',this)">Year to Date</button>
+          <button class="period-tab active" data-period="month" onclick="onSLAPeriodChange('month',this)">This Month</button>
+          <button class="period-tab" data-period="quarter" onclick="onSLAPeriodChange('quarter',this)">This Quarter</button>
+          <button class="period-tab" data-period="ytd" onclick="onSLAPeriodChange('ytd',this)">Year to Date</button>
         </div>
-        <button class="btn-refresh" onclick="loadSLAData(currentSLAPeriod)">
+        <button class="btn-refresh" onclick="if(currentSLADimension==='internal'){loadSLAData(currentSLAPeriod);}else{loadExternalSLAData(currentSLAPeriod);}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           Refresh
         </button>
       </div>
 
-      <!-- KPI Row -->
-      <div class="sla-kpis" id="slaKpis">
-        <div class="kpi-card" style="--accent:#1A237E"><div class="kpi-label">Avg Finance Approval</div><div class="kpi-value" id="kpiAvgFinance">--</div><div class="kpi-sub">minutes</div></div>
-        <div class="kpi-card" style="--accent:#FF6F00"><div class="kpi-label">Avg LA Approval</div><div class="kpi-value" id="kpiAvgLA">--</div><div class="kpi-sub">minutes</div></div>
-        <div class="kpi-card" style="--accent:#16a34a"><div class="kpi-label">On-Time Rate</div><div class="kpi-value" id="kpiOnTime">--</div><div class="kpi-sub">% within SLA</div></div>
-        <div class="kpi-card" style="--accent:#d97706"><div class="kpi-label">Total Orders</div><div class="kpi-value" id="kpiTotalOrders">--</div><div class="kpi-sub">in period</div></div>
-      </div>
+      <!-- ═══ INTERNAL SLA VIEW ═══ -->
+      <div id="slaInternalView">
 
-      <!-- Charts Row -->
-      <div class="sla-charts-row">
-        <div class="sla-chart-card">
-          <div class="sla-chart-title">Finance Approval Time (minutes) — by Affiliate</div>
-          <div class="sla-chart-subtitle">Time from order submission to finance approval</div>
-          <div class="sla-chart-wrap"><canvas id="chartFinance"></canvas></div>
+        <!-- KPI Row -->
+        <div class="sla-kpis" id="slaKpis">
+          <div class="kpi-card" style="--accent:#1A237E"><div class="kpi-label">Avg Finance Approval</div><div class="kpi-value" id="kpiAvgFinance">--</div><div class="kpi-sub">minutes &middot; Target: 60 min</div></div>
+          <div class="kpi-card" style="--accent:#FF6F00"><div class="kpi-label">Avg LA Approval</div><div class="kpi-value" id="kpiAvgLA">--</div><div class="kpi-sub">minutes &middot; Target: 120 min</div></div>
+          <div class="kpi-card" style="--accent:#16a34a"><div class="kpi-label">On-Time Rate</div><div class="kpi-value" id="kpiOnTime">--</div><div class="kpi-sub">% within SLA</div></div>
+          <div class="kpi-card" style="--accent:#d97706"><div class="kpi-label">Total Orders</div><div class="kpi-value" id="kpiTotalOrders">--</div><div class="kpi-sub">in period</div></div>
         </div>
-        <div class="sla-chart-card">
-          <div class="sla-chart-title">Loading Authority Approval Time (minutes) — by Affiliate</div>
-          <div class="sla-chart-subtitle">Time from finance approval to loading authority issued</div>
-          <div class="sla-chart-wrap"><canvas id="chartLA"></canvas></div>
+
+        <!-- Charts Row -->
+        <div class="sla-charts-row">
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">Finance Approval Time (minutes) — by Affiliate</div>
+            <div class="sla-chart-subtitle">Time from order submission to finance approval</div>
+            <div class="sla-chart-wrap"><canvas id="chartFinance"></canvas></div>
+          </div>
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">Loading Authority Approval Time (minutes) — by Affiliate</div>
+            <div class="sla-chart-subtitle">Time from finance approval to loading authority issued</div>
+            <div class="sla-chart-wrap"><canvas id="chartLA"></canvas></div>
+          </div>
         </div>
-      </div>
 
-      <!-- Trend Chart -->
-      <div class="sla-chart-card" style="margin-bottom:24px;">
-        <div class="sla-chart-title">Monthly SLA Trend</div>
-        <div class="sla-chart-wrap"><canvas id="chartTrend"></canvas></div>
-      </div>
+        <!-- Trend Chart -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">Monthly SLA Trend</div>
+          <div class="sla-chart-wrap"><canvas id="chartTrend"></canvas></div>
+        </div>
 
-      <!-- Affiliate Table -->
-      <div class="sla-chart-card">
-        <div class="sla-chart-title">Affiliate Performance Breakdown</div>
-        <table class="sla-table">
-          <thead>
-            <tr>
-              <th>Affiliate</th>
-              <th>Orders</th>
-              <th>Avg Finance (min)</th>
-              <th>% Within 60min</th>
-              <th>Avg LA (min)</th>
-              <th>% Within 120min</th>
-              <th>On-Time Delivery %</th>
-            </tr>
-          </thead>
-          <tbody id="slaTableBody"></tbody>
-        </table>
-      </div>
+        <!-- Affiliate Table -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">Affiliate Performance Breakdown</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th>Affiliate</th>
+                <th>Orders</th>
+                <th>Avg Finance (min)</th>
+                <th>% Within 60min</th>
+                <th>Avg LA (min)</th>
+                <th>% Within 120min</th>
+                <th>On-Time Delivery %</th>
+              </tr>
+            </thead>
+            <tbody id="slaTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Approver Performance Leaderboard -->
+        <div class="sla-chart-card">
+          <div class="sla-chart-title">Approver Performance</div>
+          <div class="sla-chart-subtitle">Individual staff approval times for the selected period</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Approver</th>
+                <th>Orders Approved</th>
+                <th>Avg Approval Time</th>
+                <th>Fastest</th>
+                <th>Slowest</th>
+                <th>Within SLA</th>
+              </tr>
+            </thead>
+            <tbody id="approverLeaderboardBody"></tbody>
+          </table>
+        </div>
+
+      </div><!-- /slaInternalView -->
+
+      <!-- ═══ EXTERNAL SLA VIEW ═══ -->
+      <div id="slaExternalView" style="display:none">
+
+        <!-- External KPI Row -->
+        <div class="sla-kpis">
+          <div class="kpi-card" style="--accent:#1A237E"><div class="kpi-label">Avg First Response</div><div class="kpi-value" id="extKpiFirstResponse">--</div><div class="kpi-sub">minutes &middot; Target: 60 min</div></div>
+          <div class="kpi-card" style="--accent:#FF6F00"><div class="kpi-label">Avg Resolution Time</div><div class="kpi-value" id="extKpiResolution">--</div><div class="kpi-sub">hours &middot; Target: 24 hrs</div></div>
+          <div class="kpi-card" style="--accent:#0d9488"><div class="kpi-label">Avg Fulfilment Time</div><div class="kpi-value" id="extKpiFulfilment">--</div><div class="kpi-sub">hours &middot; Target: 48 hrs</div></div>
+          <div class="kpi-card" style="--accent:#7c3aed"><div class="kpi-label">Customer Satisfaction</div><div class="kpi-value" id="extKpiSatisfaction">--</div><div class="kpi-sub">/ 5 &middot; Based on ratings</div></div>
+        </div>
+
+        <!-- Response Trend Chart -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">Ticket First Response Time by Month</div>
+          <div class="sla-chart-subtitle">Average minutes from ticket creation to first agent reply</div>
+          <div class="sla-chart-wrap"><canvas id="chartExtResponse"></canvas></div>
+        </div>
+
+        <!-- Charts Row: Category + Fulfilment -->
+        <div class="sla-charts-row">
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">Resolution Time by Ticket Category</div>
+            <div class="sla-chart-subtitle">Average hours from ticket open to resolved status</div>
+            <div class="sla-chart-wrap"><canvas id="chartExtCategory"></canvas></div>
+          </div>
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">Order Fulfilment Timeline</div>
+            <div class="sla-chart-subtitle">Hours from customer order submission to delivery confirmation</div>
+            <div class="sla-chart-wrap"><canvas id="chartExtFulfilment"></canvas></div>
+          </div>
+        </div>
+
+        <!-- External Affiliate Table -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">External SLA by Affiliate</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th>Affiliate</th>
+                <th>Tickets Raised</th>
+                <th>Avg 1st Response (min)</th>
+                <th>% Within 60min</th>
+                <th>Avg Resolution (hrs)</th>
+                <th>% Within 24hrs</th>
+                <th>Avg Fulfilment (hrs)</th>
+                <th>% Within 48hrs</th>
+                <th>CSAT Score</th>
+              </tr>
+            </thead>
+            <tbody id="extAffiliateBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Agent Response Leaderboard -->
+        <div class="sla-chart-card">
+          <div class="sla-chart-title">Agent Response Leaderboard</div>
+          <div class="sla-chart-subtitle">How quickly each CS agent first responds to customer tickets</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Agent</th>
+                <th>Tickets Handled</th>
+                <th>Avg First Response</th>
+                <th>Avg Resolution</th>
+                <th>CSAT</th>
+                <th>Within SLA %</th>
+              </tr>
+            </thead>
+            <tbody id="extAgentBody"></tbody>
+          </table>
+        </div>
+
+      </div><!-- /slaExternalView -->
 
       <!-- Loading / Error states -->
       <div id="slaLoader" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.7);z-index:50;display:none;align-items:center;justify-content:center;">
@@ -1127,7 +1254,11 @@ function showPage(name) {
       if (typeof loadDashboardHome === 'function') loadDashboardHome();
       break;
     case 'sla':
-      if (typeof loadSLAData === 'function' && !window.slaLoaded) { window.slaLoaded=true; loadSLAData('month'); }
+      if (!window.slaLoaded) {
+        window.slaLoaded=true;
+        if (currentSLADimension === 'external') { loadExternalSLAData('month'); }
+        else { loadSLAData('month'); }
+      }
       break;
     case 'chat':
       if (typeof selectRoom === 'function' && !window.chatLoaded) { window.chatLoaded=true; selectRoom('ROOM_GENERAL'); }
@@ -1248,7 +1379,38 @@ function initDashboard() {
 
 /* ── SLA Analytics ── */
 var currentSLAPeriod = 'month';
+var currentSLADimension = 'internal';
 var slaChartFinance, slaChartLA, slaChartTrend;
+
+function setSLADimension(dim) {
+  currentSLADimension = dim;
+  var isInternal = dim === 'internal';
+
+  document.getElementById('dimInternal').classList.toggle('active', isInternal);
+  document.getElementById('dimExternal').classList.toggle('active', !isInternal);
+
+  document.getElementById('slaInternalView').style.display  = isInternal  ? 'block' : 'none';
+  document.getElementById('slaExternalView').style.display  = !isInternal ? 'block' : 'none';
+
+  if (isInternal) {
+    loadSLAData(currentSLAPeriod);
+  } else {
+    loadExternalSLAData(currentSLAPeriod);
+  }
+}
+
+function onSLAPeriodChange(period, btn) {
+  currentSLAPeriod = period;
+  if (btn) {
+    document.querySelectorAll('#slaPeriodTabs .period-tab').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+  if (currentSLADimension === 'internal') {
+    loadSLAData(period);
+  } else {
+    loadExternalSLAData(period);
+  }
+}
 
 function loadSLAData(period, btn) {
   currentSLAPeriod = period || 'month';
@@ -1292,7 +1454,9 @@ function renderSLAData(data) {
     },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ afterLabel:function(ctx){ var d=data.byAffiliate[ctx.dataIndex]; return 'Orders: '+d.orders+'  |  SLA%: '+d.financeSLAPct+'%'; } } } },
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ afterLabel:function(ctx){ var d=data.byAffiliate[ctx.dataIndex]; return 'Orders: '+d.orders+'  |  SLA%: '+d.financeSLAPct+'%'; } } },
+        annotation:{ annotations:{ slaLine:{ type:'line', yMin:60, yMax:60, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA Target: 60 min', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } }
+      },
       scales:{ y:{ title:{display:true,text:'Minutes'}, grid:{color:'rgba(226,232,240,0.6)'} }, x:{ grid:{display:false} } }
     }
   });
@@ -1313,7 +1477,9 @@ function renderSLAData(data) {
     },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false} },
+      plugins:{ legend:{display:false},
+        annotation:{ annotations:{ slaLine:{ type:'line', yMin:120, yMax:120, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA Target: 120 min', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } }
+      },
       scales:{ y:{ title:{display:true,text:'Minutes'} }, x:{ grid:{display:false} } }
     }
   });
@@ -1338,6 +1504,9 @@ function renderSLAData(data) {
   tbody.innerHTML = data.byAffiliate.map(function(a){
     return '<tr><td><strong>'+a.affiliate+'</strong></td><td>'+a.orders+'</td><td>'+Math.round(a.avgFinance)+'</td><td><span class="pct-badge '+(a.financeSLAPct>=80?'pct-good':a.financeSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.financeSLAPct+'%</span></td><td>'+Math.round(a.avgLA)+'</td><td><span class="pct-badge '+(a.laSLAPct>=80?'pct-good':a.laSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.laSLAPct+'%</span></td><td><span class="pct-badge '+(a.onTimePct>=80?'pct-good':a.onTimePct>=60?'pct-warn':'pct-bad')+'">'+a.onTimePct+'%</span></td></tr>';
   }).join('');
+
+  // Approver leaderboard
+  renderApproverLeaderboard(data);
 }
 
 function showSLALoading(on){
@@ -1347,6 +1516,101 @@ function showSLALoading(on){
 function showSLAError(msg){
   var err = document.getElementById('slaError');
   if (err) { err.textContent = msg; err.style.display = 'block'; }
+}
+
+function renderApproverLeaderboard(data) {
+  if (!data.approverStats) return;
+  var tbody = document.getElementById('approverLeaderboardBody');
+  if (!tbody) return;
+  tbody.innerHTML = data.approverStats.map(function(a, idx) {
+    var medal = idx===0?'&#127947;':idx===1?'&#129352;':idx===2?'&#129353;':String(idx+1);
+    var rowClass = idx===0 ? ' class="leaderboard-row-1st"' : '';
+    return '<tr'+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+a.name+'</td><td>'+a.count+'</td><td>'+Math.round(a.avg)+'min</td><td>'+Math.round(a.fastest)+'min</td><td>'+Math.round(a.slowest)+'min</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span><div class="leaderboard-bar"><div class="leaderboard-bar-fill" style="width:'+a.withinSLAPct+'%"></div></div></td></tr>';
+  }).join('');
+}
+
+/* ── External SLA Analytics ── */
+var externalSLALoaded = false;
+
+function loadExternalSLAData(period) {
+  period = period || currentSLAPeriod;
+  showSLALoading(true);
+  google.script.run
+    .withSuccessHandler(function(data) {
+      showSLALoading(false);
+      if (data.success) renderExternalSLA(data);
+      else showSLAError(data.error);
+    })
+    .withFailureHandler(function(e) { showSLALoading(false); showSLAError(e.message); })
+    .handleSLARequest({ action: 'getExternalSLAAnalytics', period: period, affiliate: currentAffiliate });
+}
+
+function renderExternalSLA(data) {
+  var set = function(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; };
+  set('extKpiFirstResponse', Math.round(data.kpis.avgFirstResponseMin));
+  set('extKpiResolution',    Math.round(data.kpis.avgResolutionHrs * 10) / 10);
+  set('extKpiFulfilment',    Math.round(data.kpis.avgFulfilmentHrs * 10) / 10);
+  set('extKpiSatisfaction',  data.kpis.avgCSAT > 0 ? data.kpis.avgCSAT.toFixed(1) : '--');
+
+  // Response trend chart
+  if (window.chartExtResponse) window.chartExtResponse.destroy();
+  var rCtx = document.getElementById('chartExtResponse').getContext('2d');
+  window.chartExtResponse = new Chart(rCtx, {
+    type: 'line',
+    data: {
+      labels: data.monthlyTrend.map(function(m){ return m.month; }),
+      datasets: [
+        { label:'Avg First Response (min)', data:data.monthlyTrend.map(function(m){return m.avgFirstResponse;}), borderColor:'#1A237E', backgroundColor:'rgba(26,35,126,0.06)', fill:true, tension:0.4, pointRadius:4 },
+        { label:'Avg Resolution (hrs)', data:data.monthlyTrend.map(function(m){return m.avgResolutionHrs;}), borderColor:'#FF6F00', backgroundColor:'rgba(255,111,0,0.06)', fill:true, tension:0.4, pointRadius:4, yAxisID:'y1' }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ annotation:{ annotations:{ slaLine:{ type:'line', yMin:60, yMax:60, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA Target: 60 min', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } } },
+      scales:{ y:{title:{display:true,text:'Response (min)'},position:'left'}, y1:{title:{display:true,text:'Resolution (hrs)'},position:'right',grid:{drawOnChartArea:false}} } }
+  });
+
+  // Category chart
+  if (window.chartExtCategory) window.chartExtCategory.destroy();
+  var catColors = { DELIVERY:'#1A237E',QUALITY:'#dc2626',BILLING:'#d97706',ACCOUNT:'#0d9488',PRICING:'#7c3aed',GENERAL:'#64748b' };
+  var cCtx = document.getElementById('chartExtCategory').getContext('2d');
+  window.chartExtCategory = new Chart(cCtx, {
+    type:'bar',
+    data:{
+      labels: data.byCategory.map(function(c){return c.category;}),
+      datasets:[{ label:'Avg Resolution (hrs)', data:data.byCategory.map(function(c){return c.avgResolutionHrs;}), backgroundColor:data.byCategory.map(function(c){return catColors[c.category]||'#94a3b8';}), borderRadius:6 }]
+    },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, annotation:{ annotations:{ slaLine:{ type:'line', xMin:24, xMax:24, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA: 24hrs', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } } },
+      scales:{x:{title:{display:true,text:'Hours'}},y:{grid:{display:false}}} }
+  });
+
+  // Fulfilment scatter
+  if (window.chartExtFulfilment) window.chartExtFulfilment.destroy();
+  var fCtx = document.getElementById('chartExtFulfilment').getContext('2d');
+  window.chartExtFulfilment = new Chart(fCtx, {
+    type:'scatter',
+    data:{ datasets:[
+      { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='ON_TIME';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) },
+      { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='SLIGHT';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) },
+      { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='DELAYED';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{type:'time',time:{unit:'day'},title:{display:true,text:'Order Date'}}, y:{title:{display:true,text:'Hours to Deliver'},min:0} }, plugins:{ tooltip:{ callbacks:{ label:function(ctx){ return ctx.raw.label+': '+ctx.raw.y+'h'; } } } } }
+  });
+
+  // Affiliate table
+  var tbody = document.getElementById('extAffiliateBody');
+  if (tbody) tbody.innerHTML = data.byAffiliate.map(function(a){
+    function badge(pct){ return '<span class="pct-badge '+(pct>=80?'pct-good':pct>=60?'pct-warn':'pct-bad')+'">'+pct+'%</span>'; }
+    return '<tr><td><strong>'+a.affiliate+'</strong></td><td>'+a.tickets+'</td><td>'+Math.round(a.avgFirstResponseMin)+'</td><td>'+badge(a.firstResponseSLAPct)+'</td><td>'+Math.round(a.avgResolutionHrs*10)/10+'</td><td>'+badge(a.resolutionSLAPct)+'</td><td>'+Math.round(a.avgFulfilmentHrs*10)/10+'</td><td>'+badge(a.fulfilmentSLAPct)+'</td><td>'+(a.avgCSAT>0?'&#9733; '+a.avgCSAT.toFixed(1):'--')+'</td></tr>';
+  }).join('');
+
+  // Agent leaderboard
+  var agentBody = document.getElementById('extAgentBody');
+  if (agentBody) agentBody.innerHTML = data.agentPerformance.map(function(a, idx){
+    var medal = idx===0?'&#127947;':idx===1?'&#129352;':idx===2?'&#129353;':String(idx+1);
+    var rowClass = a.withinSLAPct < 60 ? 'style="background:#fff5f5"' : idx===0 ? 'style="background:#fefce8"' : '';
+    return '<tr '+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+a.name+'</td><td>'+a.tickets+'</td><td>'+Math.round(a.avgFirstResponse)+'min</td><td>'+Math.round(a.avgResolution*10)/10+'h</td><td>'+(a.avgCSAT>0?'&#9733; '+a.avgCSAT.toFixed(1):'--')+'</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span></td></tr>';
+  }).join('');
 }
 
 /* ══════════ USERS & ROLES ══════════ */
