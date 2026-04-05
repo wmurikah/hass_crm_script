@@ -357,6 +357,125 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .pct-warn { background:#fef3c7; color:#92400e; }
 .pct-bad { background:#fee2e2; color:#dc2626; }
 @media(max-width:900px){.sla-kpis{grid-template-columns:repeat(2,1fr);} .sla-charts-row{grid-template-columns:1fr;}}
+
+/* ── Users & Roles Page ── */
+.users-tabs { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.users-tab { background:#fff; border:1px solid var(--slate-200); border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; color:var(--slate-600); cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.users-tab:hover { background:var(--slate-100); }
+.users-tab.active { background:var(--navy-800); color:#fff; border-color:var(--navy-800); }
+.users-search { border:1px solid var(--slate-200); border-radius:8px; padding:8px 14px; font-size:13px; font-family:inherit; width:240px; outline:none; }
+.users-search:focus { border-color:var(--navy-800); box-shadow:0 0 0 3px rgba(26,35,126,0.08); }
+.btn-add-staff { background:var(--navy-800); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.btn-add-staff:hover { background:var(--navy-900); }
+.user-panel { background:#fff; border:1px solid var(--slate-200); border-radius:12px; overflow:hidden; }
+.table-wrap { overflow-x:auto; }
+.users-table { width:100%; border-collapse:collapse; font-size:13px; }
+.users-table th { background:#f8fafc; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; padding:10px 14px; text-align:left; border-bottom:2px solid #e2e8f0; white-space:nowrap; }
+.users-table td { padding:10px 14px; border-bottom:1px solid #f1f5f9; color:#1e293b; }
+.users-table tbody tr:hover td { background:#f8fafc; }
+.users-empty, .users-loading { padding:40px; text-align:center; color:#94a3b8; font-size:14px; }
+.status-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
+.status-active { background:#dcfce7; color:#15803d; }
+.status-inactive { background:#fee2e2; color:#dc2626; }
+.status-suspended { background:#fef3c7; color:#92400e; }
+.action-btn { background:none; border:1px solid var(--slate-200); border-radius:6px; padding:4px 10px; font-size:11px; font-weight:600; color:var(--slate-600); cursor:pointer; font-family:inherit; margin-right:4px; transition:all 0.15s; }
+.action-btn:hover { background:var(--slate-100); border-color:var(--slate-600); }
+.action-btn.danger { color:#dc2626; border-color:#fecaca; }
+.action-btn.danger:hover { background:#fee2e2; }
+
+/* ── Modals ── */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:200; display:flex; align-items:center; justify-content:center; }
+.modal-card { background:#fff; border-radius:16px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.15); }
+.modal-header { padding:16px 20px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; }
+.modal-header h3 { margin:0; font-size:16px; font-weight:700; color:#1e293b; }
+.modal-close { background:none; border:none; font-size:22px; color:#94a3b8; cursor:pointer; line-height:1; padding:0 4px; }
+.modal-close:hover { color:#1e293b; }
+.modal-body { padding:20px; }
+.modal-footer { padding:14px 20px; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:8px; }
+.form-group { margin-bottom:14px; flex:1; }
+.form-group label { display:block; font-size:12px; font-weight:600; color:#64748b; margin-bottom:5px; }
+.form-input { width:100%; border:1.5px solid #e2e8f0; border-radius:8px; padding:9px 12px; font-size:13px; font-family:inherit; outline:none; transition:border-color 0.15s; box-sizing:border-box; }
+.form-input:focus { border-color:var(--navy-800); box-shadow:0 0 0 3px rgba(26,35,126,0.08); }
+.form-row { display:flex; gap:12px; }
+.form-error { background:#fee2e2; color:#dc2626; padding:8px 12px; border-radius:8px; font-size:12px; margin-top:8px; }
+.btn-primary { background:var(--navy-800); color:#fff; border:none; border-radius:8px; padding:9px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.btn-primary:hover { background:var(--navy-900); }
+.btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+.btn-secondary { background:#fff; color:var(--slate-600); border:1px solid var(--slate-200); border-radius:8px; padding:9px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.btn-secondary:hover { background:var(--slate-100); }
+.contact-portal-toggle { position:relative; width:36px; height:20px; background:#e2e8f0; border-radius:10px; cursor:pointer; border:none; transition:background 0.2s; }
+.contact-portal-toggle.on { background:#16a34a; }
+.contact-portal-toggle::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:transform 0.2s; }
+.contact-portal-toggle.on::after { transform:translateX(16px); }
+
+/* ── Staff Chat ── */
+#page-chat .chat-shell { display:grid; grid-template-columns:220px 1fr 180px; height:calc(100vh - 56px - 48px); gap:0; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; background:#fff; }
+.chat-rooms { background:#f8fafc; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; overflow-y:auto; }
+.room-section-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#94a3b8; padding:12px 14px 4px; }
+.room-item { padding:8px 14px; font-size:13px; color:#64748b; cursor:pointer; border-radius:6px; margin:1px 6px; display:flex; align-items:center; gap:8px; transition:all 0.12s; }
+.room-item:hover { background:#f1f5f9; color:#1e293b; }
+.room-item.active { background:#e0e7ff; color:#1A237E; font-weight:600; }
+.room-hash { font-weight:700; color:#94a3b8; font-size:14px; width:16px; text-align:center; }
+.room-item.active .room-hash { color:#1A237E; }
+.room-badge { margin-left:auto; background:var(--red-500); color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; min-width:16px; text-align:center; }
+.chat-thread { display:flex; flex-direction:column; min-width:0; }
+.chat-thread-header { padding:12px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.thread-room-name { font-size:14px; font-weight:700; color:#1e293b; }
+.thread-room-desc { font-size:11px; color:#94a3b8; }
+.thread-member-count { font-size:11px; color:#94a3b8; }
+.chat-messages-area { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px; background:#fafbfc; }
+.chat-msg { display:flex; gap:10px; max-width:85%; }
+.chat-msg.self { margin-left:auto; flex-direction:row-reverse; }
+.chat-msg-avatar { width:30px; height:30px; border-radius:50%; background:#e0e7ff; color:#1A237E; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.chat-msg.self .chat-msg-avatar { background:#1A237E; color:#fff; }
+.chat-msg-body { display:flex; flex-direction:column; }
+.chat-msg-name { font-size:11px; font-weight:600; color:#64748b; margin-bottom:2px; }
+.chat-msg.self .chat-msg-name { text-align:right; }
+.chat-msg-bubble { padding:8px 12px; border-radius:12px 12px 12px 4px; font-size:13px; line-height:1.5; color:#1e293b; background:#fff; border:1px solid #e2e8f0; }
+.chat-msg.self .chat-msg-bubble { background:#1A237E; color:#fff; border-color:#1A237E; border-radius:12px 12px 4px 12px; }
+.chat-msg-time { font-size:10px; color:#94a3b8; margin-top:2px; }
+.chat-msg.self .chat-msg-time { text-align:right; }
+.chat-typing { padding:4px 16px; font-size:12px; color:#94a3b8; flex-shrink:0; display:flex; align-items:center; gap:6px; }
+.typing-dots span { display:inline-block; width:4px; height:4px; border-radius:50%; background:#94a3b8; animation:typingDot 1.2s infinite; }
+.typing-dots span:nth-child(2) { animation-delay:0.2s; }
+.typing-dots span:nth-child(3) { animation-delay:0.4s; }
+@keyframes typingDot { 0%,60%,100%{opacity:0.3;} 30%{opacity:1;} }
+.chat-compose { display:flex; align-items:flex-end; gap:8px; padding:10px 16px; border-top:1px solid #e2e8f0; flex-shrink:0; background:#fff; }
+.chat-compose-input { flex:1; border:1.5px solid #e2e8f0; border-radius:8px; padding:9px 12px; font-size:13px; font-family:inherit; outline:none; resize:none; max-height:100px; line-height:1.4; }
+.chat-compose-input:focus { border-color:var(--navy-800); }
+.chat-send-btn { background:var(--navy-800); border:none; color:#fff; border-radius:8px; padding:9px 12px; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
+.chat-send-btn:hover { background:var(--navy-900); }
+.chat-members { border-left:1px solid #e2e8f0; padding:0; overflow-y:auto; }
+.member-item { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:12px; cursor:pointer; transition:background 0.12s; }
+.member-item:hover { background:#f8fafc; }
+.member-status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.member-status-dot.online { background:#22c55e; }
+.member-status-dot.offline { background:#e2e8f0; }
+.member-name { color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.member-role { font-size:10px; color:#94a3b8; }
+@media(max-width:900px){
+  #page-chat .chat-shell { grid-template-columns:1fr; height:auto; }
+  .chat-rooms, .chat-members { display:none; }
+}
+
+/* ── Settings Page ── */
+.settings-tabs { display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; background:#fff; border:1px solid var(--slate-200); border-radius:10px; padding:4px; }
+.settings-tab { display:flex; align-items:center; gap:6px; background:none; border:none; padding:8px 14px; font-size:13px; font-weight:600; color:var(--slate-600); cursor:pointer; border-radius:8px; font-family:inherit; transition:all 0.15s; }
+.settings-tab:hover { background:var(--slate-100); }
+.settings-tab.active { background:var(--navy-800); color:#fff; }
+.settings-tab.active svg { stroke:#fff; }
+.settings-panel { animation:fadeIn 0.2s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
+.settings-card { background:#fff; border:1px solid var(--slate-200); border-radius:12px; padding:24px; }
+.settings-help { background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px 14px; font-size:12px; color:#0369a1; line-height:1.5; margin-bottom:20px; }
+.settings-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; padding-top:16px; border-top:1px solid #f1f5f9; }
+.settings-test-result { margin-top:12px; padding:10px 14px; border-radius:8px; font-size:12px; font-weight:600; }
+.settings-test-result.success { background:#dcfce7; color:#15803d; }
+.settings-test-result.error { background:#fee2e2; color:#dc2626; }
+.settings-toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; color:#fff; z-index:300; box-shadow:0 4px 20px rgba(0,0,0,0.15); animation:slideUp 0.3s; }
+.settings-toast.success { background:#16a34a; }
+.settings-toast.error { background:#dc2626; }
+@keyframes slideUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -553,20 +672,383 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <div class="page-placeholder">Support Tickets — loaded by SD-4 prompt</div>
     </div>
 
+    <!-- ══════════ TEAM CHAT PAGE ══════════ -->
     <div class="page-section" id="page-chat">
-      <div class="page-placeholder">Team Chat — loaded by SD-5 prompt</div>
+      <div class="chat-shell">
+        <!-- Rooms Panel -->
+        <div class="chat-rooms">
+          <div class="room-section-label">CHANNELS</div>
+          <div class="room-item active" data-room="ROOM_GENERAL" onclick="selectRoom('ROOM_GENERAL',this)">
+            <span class="room-hash">#</span> general
+            <span class="room-badge" id="badge-ROOM_GENERAL" style="display:none">0</span>
+          </div>
+          <div class="room-item" data-room="ROOM_CS" onclick="selectRoom('ROOM_CS',this)">
+            <span class="room-hash">#</span> cs-team
+            <span class="room-badge" id="badge-ROOM_CS" style="display:none">0</span>
+          </div>
+          <div class="room-item" data-room="ROOM_BD" onclick="selectRoom('ROOM_BD',this)">
+            <span class="room-hash">#</span> bd-team
+            <span class="room-badge" id="badge-ROOM_BD" style="display:none">0</span>
+          </div>
+          <div class="room-item" data-room="ROOM_MGMT" id="roomMgmt" onclick="selectRoom('ROOM_MGMT',this)" style="display:none">
+            <span class="room-hash">#</span> management
+            <span class="room-badge" id="badge-ROOM_MGMT" style="display:none">0</span>
+          </div>
+
+          <div class="room-section-label">DIRECT MESSAGES</div>
+          <div id="dmList" style="padding:0 6px;"></div>
+        </div>
+
+        <!-- Message Area -->
+        <div class="chat-thread">
+          <div class="chat-thread-header">
+            <div>
+              <div class="thread-room-name" id="threadRoomName"># general</div>
+              <div class="thread-room-desc" id="threadRoomDesc">All staff</div>
+            </div>
+            <div class="thread-member-count" id="threadMemberCount"></div>
+          </div>
+          <div class="chat-messages-area" id="chatMessagesArea"></div>
+          <div class="chat-typing" id="chatTyping" style="display:none">
+            <span class="typing-dots"><span></span><span></span><span></span></span>
+            <span id="chatTypingName">Someone</span> is typing...
+          </div>
+          <div class="chat-compose">
+            <textarea id="chatComposeInput" class="chat-compose-input" placeholder="Message #general..." rows="1"
+              onkeydown="chatComposeKeyDown(event)" oninput="chatComposeResize(this)"></textarea>
+            <button class="chat-send-btn" onclick="sendStaffChatMessage()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Members Panel -->
+        <div class="chat-members">
+          <div class="room-section-label">MEMBERS</div>
+          <div id="membersList"></div>
+        </div>
+      </div>
     </div>
 
+    <!-- ══════════ USERS & ROLES PAGE ══════════ -->
     <div class="page-section" id="page-users">
-      <div class="page-placeholder">Users &amp; Roles — loaded by SD-6 prompt</div>
+
+      <!-- Tabs: Staff / Customers -->
+      <div class="users-tabs">
+        <button class="users-tab active" id="tabStaff" onclick="switchUserTab('staff')">Staff Users</button>
+        <button class="users-tab" id="tabCustomers" onclick="switchUserTab('customers')">Customer Accounts</button>
+        <div style="flex:1"></div>
+        <input type="text" id="userSearch" class="users-search" placeholder="Search by name or email..." oninput="filterUserTable()">
+        <button class="btn-add-staff" onclick="openAddStaffModal()">+ Add Staff</button>
+      </div>
+
+      <!-- Staff Tab -->
+      <div id="staffPanel" class="user-panel">
+        <div class="table-wrap">
+          <table class="users-table" id="staffTable">
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Role</th><th>Country</th><th>Status</th><th>Last Login</th><th style="text-align:right">Actions</th></tr>
+            </thead>
+            <tbody id="staffTableBody"></tbody>
+          </table>
+        </div>
+        <div class="users-empty" id="staffEmpty" style="display:none">No staff users found</div>
+        <div class="users-loading" id="staffLoading">Loading staff users...</div>
+      </div>
+
+      <!-- Customers Tab -->
+      <div id="customersPanel" class="user-panel" style="display:none">
+        <div class="table-wrap">
+          <table class="users-table" id="customersTable">
+            <thead>
+              <tr><th>Company</th><th>Account No</th><th>Country</th><th>Credit Limit</th><th>Status</th><th>Contacts</th><th style="text-align:right">Actions</th></tr>
+            </thead>
+            <tbody id="customersTableBody"></tbody>
+          </table>
+        </div>
+        <div class="users-empty" id="customersEmpty" style="display:none">No customer accounts found</div>
+        <div class="users-loading" id="customersLoading">Loading customers...</div>
+      </div>
     </div>
 
+    <!-- Add Staff Modal -->
+    <div class="modal-overlay" id="addStaffModal" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Add Staff User</h3>
+          <button class="modal-close" onclick="closeModal('addStaffModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input id="staffFirstName" type="text" class="form-input" placeholder="First name"></div>
+            <div class="form-group"><label>Last Name *</label><input id="staffLastName" type="text" class="form-input" placeholder="Last name"></div>
+          </div>
+          <div class="form-group"><label>Email *</label><input id="staffEmail" type="email" class="form-input" placeholder="name@hasspetroleum.com"></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Role *</label>
+              <select id="staffRole" class="form-input">
+                <option value="">Select role...</option>
+                <option value="CS_AGENT">CS Agent</option>
+                <option value="CS_SUPERVISOR">CS Supervisor</option>
+                <option value="CS_MANAGER">CS Manager</option>
+                <option value="BD_REP">BD Representative</option>
+                <option value="BD_MANAGER">BD Manager</option>
+                <option value="FINANCE_OFFICER">Finance Officer</option>
+                <option value="COUNTRY_MANAGER">Country Manager</option>
+                <option value="REGIONAL_MANAGER">Regional Manager</option>
+                <option value="GROUP_HEAD">Group Head</option>
+                <option value="ADMIN">Admin</option>
+                <option value="VIEWER">Viewer</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Country Code</label>
+              <select id="staffCountry" class="form-input">
+                <option value="">Select...</option>
+                <option value="KE">KE - Kenya</option>
+                <option value="UG">UG - Uganda</option>
+                <option value="TZ">TZ - Tanzania</option>
+                <option value="RW">RW - Rwanda</option>
+                <option value="SS">SS - South Sudan</option>
+                <option value="ZM">ZM - Zambia</option>
+                <option value="DRC">DRC - Congo</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group"><label>Team ID</label><input id="staffTeam" type="text" class="form-input" placeholder="Optional team ID"></div>
+          <div id="addStaffError" class="form-error" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('addStaffModal')">Cancel</button>
+          <button class="btn-primary" id="addStaffBtn" onclick="submitAddStaff()">Create User</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Change Role Modal -->
+    <div class="modal-overlay" id="changeRoleModal" style="display:none">
+      <div class="modal-card" style="max-width:400px">
+        <div class="modal-header">
+          <h3>Change Role</h3>
+          <button class="modal-close" onclick="closeModal('changeRoleModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:#64748b;margin:0 0 12px">Change role for <strong id="changeRoleUserName"></strong></p>
+          <select id="newRoleSelect" class="form-input">
+            <option value="CS_AGENT">CS Agent</option>
+            <option value="CS_SUPERVISOR">CS Supervisor</option>
+            <option value="CS_MANAGER">CS Manager</option>
+            <option value="BD_REP">BD Representative</option>
+            <option value="BD_MANAGER">BD Manager</option>
+            <option value="FINANCE_OFFICER">Finance Officer</option>
+            <option value="COUNTRY_MANAGER">Country Manager</option>
+            <option value="REGIONAL_MANAGER">Regional Manager</option>
+            <option value="GROUP_HEAD">Group Head</option>
+            <option value="ADMIN">Admin</option>
+            <option value="SUPER_ADMIN">Super Admin</option>
+            <option value="VIEWER">Viewer</option>
+          </select>
+          <input type="hidden" id="changeRoleUserId">
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('changeRoleModal')">Cancel</button>
+          <button class="btn-primary" onclick="submitChangeRole()">Update Role</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reset Password Confirm Modal -->
+    <div class="modal-overlay" id="resetPwModal" style="display:none">
+      <div class="modal-card" style="max-width:400px">
+        <div class="modal-header">
+          <h3>Reset Password</h3>
+          <button class="modal-close" onclick="closeModal('resetPwModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:#64748b;">This will generate a new temporary password and email it to <strong id="resetPwUserName"></strong>.</p>
+          <input type="hidden" id="resetPwUserId">
+          <input type="hidden" id="resetPwUserType">
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('resetPwModal')">Cancel</button>
+          <button class="btn-primary" id="resetPwBtn" onclick="submitResetPassword()">Reset Password</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customer Contacts Drawer -->
+    <div class="modal-overlay" id="contactsDrawer" style="display:none">
+      <div class="modal-card" style="max-width:560px">
+        <div class="modal-header">
+          <h3 id="contactsDrawerTitle">Customer Contacts</h3>
+          <button class="modal-close" onclick="closeModal('contactsDrawer')">&times;</button>
+        </div>
+        <div class="modal-body" id="contactsDrawerBody">
+          <div class="users-loading">Loading contacts...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ REPORTS PAGE ══════════ -->
     <div class="page-section" id="page-reports">
       <div class="page-placeholder">Reports — loaded by SD-6 prompt</div>
     </div>
 
+    <!-- ══════════ SETTINGS PAGE ══════════ -->
     <div class="page-section" id="page-settings">
-      <div class="page-placeholder">Settings — loaded by SD-6 prompt</div>
+
+      <div class="settings-tabs" id="settingsTabs">
+        <button class="settings-tab active" data-tab="tab-erp" onclick="switchSettingsTab('tab-erp',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Oracle EBS
+        </button>
+        <button class="settings-tab" data-tab="tab-whatsapp" onclick="switchSettingsTab('tab-whatsapp',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+          WhatsApp
+        </button>
+        <button class="settings-tab" data-tab="tab-teams" onclick="switchSettingsTab('tab-teams',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Teams
+        </button>
+        <button class="settings-tab" data-tab="tab-zoom" onclick="switchSettingsTab('tab-zoom',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Zoom
+        </button>
+        <button class="settings-tab" data-tab="tab-phone" onclick="switchSettingsTab('tab-phone',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+          Phone
+        </button>
+        <button class="settings-tab" data-tab="tab-email" onclick="switchSettingsTab('tab-email',this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Email
+        </button>
+      </div>
+
+      <!-- Oracle EBS Tab -->
+      <div class="settings-panel" id="tab-erp">
+        <div class="settings-card">
+          <div class="settings-help">Used to sync Orders, Approvals, and Customer data from Oracle EBS. The portal calls Oracle REST APIs for FINANCE_VARIANCE and LOADING_AUTHORITY_VARIANCE data.</div>
+          <div class="form-group"><label>EBS Host URL</label><input data-setting-key="ORACLE_HOST" type="url" class="form-input" placeholder="https://erp.hasspetroleum.com:8080"></div>
+          <div class="form-row">
+            <div class="form-group"><label>API Username</label><input data-setting-key="ORACLE_USER" type="text" class="form-input" placeholder="hass_api_user"></div>
+            <div class="form-group"><label>API Password / Key</label><input data-setting-key="ORACLE_PASSWORD" type="password" class="form-input" placeholder="Enter password or API key"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Database SID</label><input data-setting-key="ORACLE_DB" type="text" class="form-input" placeholder="PROD"></div>
+            <div class="form-group"><label>Port</label><input data-setting-key="ORACLE_PORT" type="text" class="form-input" placeholder="1521"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testOracleConnection')">Test EBS Connection</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testOracleConnection" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- WhatsApp Tab -->
+      <div class="settings-panel" id="tab-whatsapp" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Customers send WhatsApp messages to your business number. Messages appear as tickets. Staff replies from the portal are sent back via WhatsApp.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Phone Number ID</label><input data-setting-key="WA_PHONE_ID" type="text" class="form-input" placeholder="Meta WhatsApp Business Phone Number ID"></div>
+            <div class="form-group"><label>Access Token</label><input data-setting-key="WA_TOKEN" type="password" class="form-input" placeholder="EAAxxxxx... (permanent token)"></div>
+          </div>
+          <div class="form-group"><label>Webhook URL</label><input data-setting-key="WA_WEBHOOK_URL" type="url" class="form-input" readonly style="background:#f8fafc"></div>
+          <div class="form-group"><label>Webhook Verify Token</label><input data-setting-key="WA_VERIFY_TOKEN" type="text" class="form-input" placeholder="Your custom verification string"></div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testWhatsApp')">Send Test Message</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testWhatsApp" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Teams Tab -->
+      <div class="settings-panel" id="tab-teams" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Staff notifications are posted to Teams channels for high-priority tickets, order approvals, or SLA breaches. Staff can create Teams meetings from ticket detail.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Azure Tenant ID</label><input data-setting-key="TEAMS_TENANT_ID" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
+            <div class="form-group"><label>App Client ID</label><input data-setting-key="TEAMS_CLIENT_ID" type="text" class="form-input" placeholder="Azure AD App registration client ID"></div>
+          </div>
+          <div class="form-group"><label>Client Secret</label><input data-setting-key="TEAMS_CLIENT_SECRET" type="password" class="form-input" placeholder="Azure AD client secret value"></div>
+          <div class="form-group"><label>Incoming Webhook URL</label><input data-setting-key="TEAMS_WEBHOOK_URL" type="url" class="form-input" placeholder="https://hasspetroleum.webhook.office.com/..."></div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testTeams')">Post Test Notification</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testTeams" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Zoom Tab -->
+      <div class="settings-panel" id="tab-zoom" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Allows staff to start Zoom calls with customers from the support ticket interface. Meeting links are sent via email and WhatsApp.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Account ID</label><input data-setting-key="ZOOM_ACCOUNT_ID" type="text" class="form-input" placeholder="Your Zoom account ID"></div>
+            <div class="form-group"><label>Client ID</label><input data-setting-key="ZOOM_CLIENT_ID" type="text" class="form-input" placeholder="Zoom OAuth app client ID"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Client Secret</label><input data-setting-key="ZOOM_CLIENT_SECRET" type="password" class="form-input" placeholder="Zoom OAuth app client secret"></div>
+            <div class="form-group"><label>Webhook Secret</label><input data-setting-key="ZOOM_WEBHOOK_SECRET" type="text" class="form-input" placeholder="Zoom webhook secret token"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testZoom')">Create Test Meeting</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testZoom" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Phone Tab -->
+      <div class="settings-panel" id="tab-phone" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Inbound customer calls are routed to available CS agents. Calls are logged as tickets. Missed calls trigger a WhatsApp callback notification.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Twilio Account SID</label><input data-setting-key="TWILIO_SID" type="text" class="form-input" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
+            <div class="form-group"><label>Auth Token</label><input data-setting-key="TWILIO_TOKEN" type="password" class="form-input" placeholder="Twilio auth token"></div>
+          </div>
+          <div class="form-group"><label>Twilio Phone Number</label><input data-setting-key="TWILIO_NUMBER" type="text" class="form-input" placeholder="+254xxxxxxxxx"></div>
+          <div class="form-group"><label>Call Webhook URL</label><input data-setting-key="TWILIO_WEBHOOK_URL" type="url" class="form-input" readonly style="background:#f8fafc"></div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testTwilio')">Make Test Call</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testTwilio" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Email Tab -->
+      <div class="settings-panel" id="tab-email" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Controls how the portal sends emails — order confirmations, ticket notifications, password resets. Microsoft Graph recommended for @hasspetroleum.com.</div>
+          <div class="form-group">
+            <label>Provider</label>
+            <select data-setting-key="EMAIL_PROVIDER" class="form-input">
+              <option value="MAILAPP">MailApp (Google)</option>
+              <option value="MICROSOFT_GRAPH">Microsoft Graph</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>MS Graph Tenant ID</label><input data-setting-key="MS_GRAPH_TENANT" type="text" class="form-input" placeholder="Required if using Microsoft Graph"></div>
+            <div class="form-group"><label>MS Graph Client ID</label><input data-setting-key="MS_GRAPH_CLIENT" type="text" class="form-input" placeholder="Azure AD app client ID"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>MS Graph Secret</label><input data-setting-key="MS_GRAPH_SECRET" type="password" class="form-input" placeholder="Azure AD client secret"></div>
+            <div class="form-group"><label>Reply-To Address</label><input data-setting-key="EMAIL_FROM" type="email" class="form-input" placeholder="hassaudit@outlook.com"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn-secondary" onclick="testSettingsConnection('testEmail')">Send Test Email</button>
+            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
+          </div>
+          <div class="settings-test-result" id="testResult-testEmail" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- Settings Toast -->
+      <div id="settingsToast" class="settings-toast" style="display:none"></div>
     </div>
 
   </main>
@@ -610,9 +1092,19 @@ function showPage(name) {
   // Lazy-load SLA data on first visit
   if (name === 'sla' && !slaLoaded) { slaLoaded = true; loadSLAData('month'); }
 
+  // Lazy-load Users data
+  if (name === 'users') loadUsersData();
+
+  // Lazy-load Chat
+  if (name === 'chat') initChat();
+  else stopChatPoll();
+
+  // Lazy-load Settings
+  if (name === 'settings') loadSettingsData();
+
   // Hide affiliate filter on admin pages
   var afFilter = document.getElementById('affiliateFilter');
-  if (afFilter) afFilter.style.visibility = ['users','settings'].includes(name) ? 'hidden' : 'visible';
+  if (afFilter) afFilter.style.visibility = ['users','settings','chat'].includes(name) ? 'hidden' : 'visible';
 
   // Close mobile sidebar
   closeSidebar();
@@ -796,6 +1288,513 @@ function showSLAError(msg){
   if (err) { err.textContent = msg; err.style.display = 'block'; }
 }
 
+/* ══════════ USERS & ROLES ══════════ */
+var usersStaffData = [];
+var usersCustomerData = [];
+var usersLoaded = false;
+
+function loadUsersData() {
+  if (usersLoaded) return;
+  usersLoaded = true;
+  document.getElementById('staffLoading').style.display = 'block';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById('staffLoading').style.display = 'none';
+      if (r.success) { usersStaffData = r.staff; renderStaffTable(r.staff); }
+      else { document.getElementById('staffEmpty').textContent = r.error; document.getElementById('staffEmpty').style.display = 'block'; }
+    })
+    .withFailureHandler(function(e) { document.getElementById('staffLoading').style.display = 'none'; document.getElementById('staffEmpty').textContent = e.message; document.getElementById('staffEmpty').style.display = 'block'; })
+    .handleUserRequest({ action:'getAllStaff' });
+}
+
+function loadCustomersData() {
+  document.getElementById('customersLoading').style.display = 'block';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById('customersLoading').style.display = 'none';
+      if (r.success) { usersCustomerData = r.customers; renderCustomersTable(r.customers); }
+      else { document.getElementById('customersEmpty').textContent = r.error; document.getElementById('customersEmpty').style.display = 'block'; }
+    })
+    .withFailureHandler(function(e) { document.getElementById('customersLoading').style.display = 'none'; })
+    .handleUserRequest({ action:'getAllCustomers' });
+}
+
+function switchUserTab(tab) {
+  document.getElementById('tabStaff').classList.toggle('active', tab === 'staff');
+  document.getElementById('tabCustomers').classList.toggle('active', tab === 'customers');
+  document.getElementById('staffPanel').style.display = tab === 'staff' ? 'block' : 'none';
+  document.getElementById('customersPanel').style.display = tab === 'customers' ? 'block' : 'none';
+  if (tab === 'customers' && usersCustomerData.length === 0) loadCustomersData();
+}
+
+function renderStaffTable(staff) {
+  var tbody = document.getElementById('staffTableBody');
+  if (!staff.length) { tbody.innerHTML = ''; document.getElementById('staffEmpty').style.display = 'block'; return; }
+  document.getElementById('staffEmpty').style.display = 'none';
+  tbody.innerHTML = staff.map(function(u) {
+    var statusClass = u.status === 'ACTIVE' ? 'status-active' : u.status === 'INACTIVE' ? 'status-inactive' : 'status-suspended';
+    var toggleLabel = u.status === 'ACTIVE' ? 'Deactivate' : 'Activate';
+    var toggleStatus = u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    return '<tr data-name="' + ((u.first_name+' '+u.last_name).toLowerCase()) + '" data-email="' + (u.email||'').toLowerCase() + '">'
+      + '<td><strong>' + (u.first_name||'') + ' ' + (u.last_name||'') + '</strong></td>'
+      + '<td>' + (u.email||'') + '</td>'
+      + '<td>' + formatRole(u.role) + '</td>'
+      + '<td>' + (u.country_code||'-') + '</td>'
+      + '<td><span class="status-badge ' + statusClass + '">' + u.status + '</span></td>'
+      + '<td style="font-size:11px;color:#94a3b8;">' + (u.last_login ? new Date(u.last_login).toLocaleDateString() : '-') + '</td>'
+      + '<td style="text-align:right;white-space:nowrap;">'
+      + '<button class="action-btn" onclick="openResetPwModal(\'' + u.user_id + '\',\'' + (u.first_name||'')+' '+(u.last_name||'') + '\',\'STAFF\')">Reset PW</button>'
+      + '<button class="action-btn" onclick="openChangeRoleModal(\'' + u.user_id + '\',\'' + (u.first_name||'')+' '+(u.last_name||'') + '\',\'' + u.role + '\')">Role</button>'
+      + '<button class="action-btn danger" onclick="toggleUserStatus(\'' + u.user_id + '\',\'' + toggleStatus + '\')">' + toggleLabel + '</button>'
+      + '</td></tr>';
+  }).join('');
+}
+
+function renderCustomersTable(customers) {
+  var tbody = document.getElementById('customersTableBody');
+  if (!customers.length) { tbody.innerHTML = ''; document.getElementById('customersEmpty').style.display = 'block'; return; }
+  document.getElementById('customersEmpty').style.display = 'none';
+  tbody.innerHTML = customers.map(function(c) {
+    var statusClass = c.status === 'ACTIVE' ? 'status-active' : c.status === 'SUSPENDED' ? 'status-suspended' : 'status-inactive';
+    return '<tr data-name="' + (c.company_name||'').toLowerCase() + '" data-email="' + (c.account_number||'').toLowerCase() + '">'
+      + '<td><strong>' + (c.company_name||'') + '</strong></td>'
+      + '<td>' + (c.account_number||'') + '</td>'
+      + '<td>' + (c.country_code||'-') + '</td>'
+      + '<td>' + formatCurrency(c.credit_limit, c.currency_code) + '</td>'
+      + '<td><span class="status-badge ' + statusClass + '">' + c.status + '</span></td>'
+      + '<td><a href="#" onclick="openContactsDrawer(\'' + c.customer_id + '\',\'' + (c.company_name||'').replace(/'/g,"\\'") + '\');return false;" style="color:#1A237E;font-weight:600;">' + c.contact_count + ' contacts</a></td>'
+      + '<td style="text-align:right;white-space:nowrap;">'
+      + '<button class="action-btn" onclick="openContactsDrawer(\'' + c.customer_id + '\',\'' + (c.company_name||'').replace(/'/g,"\\'") + '\')">View</button>'
+      + '</td></tr>';
+  }).join('');
+}
+
+function formatCurrency(amount, currency) {
+  var n = Number(amount) || 0;
+  return (currency || 'USD') + ' ' + n.toLocaleString('en', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+
+function filterUserTable() {
+  var q = document.getElementById('userSearch').value.toLowerCase();
+  var activeTab = document.getElementById('tabStaff').classList.contains('active') ? 'staffTableBody' : 'customersTableBody';
+  var rows = document.getElementById(activeTab).querySelectorAll('tr');
+  rows.forEach(function(r) {
+    var name = r.getAttribute('data-name') || '';
+    var email = r.getAttribute('data-email') || '';
+    r.style.display = (name.indexOf(q) > -1 || email.indexOf(q) > -1) ? '' : 'none';
+  });
+}
+
+function openAddStaffModal() {
+  document.getElementById('addStaffModal').style.display = 'flex';
+  document.getElementById('addStaffError').style.display = 'none';
+  ['staffFirstName','staffLastName','staffEmail','staffTeam'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('staffRole').selectedIndex = 0;
+  document.getElementById('staffCountry').selectedIndex = 0;
+}
+
+function submitAddStaff() {
+  var fn = document.getElementById('staffFirstName').value.trim();
+  var ln = document.getElementById('staffLastName').value.trim();
+  var em = document.getElementById('staffEmail').value.trim();
+  var role = document.getElementById('staffRole').value;
+  if (!fn || !ln || !em || !role) {
+    document.getElementById('addStaffError').textContent = 'Please fill in all required fields.';
+    document.getElementById('addStaffError').style.display = 'block';
+    return;
+  }
+  document.getElementById('addStaffBtn').disabled = true;
+  document.getElementById('addStaffBtn').textContent = 'Creating...';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById('addStaffBtn').disabled = false;
+      document.getElementById('addStaffBtn').textContent = 'Create User';
+      if (r.success) {
+        closeModal('addStaffModal');
+        usersLoaded = false; loadUsersData();
+        showSettingsToast(r.message, true);
+      } else {
+        document.getElementById('addStaffError').textContent = r.error;
+        document.getElementById('addStaffError').style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('addStaffBtn').disabled = false;
+      document.getElementById('addStaffBtn').textContent = 'Create User';
+      document.getElementById('addStaffError').textContent = e.message;
+      document.getElementById('addStaffError').style.display = 'block';
+    })
+    .handleUserRequest({
+      action: 'addStaffUser',
+      data: {
+        first_name: fn, last_name: ln, email: em,
+        role: role,
+        country_code: document.getElementById('staffCountry').value,
+        team_id: document.getElementById('staffTeam').value.trim()
+      }
+    });
+}
+
+function openChangeRoleModal(userId, name, currentRole) {
+  document.getElementById('changeRoleUserId').value = userId;
+  document.getElementById('changeRoleUserName').textContent = name;
+  document.getElementById('newRoleSelect').value = currentRole;
+  document.getElementById('changeRoleModal').style.display = 'flex';
+}
+
+function submitChangeRole() {
+  var userId = document.getElementById('changeRoleUserId').value;
+  var newRole = document.getElementById('newRoleSelect').value;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      closeModal('changeRoleModal');
+      if (r.success) { usersLoaded = false; loadUsersData(); showSettingsToast('Role updated', true); }
+      else showSettingsToast(r.error, false);
+    })
+    .handleUserRequest({ action:'updateStaffRole', userId:userId, newRole:newRole });
+}
+
+function openResetPwModal(userId, name, userType) {
+  document.getElementById('resetPwUserId').value = userId;
+  document.getElementById('resetPwUserType').value = userType || 'STAFF';
+  document.getElementById('resetPwUserName').textContent = name;
+  document.getElementById('resetPwModal').style.display = 'flex';
+}
+
+function submitResetPassword() {
+  var userId = document.getElementById('resetPwUserId').value;
+  var userType = document.getElementById('resetPwUserType').value;
+  document.getElementById('resetPwBtn').disabled = true;
+  document.getElementById('resetPwBtn').textContent = 'Resetting...';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById('resetPwBtn').disabled = false;
+      document.getElementById('resetPwBtn').textContent = 'Reset Password';
+      closeModal('resetPwModal');
+      showSettingsToast(r.success ? r.message : r.error, r.success);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('resetPwBtn').disabled = false;
+      document.getElementById('resetPwBtn').textContent = 'Reset Password';
+    })
+    .handleUserRequest({ action:'resetUserPassword', userId:userId, userType:userType });
+}
+
+function toggleUserStatus(userId, newStatus) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success) { usersLoaded = false; loadUsersData(); showSettingsToast('Status updated', true); }
+      else showSettingsToast(r.error, false);
+    })
+    .handleUserRequest({ action:'setUserStatus', userId:userId, status:newStatus });
+}
+
+function openContactsDrawer(customerId, companyName) {
+  document.getElementById('contactsDrawerTitle').textContent = (companyName || 'Customer') + ' — Contacts';
+  document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-loading">Loading contacts...</div>';
+  document.getElementById('contactsDrawer').style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success && r.contacts.length) {
+        var html = '<table class="users-table"><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Portal Access</th></tr></thead><tbody>';
+        r.contacts.forEach(function(c) {
+          var isOn = c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE';
+          html += '<tr>'
+            + '<td><strong>' + (c.first_name||'') + ' ' + (c.last_name||'') + '</strong></td>'
+            + '<td>' + (c.email||'') + '</td>'
+            + '<td>' + (c.contact_type||'') + '</td>'
+            + '<td><button class="contact-portal-toggle ' + (isOn?'on':'') + '" onclick="togglePortalAccess(this,\'' + c.contact_id + '\',' + !isOn + ')"></button></td>'
+            + '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('contactsDrawerBody').innerHTML = html;
+      } else {
+        document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-empty">No contacts found</div>';
+      }
+    })
+    .handleUserRequest({ action:'getCustomerContacts', customerId:customerId });
+}
+
+function togglePortalAccess(btn, contactId, newAccess) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success) {
+        btn.classList.toggle('on', newAccess);
+        btn.setAttribute('onclick', "togglePortalAccess(this,'" + contactId + "'," + !newAccess + ")");
+        showSettingsToast(r.message, true);
+      }
+    })
+    .handleUserRequest({ action:'setContactPortalAccess', contactId:contactId, hasAccess:newAccess });
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+
+/* ══════════ STAFF CHAT ══════════ */
+var chatPollInterval = null;
+var chatLastFetch = null;
+var currentRoomId = 'ROOM_GENERAL';
+var chatRoomMeta = {
+  ROOM_GENERAL: { name:'# general', desc:'All staff' },
+  ROOM_CS: { name:'# cs-team', desc:'Customer Service' },
+  ROOM_BD: { name:'# bd-team', desc:'Business Development' },
+  ROOM_MGMT: { name:'# management', desc:'Management' }
+};
+var chatTypingTimer = null;
+
+function initChat() {
+  // Show management room for allowed roles
+  var mgmtRoles = ['SUPER_ADMIN','GROUP_HEAD','CS_MANAGER','BD_MANAGER'];
+  if (mgmtRoles.indexOf(SESSION.role) > -1) {
+    document.getElementById('roomMgmt').style.display = 'flex';
+  }
+  loadChatMessages('ROOM_GENERAL');
+  loadChatMembers();
+}
+
+function selectRoom(roomId, el) {
+  currentRoomId = roomId;
+  chatLastFetch = null;
+
+  // Update active room UI
+  document.querySelectorAll('.room-item').forEach(function(r) { r.classList.remove('active'); });
+  if (el) el.classList.add('active');
+
+  // Update header
+  var meta = chatRoomMeta[roomId] || { name:roomId, desc:'' };
+  document.getElementById('threadRoomName').textContent = meta.name;
+  document.getElementById('threadRoomDesc').textContent = meta.desc;
+  document.getElementById('chatComposeInput').placeholder = 'Message ' + meta.name + '...';
+
+  // Hide badge
+  var badge = document.getElementById('badge-' + roomId);
+  if (badge) badge.style.display = 'none';
+
+  loadChatMessages(roomId);
+  stopChatPoll();
+  chatPollInterval = setInterval(function() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (r.success && r.messages.length > 0) {
+          r.messages.forEach(function(m) { appendChatMsg(m); });
+          chatLastFetch = r.checkedAt;
+        }
+      })
+      .handleChatRequest({ action:'getNewChatMessages', roomId:currentRoomId, since:chatLastFetch });
+  }, 10000);
+}
+
+function stopChatPoll() { if (chatPollInterval) { clearInterval(chatPollInterval); chatPollInterval = null; } }
+
+function loadChatMessages(roomId) {
+  var area = document.getElementById('chatMessagesArea');
+  area.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px;">Loading messages...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      area.innerHTML = '';
+      if (r.success && r.messages.length) {
+        r.messages.forEach(function(m) { appendChatMsg(m); });
+        chatLastFetch = r.checkedAt;
+      } else {
+        area.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:13px;">No messages yet. Start the conversation!</div>';
+        if (r.checkedAt) chatLastFetch = r.checkedAt;
+      }
+    })
+    .withFailureHandler(function(e) {
+      area.innerHTML = '<div style="text-align:center;padding:40px;color:#dc2626;font-size:13px;">Error loading messages</div>';
+    })
+    .handleChatRequest({ action:'getChatMessages', roomId:roomId, limit:50 });
+}
+
+function appendChatMsg(m) {
+  var area = document.getElementById('chatMessagesArea');
+  // Remove empty state
+  var empty = area.querySelector('div[style*="text-align:center"]');
+  if (empty && empty.textContent.indexOf('No messages') > -1) empty.remove();
+
+  var isSelf = m.sender_id === SESSION.userId;
+  var initials = (m.sender_name || '??').split(' ').map(function(w){ return w[0]||''; }).join('').substring(0,2).toUpperCase();
+  var time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+
+  var div = document.createElement('div');
+  div.className = 'chat-msg' + (isSelf ? ' self' : '');
+  div.innerHTML = '<div class="chat-msg-avatar">' + initials + '</div>'
+    + '<div class="chat-msg-body">'
+    + '<div class="chat-msg-name">' + (m.sender_name || 'Unknown') + '</div>'
+    + '<div class="chat-msg-bubble">' + escapeHtml(m.content || '') + '</div>'
+    + '<div class="chat-msg-time">' + time + '</div>'
+    + '</div>';
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function sendStaffChatMessage() {
+  var input = document.getElementById('chatComposeInput');
+  var text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  var name = (document.getElementById('sidebarName').textContent || SESSION.userId);
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success && r.message) {
+        appendChatMsg(r.message);
+        if (r.message.created_at) chatLastFetch = r.message.created_at;
+      }
+    })
+    .handleChatRequest({
+      action:'sendChatMessage',
+      roomId:currentRoomId,
+      roomType:'CHANNEL',
+      senderId:SESSION.userId,
+      senderName:name,
+      content:text
+    });
+}
+
+function chatComposeKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendStaffChatMessage();
+  }
+}
+
+function chatComposeResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function loadChatMembers() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success) {
+        var list = document.getElementById('membersList');
+        var online = r.members.filter(function(m){return m.online;});
+        var offline = r.members.filter(function(m){return !m.online;});
+        document.getElementById('threadMemberCount').textContent = r.members.length + ' members';
+
+        var html = '';
+        online.concat(offline).forEach(function(m) {
+          html += '<div class="member-item" onclick="startDM(\'' + m.user_id + '\',\'' + (m.name||'').replace(/'/g,"\\'") + '\')">'
+            + '<span class="member-status-dot ' + (m.online?'online':'offline') + '"></span>'
+            + '<span class="member-name">' + (m.name||'Unknown') + '</span>'
+            + '</div>';
+        });
+        list.innerHTML = html;
+      }
+    })
+    .handleChatRequest({ action:'getStaffMembers' });
+}
+
+function startDM(userId, name) {
+  var dmRoomId = 'DM_' + [SESSION.userId, userId].sort().join('_');
+  chatRoomMeta[dmRoomId] = { name:name, desc:'Direct message' };
+
+  // Add to DM list if not there
+  var existing = document.querySelector('[data-room="' + dmRoomId + '"]');
+  if (!existing) {
+    var dmList = document.getElementById('dmList');
+    var div = document.createElement('div');
+    div.className = 'room-item';
+    div.setAttribute('data-room', dmRoomId);
+    div.onclick = function() { selectRoom(dmRoomId, div); };
+    div.innerHTML = '<span class="member-status-dot online" style="width:6px;height:6px;"></span> ' + name;
+    dmList.appendChild(div);
+    existing = div;
+  }
+  selectRoom(dmRoomId, existing);
+}
+
+
+/* ══════════ SETTINGS ══════════ */
+var settingsLoaded = false;
+
+function loadSettingsData() {
+  if (settingsLoaded) return;
+  settingsLoaded = true;
+
+  // Set webhook URLs
+  var scriptUrl = SESSION.scriptUrl || '';
+  var waWebhook = document.querySelector('[data-setting-key="WA_WEBHOOK_URL"]');
+  if (waWebhook && scriptUrl) waWebhook.value = scriptUrl + '?action=wa_webhook';
+  var twilioWebhook = document.querySelector('[data-setting-key="TWILIO_WEBHOOK_URL"]');
+  if (twilioWebhook && scriptUrl) twilioWebhook.value = scriptUrl + '?action=call_webhook';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success) populateSettingsForm(r.settings);
+    })
+    .handleSettingsRequest({ action:'getSettings' });
+}
+
+function populateSettingsForm(settings) {
+  var fields = document.querySelectorAll('[data-setting-key]');
+  fields.forEach(function(f) {
+    var key = f.dataset.settingKey;
+    if (settings[key] !== undefined && !f.readOnly) {
+      f.value = settings[key];
+    }
+  });
+}
+
+function switchSettingsTab(tabId, btn) {
+  document.querySelectorAll('.settings-panel').forEach(function(p) { p.style.display = 'none'; });
+  document.querySelectorAll('.settings-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById(tabId).style.display = 'block';
+  if (btn) btn.classList.add('active');
+}
+
+function saveCurrentSettings() {
+  var fields = document.querySelectorAll('[data-setting-key]');
+  var settings = {};
+  fields.forEach(function(f) {
+    if (!f.readOnly) settings[f.dataset.settingKey] = f.value;
+  });
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showSettingsToast(r.success ? 'Settings saved' : (r.error || 'Save failed'), r.success);
+    })
+    .withFailureHandler(function(e) { showSettingsToast(e.message, false); })
+    .handleSettingsRequest({ action:'saveSettings', settings:settings });
+}
+
+function testSettingsConnection(testAction) {
+  var resultEl = document.getElementById('testResult-' + testAction);
+  resultEl.style.display = 'block';
+  resultEl.className = 'settings-test-result';
+  resultEl.textContent = 'Testing...';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      resultEl.className = 'settings-test-result ' + (r.success ? 'success' : 'error');
+      resultEl.textContent = r.message + (r.responseTime ? ' (' + r.responseTime + ')' : '');
+    })
+    .withFailureHandler(function(e) {
+      resultEl.className = 'settings-test-result error';
+      resultEl.textContent = e.message;
+    })
+    .handleSettingsRequest({ action:testAction });
+}
+
+function showSettingsToast(msg, isSuccess) {
+  var toast = document.getElementById('settingsToast');
+  toast.textContent = msg;
+  toast.className = 'settings-toast ' + (isSuccess ? 'success' : 'error');
+  toast.style.display = 'block';
+  setTimeout(function() { toast.style.display = 'none'; }, 3000);
+}
+
+
+/* ══════════ INIT ══════════ */
 document.addEventListener('DOMContentLoaded', function(){
   feather.replace();
   initDashboard();
