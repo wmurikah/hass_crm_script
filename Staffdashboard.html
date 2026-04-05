@@ -65,18 +65,29 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
 /* ── Sidebar ── */
 .sidebar-header {
-  padding: 16px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+
+.sidebar-logo-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: block;
 }
 
 .sidebar-brand {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: #fff;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
+  white-space: nowrap;
 }
 
 .sidebar-nav {
@@ -550,7 +561,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   <!-- ── Sidebar ── -->
   <nav id="sidebar">
     <div class="sidebar-header">
-      <img src="" id="sidebarLogo" style="width:36px;height:36px;object-fit:contain;border-radius:50%;" alt="">
+      <img id="sidebarLogo" src="" alt="Hass Petroleum Group" class="sidebar-logo-img" style="width:48px;height:48px;object-fit:contain;border-radius:50%;flex-shrink:0;">
+      <div id="sidebarLogoFallback" style="display:none;width:48px;height:48px;border-radius:50%;background:#FF6F00;color:#fff;font-size:15px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0;">HP</div>
       <span class="sidebar-brand">Hass Portal</span>
     </div>
 
@@ -1588,9 +1600,18 @@ function initDashboard() {
       SESSION.name = name;
 
       google.script.run.withSuccessHandler(function(url){
-        if (url) {
-          var logoEls = document.querySelectorAll('.sidebar-logo, #sidebarLogo');
-          logoEls.forEach(function(el){ el.src = url; });
+        var el = document.getElementById('sidebarLogo');
+        if (url && url.trim()) {
+          if (el) {
+            el.src = url;
+            el.onerror = function() {
+              el.style.display = 'none';
+              document.getElementById('sidebarLogoFallback').style.display = 'flex';
+            };
+          }
+        } else {
+          if (el) el.style.display = 'none';
+          document.getElementById('sidebarLogoFallback').style.display = 'flex';
         }
       }).getLogoUrl();
 

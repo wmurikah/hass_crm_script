@@ -65,6 +65,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sidebar-brand span { font-weight: 600; font-size: 15px; }
+.portal-logo-img { width: 48px; height: 48px; object-fit: contain; border-radius: 50%; flex-shrink: 0; display: block; }
 .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
 .sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
 .order-line-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -197,7 +198,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 <body>
 <!-- Sidebar -->
 <aside class="hp-sidebar">
-  <div class="sidebar-brand"><div class="hp-logo-mark">HP</div><span>Customer Portal</span></div>
+  <div class="sidebar-brand"><img id="portalLogo" src="" alt="Hass Petroleum Group" class="portal-logo-img" style="width:48px;height:48px;object-fit:contain;border-radius:50%;flex-shrink:0;"><div id="portalLogoFallback" style="display:none;width:48px;height:48px;border-radius:50%;background:#FF6F00;color:#fff;font-size:15px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0;">HP</div><span>Customer Portal</span></div>
   <nav class="sidebar-nav">
     <a class="hp-nav-item active" onclick="showPage('dashboard')" data-page="dashboard">&#9776; Dashboard</a>
     <a class="hp-nav-item" onclick="showPage('orders')" data-page="orders">&#128230; Orders</a>
@@ -649,6 +650,27 @@ document.addEventListener('DOMContentLoaded',function(){
   // Populate header greeting
   var greetEl = document.getElementById('customerGreeting');
   if (greetEl && SESSION.name) greetEl.textContent = 'Welcome, ' + SESSION.name.split(' ')[0];
+
+  // Load portal logo from Drive
+  google.script.run
+    .withSuccessHandler(function(url) {
+      var el = document.getElementById('portalLogo');
+      if (url && url.trim()) {
+        if (el) {
+          el.src = url;
+          el.onerror = function() {
+            el.style.display = 'none';
+            var fb = document.getElementById('portalLogoFallback');
+            if (fb) fb.style.display = 'flex';
+          };
+        }
+      } else {
+        if (el) el.style.display = 'none';
+        var fb = document.getElementById('portalLogoFallback');
+        if (fb) fb.style.display = 'flex';
+      }
+    })
+    .getLogoUrl();
 });
 
 /* ===== Consumption Analytics ===== */
