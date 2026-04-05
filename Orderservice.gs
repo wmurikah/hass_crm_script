@@ -1321,8 +1321,233 @@ function handleOrderRequest(params) {
       
     case 'createRecurring':
       return createRecurringSchedule(params.data, params.context);
-      
+
+    case 'customerConsumption':
+      return getCustomerConsumptionAnalytics(params.customerId, params.period);
+
+    case 'getCustomerForChat':
+      return getCustomerForChat(params.customerId);
+
     default:
       return { success: false, error: 'Unknown action: ' + action };
+  }
+}
+
+// ============================================================================
+// CONSUMPTION ANALYTICS
+// ============================================================================
+
+/**
+ * Converts a period string or object into start and end Date objects.
+ * @param {string|Object} period - Period descriptor
+ * @returns {Object} { startDate, endDate }
+ */
+function parsePeriod(period) {
+  const now = new Date();
+  let startDate;
+  let endDate = new Date(now);
+  endDate.setHours(23, 59, 59, 999);
+
+  if (typeof period === 'object' && period !== null && period.from) {
+    startDate = new Date(period.from + '-01');
+    const parts = period.to.split('-');
+    endDate = new Date(parseInt(parts[0]), parseInt(parts[1]), 0, 23, 59, 59, 999);
+  } else if (period === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (period === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    startDate = new Date(now.getFullYear(), q * 3, 1);
+  } else if (period === 'year') {
+    startDate = new Date(now.getFullYear(), 0, 1);
+  } else if (period === 'ytm') {
+    startDate = new Date(now.getFullYear(), 0, 1);
+    endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  } else {
+    // Default: last 6 months
+    startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  }
+  return { startDate: startDate, endDate: endDate };
+}
+
+/**
+ * Aggregates order and order line data for the consumption analytics dashboard.
+ * @param {string} customerId - Customer ID
+ * @param {string|Object} period - Period descriptor
+ * @returns {Object} Consumption analytics payload
+ */
+function getCustomerConsumptionAnalytics(customerId, period) {
+  try {
+    const range = parsePeriod(period);
+    const startDate = range.startDate;
+    const endDate = range.endDate;
+
+    // Pull all orders for this customer in the date range
+    const allOrders = getSheetData('Orders');
+    const orders = allOrders.filter(function(o) {
+      if (o.customer_id !== customerId) return false;
+      if (!['DELIVERED', 'IN_TRANSIT', 'APPROVED'].includes(o.status)) return false;
+      const created = new Date(o.created_at);
+      return created >= startDate && created <= endDate;
+    });
+
+    // Pull order lines for matched orders
+    const orderIdSet = {};
+    orders.forEach(function(o) { orderIdSet[o.order_id] = true; });
+    const allLines = getSheetData('OrderLines');
+    const lines = allLines.filter(function(l) { return orderIdSet[l.order_id]; });
+
+    // Build monthly trend map
+    const monthMap = {};
+    orders.forEach(function(o) {
+      const mk = new Date(o.created_at).toISOString().slice(0, 7);
+      if (!monthMap[mk]) monthMap[mk] = { month: mk, agoVol: 0, pmsVol: 0, keroVol: 0, spend: 0 };
+      monthMap[mk].spend += parseFloat(o.total_amount) || 0;
+    });
+    lines.forEach(function(l) {
+      const order = orders.find(function(o) { return o.order_id === l.order_id; });
+      if (!order) return;
+      const mk = new Date(order.created_at).toISOString().slice(0, 7);
+      if (!monthMap[mk]) return;
+      const vol = parseFloat(l.quantity) || 0;
+      if (l.product_id === 'PROD001') monthMap[mk].agoVol += vol;
+      else if (l.product_id === 'PROD002') monthMap[mk].pmsVol += vol;
+      else if (l.product_id === 'PROD003') monthMap[mk].keroVol += vol;
+    });
+    const monthlyTrend = Object.values(monthMap).sort(function(a, b) {
+      return a.month.localeCompare(b.month);
+    });
+
+    // By product totals
+    const byProduct = [
+      { product: 'AGO (Diesel)', productId: 'PROD001', volume: 0, spend: 0, pct: 0 },
+      { product: 'PMS (Petrol)', productId: 'PROD002', volume: 0, spend: 0, pct: 0 },
+      { product: 'Kerosene',     productId: 'PROD003', volume: 0, spend: 0, pct: 0 },
+      { product: 'Other',        productId: 'PROD004', volume: 0, spend: 0, pct: 0 }
+    ];
+    lines.forEach(function(l) {
+      const pp = byProduct.find(function(p) { return p.productId === l.product_id; });
+      const target = pp || byProduct[3]; // other bucket
+      target.volume += parseFloat(l.quantity) || 0;
+      target.spend  += parseFloat(l.line_total) || 0;
+    });
+    const totalVol = byProduct.reduce(function(s, p) { return s + p.volume; }, 0);
+    byProduct.forEach(function(p) {
+      p.pct = totalVol > 0 ? Math.round(p.volume / totalVol * 100) : 0;
+    });
+
+    // By location
+    const locMap = {};
+    orders.forEach(function(o) {
+      const lid = o.delivery_location_id || 'UNKNOWN';
+      if (!locMap[lid]) locMap[lid] = { locationId: lid, locationName: lid, orders: 0, volume: 0, spend: 0, lastOrder: '' };
+      locMap[lid].orders++;
+      locMap[lid].spend += parseFloat(o.total_amount) || 0;
+      if (!locMap[lid].lastOrder || o.created_at > locMap[lid].lastOrder) locMap[lid].lastOrder = o.created_at;
+    });
+    lines.forEach(function(l) {
+      const order = orders.find(function(o) { return o.order_id === l.order_id; });
+      if (!order) return;
+      const lid = order.delivery_location_id || 'UNKNOWN';
+      if (locMap[lid]) locMap[lid].volume += parseFloat(l.quantity) || 0;
+    });
+    // Enrich with location names from DeliveryLocations sheet
+    const locations = getSheetData('DeliveryLocations');
+    Object.values(locMap).forEach(function(loc) {
+      var found = locations.find(function(l) { return l.location_id === loc.locationId; });
+      if (found) loc.locationName = found.name || found.location_name || loc.locationId;
+    });
+
+    // Delivery performance
+    const deliveryPerf = orders
+      .filter(function(o) { return o.delivered_at && o.submitted_at; })
+      .map(function(o) {
+        const hrs = (new Date(o.delivered_at) - new Date(o.submitted_at)) / 3600000;
+        return {
+          orderId: o.order_id,
+          orderNumber: o.order_number,
+          orderDate: o.created_at,
+          deliveredAt: o.delivered_at,
+          hoursToDeliver: Math.round(hrs * 10) / 10,
+          status: hrs <= 24 ? 'ON_TIME' : hrs <= 48 ? 'SLIGHT_DELAY' : 'DELAYED'
+        };
+      });
+
+    // KPIs
+    const totalSpend = orders.reduce(function(s, o) { return s + (parseFloat(o.total_amount) || 0); }, 0);
+    const kpis = {
+      totalVolume:  Math.round(totalVol),
+      totalSpend:   Math.round(totalSpend),
+      orderCount:   orders.length,
+      avgOrderSize: orders.length > 0 ? Math.round(totalVol / orders.length) : 0,
+      vsLastPeriod: null // future: compute prior period for comparison
+    };
+
+    return {
+      success:             true,
+      period:              period,
+      startDate:           startDate.toISOString(),
+      endDate:             endDate.toISOString(),
+      kpis:                kpis,
+      monthlyTrend:        monthlyTrend,
+      byProduct:           byProduct,
+      byLocation:          Object.values(locMap),
+      deliveryPerformance: deliveryPerf
+    };
+
+  } catch (e) {
+    Logger.log('getCustomerConsumptionAnalytics error: ' + e.message + ' | Stack: ' + e.stack);
+    return { success: false, error: e.message };
+  }
+}
+
+// ============================================================================
+// CUSTOMER FOR CHAT
+// ============================================================================
+
+/**
+ * Returns enriched customer data for the staff chat panel profile card.
+ * @param {string} customerId - Customer ID
+ * @returns {Object} Customer data with open ticket count and last order date
+ */
+function getCustomerForChat(customerId) {
+  try {
+    const customers = getSheetData('Customers');
+    const customer = customers.find(function(c) { return c.customer_id === customerId; });
+    if (!customer) return { success: false, error: 'Customer not found' };
+
+    // Count open tickets
+    const allTickets = getSheetData('Tickets');
+    const openStatuses = ['NEW', 'OPEN', 'IN_PROGRESS', 'PENDING_CUSTOMER', 'PENDING_INTERNAL', 'ESCALATED'];
+    const openCount = allTickets.filter(function(t) {
+      return t.customer_id === customerId && openStatuses.includes(t.status);
+    }).length;
+
+    // Get last order date
+    const allOrders = getSheetData('Orders');
+    const custOrders = allOrders
+      .filter(function(o) { return o.customer_id === customerId && o.status === 'DELIVERED'; })
+      .sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    const lastOrderDate = custOrders.length > 0 ? custOrders[0].created_at : null;
+
+    return {
+      success: true,
+      customer: {
+        customer_id:       customer.customer_id,
+        account_number:    customer.account_number,
+        company_name:      customer.company_name || customer.trading_name,
+        trading_name:      customer.trading_name,
+        country_code:      customer.country_code,
+        currency:          customer.currency,
+        credit_limit:      parseFloat(customer.credit_limit) || 0,
+        credit_used:       parseFloat(customer.credit_used) || 0,
+        open_tickets_count: openCount,
+        last_order_date:   lastOrderDate,
+        risk_level:        customer.risk_level,
+        account_status:    customer.status
+      }
+    };
+  } catch (e) {
+    Logger.log('getCustomerForChat error: ' + e.message);
+    return { success: false, error: e.message };
   }
 }

@@ -1688,8 +1688,170 @@ function handleTicketRequest(params) {
       
     case 'bulkUpdateStatus':
       return bulkUpdateStatus(params.ticketIds, params.status, params.context);
-      
+
+    case 'getNewComments':
+      return getNewCommentsForTicket(params.ticketId, params.since);
+
+    case 'getOpenTicketsForChat':
+      return getCustomerOpenTicketsForChat(params.customerId);
+
+    case 'getComments':
+      return getTicketComments(params.ticketId);
+
+    case 'getByCustomer':
+      return getTicketsByCustomer(params.customerId, params.limit);
+
+    case 'updateStatus':
+      return updateTicketStatus(params.ticketId, params.status, params.agentId);
+
     default:
       return { success: false, error: 'Unknown action: ' + action };
+  }
+}
+
+// ============================================================================
+// CHAT SUPPORT FUNCTIONS
+// ============================================================================
+
+/**
+ * Returns comments added after a given ISO timestamp. Used by 15-second chat polling.
+ * @param {string} ticketId - Ticket ID
+ * @param {string} since - ISO timestamp
+ * @returns {Object} New comments since timestamp
+ */
+function getNewCommentsForTicket(ticketId, since) {
+  try {
+    const sinceDate = since ? new Date(since) : new Date(Date.now() - 30000);
+    const allComments = getSheetData('TicketComments');
+    const ticketComments = allComments
+      .filter(function(c) { return c.ticket_id === ticketId; })
+      .sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+    const newComments = ticketComments.filter(function(c) {
+      return new Date(c.created_at) > sinceDate;
+    });
+    return {
+      success:     true,
+      newComments: newComments,
+      checkedAt:   new Date().toISOString()
+    };
+  } catch (e) {
+    Logger.log('getNewCommentsForTicket error: ' + e.message);
+    return { success: false, error: e.message, newComments: [] };
+  }
+}
+
+/**
+ * Returns all comments for a ticket ordered by created_at ascending.
+ * Used for initial chat load.
+ * @param {string} ticketId - Ticket ID
+ * @returns {Object} All ticket comments
+ */
+function getTicketComments(ticketId) {
+  try {
+    const allComments = getSheetData('TicketComments');
+    const comments = allComments
+      .filter(function(c) { return c.ticket_id === ticketId; })
+      .sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+    return { success: true, comments: comments };
+  } catch (e) {
+    Logger.log('getTicketComments error: ' + e.message);
+    return { success: false, error: e.message, comments: [] };
+  }
+}
+
+/**
+ * Returns open tickets for a customer with latest comment.
+ * Populates the customer chat widget ticket selector.
+ * @param {string} customerId - Customer ID
+ * @returns {Object} Open tickets with latest message
+ */
+function getCustomerOpenTicketsForChat(customerId) {
+  try {
+    const openStatuses = ['NEW', 'OPEN', 'IN_PROGRESS', 'PENDING_CUSTOMER', 'PENDING_INTERNAL', 'ESCALATED'];
+    const allTickets = getSheetData('Tickets');
+    const tickets = allTickets
+      .filter(function(t) {
+        return t.customer_id === customerId && openStatuses.includes(t.status);
+      })
+      .sort(function(a, b) { return new Date(b.updated_at) - new Date(a.updated_at); })
+      .slice(0, 10);
+
+    const allComments = getSheetData('TicketComments');
+    const enriched = tickets.map(function(t) {
+      const ticketComments = allComments
+        .filter(function(c) { return c.ticket_id === t.ticket_id && !c.is_internal; })
+        .sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+      return {
+        ticket_id:     t.ticket_id,
+        ticket_number: t.ticket_number,
+        subject:       t.subject,
+        status:        t.status,
+        priority:      t.priority,
+        assigned_to:   t.assigned_to,
+        updated_at:    t.updated_at,
+        latestMessage: ticketComments.length > 0 ? ticketComments[0] : null
+      };
+    });
+
+    return { success: true, tickets: enriched };
+  } catch (e) {
+    Logger.log('getCustomerOpenTicketsForChat error: ' + e.message);
+    return { success: false, error: e.message, tickets: [] };
+  }
+}
+
+/**
+ * Returns all tickets for a customer sorted by updated_at desc.
+ * Used for the history tab in the staff chat panel.
+ * @param {string} customerId - Customer ID
+ * @param {number} limit - Max tickets to return (default 20)
+ * @returns {Object} Customer tickets
+ */
+function getTicketsByCustomer(customerId, limit) {
+  try {
+    const cap = parseInt(limit) || 20;
+    const allTickets = getSheetData('Tickets');
+    const tickets = allTickets
+      .filter(function(t) { return t.customer_id === customerId; })
+      .sort(function(a, b) { return new Date(b.updated_at) - new Date(a.updated_at); })
+      .slice(0, cap);
+    return { success: true, tickets: tickets };
+  } catch (e) {
+    Logger.log('getTicketsByCustomer error: ' + e.message);
+    return { success: false, error: e.message, tickets: [] };
+  }
+}
+
+/**
+ * Updates ticket status and timestamps. Called from staff quick actions.
+ * @param {string} ticketId - Ticket ID
+ * @param {string} newStatus - New status value
+ * @param {string} agentId - Agent performing the update
+ * @returns {Object} Result
+ */
+function updateTicketStatus(ticketId, newStatus, agentId) {
+  try {
+    if (!ticketId || !newStatus) return { success: false, error: 'ticketId and status are required' };
+    const validStatuses = ['NEW','OPEN','IN_PROGRESS','PENDING_CUSTOMER','PENDING_INTERNAL','ESCALATED','RESOLVED','CLOSED'];
+    if (!validStatuses.includes(newStatus)) return { success: false, error: 'Invalid status: ' + newStatus };
+
+    const now = new Date().toISOString();
+    const updates = {
+      status:     newStatus,
+      updated_at: now
+    };
+    if (newStatus === 'RESOLVED') {
+      updates.resolved_at     = now;
+      updates.resolved_by     = agentId || '';
+    }
+    if (newStatus === 'CLOSED') {
+      updates.closed_at = now;
+    }
+    const result = updateRow('Tickets', 'ticket_id', ticketId, updates);
+    if (!result) return { success: false, error: 'Ticket not found' };
+    return { success: true, ticketId: ticketId, newStatus: newStatus };
+  } catch (e) {
+    Logger.log('updateTicketStatus error: ' + e.message);
+    return { success: false, error: e.message };
   }
 }
