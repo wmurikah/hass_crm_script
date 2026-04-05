@@ -63,6 +63,91 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 .report-card .title { font-weight: 600; font-size: 15px; color: #1e293b; margin-bottom: 6px; }
 .report-card .desc { font-size: 12px; color: #64748b; margin-bottom: 16px; }
 ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* Chat Panel Layout */
+.ticket-detail-split { display:grid; grid-template-columns:1fr 360px; gap:0; align-items:start; height:100%; }
+.ticket-detail-left { overflow-y:auto; height:100%; border-right:1px solid #e2e8f0; padding-right:0; }
+.ticket-detail-right { height:100%; display:flex; flex-direction:column; background:#f8fafc; overflow:hidden; }
+@media(max-width:1100px){ .ticket-detail-split { grid-template-columns:1fr; } .ticket-detail-right { height:auto; border-top:1px solid #e2e8f0; } }
+
+/* Customer Profile Card */
+.staff-customer-profile { padding:14px 16px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:12px; }
+.profile-avatar { width:40px; height:40px; border-radius:10px; background:#e0e7ff; color:#3730a3; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.profile-info { flex:1; min-width:0; }
+.profile-company { font-size:13px; font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.profile-account { font-size:11px; color:#64748b; margin-top:2px; }
+.profile-stats { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid #e2e8f0; background:#fff; }
+.profile-stat { padding:10px 8px; text-align:center; border-right:1px solid #e2e8f0; }
+.profile-stat:last-child { border-right:none; }
+.profile-stat-value { font-size:13px; font-weight:700; color:#1e293b; font-family:'Space Mono',monospace; }
+.profile-stat-label { font-size:10px; color:#94a3b8; margin-top:2px; text-transform:uppercase; letter-spacing:0.3px; }
+
+/* Quick Actions */
+.staff-quick-actions { padding:8px 12px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.qa-btn { display:flex; align-items:center; gap:5px; padding:5px 10px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; color:#1e293b; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.qa-btn:hover { border-color:#1A237E; color:#1A237E; }
+.qa-btn-escalate:hover { border-color:#dc2626; color:#dc2626; }
+.qa-status-select { padding:5px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:11px; font-weight:600; color:#1e293b; background:#fff; cursor:pointer; font-family:inherit; }
+
+/* Chat Tabs */
+.staff-chat-tabs { display:flex; border-bottom:2px solid #e2e8f0; background:#fff; flex-shrink:0; }
+.staff-tab { flex:1; padding:10px 8px; border:none; background:none; font-size:13px; font-weight:500; color:#64748b; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.15s; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:5px; }
+.staff-tab:hover { color:#1e293b; }
+.staff-tab.active { color:#1A237E; border-bottom-color:#1A237E; font-weight:600; }
+.tab-badge { min-width:16px; height:16px; border-radius:8px; background:#dc2626; color:#fff; font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; padding:0 4px; }
+
+/* Chat Messages */
+.staff-chat-messages { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; min-height:0; background:#f8fafc; }
+.staff-chat-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#94a3b8; font-size:13px; padding:20px; }
+.staff-chat-input-area { border-top:1px solid #e2e8f0; padding:10px 12px; background:#fff; flex-shrink:0; }
+.staff-input-row { margin-bottom:8px; }
+.staff-chat-textarea { width:100%; border:1.5px solid #e2e8f0; border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; resize:none; outline:none; box-sizing:border-box; transition:border-color 0.15s; }
+.staff-chat-textarea:focus { border-color:#1A237E; }
+.staff-input-actions { display:flex; align-items:center; justify-content:space-between; }
+.input-hint { font-size:11px; color:#94a3b8; }
+.staff-send-btn { padding:7px 16px; background:#1A237E; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s; }
+.staff-send-btn:hover { background:#283593; }
+
+/* Internal Notes */
+.msg { max-width:85%; }
+.msg-customer { align-self:flex-end; }
+.msg-agent { align-self:flex-start; }
+.msg-internal { align-self:stretch; border-radius:10px; overflow:hidden; border:1px solid #fde68a; }
+.internal-note-header { background:#fef3c7; padding:6px 12px; display:flex; align-items:center; gap:6px; font-size:11px; color:#92400e; }
+.lock-icon { font-size:12px; }
+.internal-label { font-weight:700; font-size:11px; }
+.note-author { margin-left:auto; font-weight:600; }
+.internal-bubble { background:#fefce8; padding:10px 14px; font-size:13px; color:#1e293b; line-height:1.5; }
+.customer-bubble { background:var(--hp-navy-800); color:#fff; border-radius:12px 12px 4px 12px; padding:10px 14px; font-size:13px; line-height:1.5; }
+.customer-bubble .msg-author { font-size:11px; font-weight:600; opacity:0.8; margin-bottom:3px; }
+.customer-bubble .msg-time { font-size:10px; opacity:0.6; margin-top:4px; }
+.agent-bubble { background:#fff; border:1px solid #e2e8f0; border-radius:12px 12px 12px 4px; padding:10px 14px; font-size:13px; color:#334155; line-height:1.5; }
+.agent-bubble .msg-author { font-size:11px; font-weight:600; color:#1A237E; margin-bottom:3px; }
+.agent-bubble .msg-time { font-size:10px; color:#94a3b8; margin-top:4px; }
+
+/* Notes Tab */
+.notes-tab-content { display:flex; flex-direction:column; flex:1; min-height:0; }
+.notes-history { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
+.notes-input-area { padding:12px; border-top:1px solid #e2e8f0; background:#fff; flex-shrink:0; }
+.staff-note-textarea { width:100%; border:1.5px solid #fde68a; border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; resize:none; outline:none; background:#fefce8; box-sizing:border-box; }
+.staff-note-textarea:focus { border-color:#f59e0b; }
+.notes-input-actions { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.notes-warning { display:flex; align-items:center; gap:4px; font-size:11px; color:#92400e; }
+.staff-note-btn { padding:7px 16px; background:#f59e0b; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+
+/* History Tab */
+.history-tab-content { flex:1; overflow-y:auto; background:#f8fafc; }
+.history-ticket-item { padding:10px 14px; border-bottom:1px solid #e2e8f0; cursor:pointer; transition:background 0.15s; background:#fff; }
+.history-ticket-item:hover { background:#f0f4ff; }
+.history-ticket-num { font-size:11px; font-weight:700; color:#1A237E; margin-bottom:3px; }
+.history-ticket-subject { font-size:12px; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.history-ticket-meta { display:flex; gap:6px; margin-top:4px; align-items:center; }
+.history-status-badge { font-size:10px; padding:2px 6px; border-radius:4px; font-weight:600; }
+.history-ticket-date { font-size:10px; color:#94a3b8; margin-left:auto; }
+
+/* Notification Nudge */
+.notif-nudge { background:#f0f4ff; border-bottom:1px solid #c7d2fe; padding:8px 14px; display:flex; align-items:center; gap:8px; font-size:12px; color:#3730a3; flex-shrink:0; }
+.notif-nudge button { padding:3px 8px; border-radius:4px; border:1px solid #c7d2fe; background:#fff; font-size:11px; cursor:pointer; }
 .sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sidebar-brand span { font-weight: 600; font-size: 15px; }
 .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
@@ -244,28 +329,54 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 </div>
 
 <!-- Ticket Detail Modal -->
-<div class="modal fade" id="ticketModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+<div class="modal fade" id="ticketModal" tabindex="-1"><div class="modal-dialog" style="max-width:1100px"><div class="modal-content">
   <div class="modal-header hp-modal-header">
     <h6 class="modal-title fw-bold" id="tmTitle">Ticket Details</h6>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
   </div>
-  <div class="modal-body">
-    <div class="row g-3 mb-3" id="tmFields">
-      <div class="col-md-4"><div class="hp-form-label">Customer</div><div id="tmCustomer">-</div></div>
-      <div class="col-md-4"><div class="hp-form-label">Contact</div><div id="tmContact">-</div></div>
-      <div class="col-md-4"><div class="hp-form-label">Category</div><div id="tmCategory">-</div></div>
-      <div class="col-md-4"><div class="hp-form-label">Priority</div><div id="tmPriority">-</div></div>
-      <div class="col-md-4"><div class="hp-form-label">Assigned To</div><div id="tmAssigned">-</div></div>
-      <div class="col-md-4"><div class="hp-form-label">Created</div><div id="tmCreated">-</div></div>
-    </div>
-    <div class="hp-thread" id="tmThread">
-      <div class="hp-bubble-customer"><strong>Customer</strong><br>Sample message from customer</div>
-      <div class="hp-bubble-agent"><strong>Agent</strong><br>Sample reply from agent</div>
-      <div class="hp-bubble-internal"><strong>Internal Note</strong><br>This is an internal note</div>
-    </div>
-    <div class="mt-3">
-      <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="tmInternal"><label class="form-check-label" for="tmInternal" style="font-size:13px">Internal note (not visible to customer)</label></div>
-      <textarea class="form-control form-control-sm" id="tmReply" rows="3" placeholder="Type your reply..."></textarea>
+  <div class="modal-body p-0" style="height:70vh;overflow:hidden;">
+    <div id="ticketDetailView" class="ticket-detail-split" style="height:100%;">
+      <!-- Left Column: Existing Ticket Detail -->
+      <div class="ticket-detail-left" id="ticketDetailLeft" style="padding:20px;">
+        <div class="row g-3 mb-3" id="tmFields">
+          <div class="col-md-4"><div class="hp-form-label">Customer</div><div id="tmCustomer">-</div></div>
+          <div class="col-md-4"><div class="hp-form-label">Contact</div><div id="tmContact">-</div></div>
+          <div class="col-md-4"><div class="hp-form-label">Category</div><div id="tmCategory">-</div></div>
+          <div class="col-md-4"><div class="hp-form-label">Priority</div><div id="tmPriority">-</div></div>
+          <div class="col-md-4"><div class="hp-form-label">Assigned To</div><div id="tmAssigned">-</div></div>
+          <div class="col-md-4"><div class="hp-form-label">Created</div><div id="tmCreated">-</div></div>
+        </div>
+        <div class="hp-thread" id="tmThread">
+          <div class="hp-bubble-customer"><strong>Customer</strong><br>Sample message from customer</div>
+          <div class="hp-bubble-agent"><strong>Agent</strong><br>Sample reply from agent</div>
+          <div class="hp-bubble-internal"><strong>Internal Note</strong><br>This is an internal note</div>
+        </div>
+        <div class="mt-3">
+          <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="tmInternal"><label class="form-check-label" for="tmInternal" style="font-size:13px">Internal note (not visible to customer)</label></div>
+          <textarea class="form-control form-control-sm" id="tmReply" rows="3" placeholder="Type your reply..."></textarea>
+        </div>
+      </div>
+      <!-- Right Column: Chat Panel -->
+      <div class="ticket-detail-right" id="staffChatPanel">
+        <!-- Notification Nudge -->
+        <div class="notif-nudge" id="notifNudge" style="display:none"><span>Enable notifications to get alerted on new messages</span><button onclick="requestNotificationPermission(); this.parentElement.style.display='none'">Enable</button><button onclick="this.parentElement.style.display='none'">Dismiss</button></div>
+        <!-- Customer Profile -->
+        <div class="staff-customer-profile" id="staffCustomerProfile"><div class="profile-avatar" id="profileAvatar">--</div><div class="profile-info"><div class="profile-company" id="profileCompany">No ticket selected</div><div class="profile-account" id="profileAccount"></div></div></div>
+        <div class="profile-stats" id="profileStats" style="display:none"><div class="profile-stat"><div class="profile-stat-value" id="profileCredit">--</div><div class="profile-stat-label">Avail. Credit</div></div><div class="profile-stat"><div class="profile-stat-value" id="profileOpenTickets">--</div><div class="profile-stat-label">Open Tickets</div></div><div class="profile-stat"><div class="profile-stat-value" id="profileLastOrder">--</div><div class="profile-stat-label">Last Order</div></div></div>
+        <!-- Quick Actions -->
+        <div class="staff-quick-actions" id="staffQuickActions" style="display:none"><button class="qa-btn" onclick="staffAssignToMe()" title="Assign to me"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Assign to Me</button><select class="qa-status-select" id="qaStatusSelect" onchange="staffChangeStatus(this.value)"><option value="">Change Status</option><option value="OPEN">Open</option><option value="IN_PROGRESS">In Progress</option><option value="PENDING_CUSTOMER">Pending Customer</option><option value="RESOLVED">Resolved</option><option value="CLOSED">Closed</option></select><button class="qa-btn qa-btn-escalate" onclick="staffEscalate()" title="Escalate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg> Escalate</button></div>
+        <!-- Chat Tabs -->
+        <div class="staff-chat-tabs"><button class="staff-tab active" data-tab="chat" onclick="switchStaffTab('chat',this)">Chat<span class="tab-badge" id="chatTabBadge" style="display:none">0</span></button><button class="staff-tab" data-tab="notes" onclick="switchStaffTab('notes',this)">Notes</button><button class="staff-tab" data-tab="history" onclick="switchStaffTab('history',this)">History</button></div>
+        <!-- Chat Tab Content -->
+        <div id="staffTabChat" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+          <div class="staff-chat-messages" id="staffChatMessages"><div class="staff-chat-empty" id="staffChatEmpty"><p>Select a ticket to view the conversation.</p></div></div>
+          <div class="staff-chat-input-area" id="staffChatInputArea" style="display:none"><div class="staff-input-row"><textarea id="staffChatInput" class="staff-chat-textarea" placeholder="Reply to customer..." rows="2" onkeydown="staffChatKeyDown(event)" oninput="staffChatInputResize(this)"></textarea></div><div class="staff-input-actions"><span class="input-hint">Shift+Enter for new line, Enter to send</span><button class="staff-send-btn" onclick="staffSendMessage(false)">Send to Customer</button></div></div>
+        </div>
+        <!-- Notes Tab Content -->
+        <div class="notes-tab-content" id="staffTabNotes" style="display:none"><div class="notes-history" id="staffNotesHistory"></div><div class="notes-input-area"><textarea id="staffNoteInput" class="staff-note-textarea" placeholder="Type an internal note... Only staff can see this." rows="4"></textarea><div class="notes-input-actions"><span class="notes-warning"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Not visible to customer</span><button class="staff-note-btn" onclick="staffPostNote()">Post Note</button></div></div></div>
+        <!-- History Tab Content -->
+        <div class="history-tab-content" id="staffTabHistory" style="display:none"><div id="customerTicketHistory"><div class="history-loading" style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">Select a ticket to see customer history.</div></div></div>
+      </div>
     </div>
   </div>
   <div class="modal-footer">
@@ -390,6 +501,359 @@ function searchCustomers(q){
 function doLogout(){google.script.run.withSuccessHandler(function(){google.script.host.close();}).processRequest({service:'auth',action:'logout'});}
 
 document.addEventListener('DOMContentLoaded',function(){showPage('overview');});
+
+/* ===== Chat Panel State ===== */
+let staffActiveTicketId = null;
+let staffActiveCustomerId = null;
+let staffActiveTicketData = null;
+let staffPollInterval = null;
+let staffLastFetchTime = null;
+let staffUnreadCount = 0;
+let staffCurrentTab = 'chat';
+let notifPermissionGranted = false;
+
+/* SESSION placeholder - populated by auth */
+var SESSION = SESSION || { userId: currentUser?.user_id || '', name: currentUser?.name || 'Staff' };
+
+/* ===== Chat Panel Functions ===== */
+
+function loadStaffChatPanel(ticket) {
+  staffActiveTicketId = ticket.ticket_id;
+  staffActiveCustomerId = ticket.customer_id;
+  staffActiveTicketData = ticket;
+  stopStaffPolling();
+  updateStaffCustomerProfile(ticket);
+  document.getElementById('staffQuickActions').style.display = 'flex';
+  document.getElementById('staffChatInputArea').style.display = 'block';
+  switchStaffTab('chat', document.querySelector('.staff-tab[data-tab="chat"]'));
+  loadStaffChatMessages(ticket.ticket_id);
+  loadCustomerTicketHistory(ticket.customer_id);
+  startStaffPolling(ticket.ticket_id);
+  // Show notification nudge if permission not yet granted
+  if ('Notification' in window && Notification.permission === 'default') {
+    document.getElementById('notifNudge').style.display = 'flex';
+  }
+}
+
+function updateStaffCustomerProfile(ticket) {
+  var avatar = document.getElementById('profileAvatar');
+  var company = document.getElementById('profileCompany');
+  company.textContent = ticket.customer_id || 'Customer';
+  avatar.textContent = '--';
+  google.script.run.withSuccessHandler(renderStaffProfile).handleOrderRequest({
+    service: 'customers', action: 'getCustomerForChat', customerId: ticket.customer_id
+  });
+}
+
+function renderStaffProfile(result) {
+  if (!result || !result.success) return;
+  var c = result.customer;
+  var initials = (c.trading_name || c.company_name || '--').substring(0, 2).toUpperCase();
+  document.getElementById('profileAvatar').textContent = initials;
+  document.getElementById('profileCompany').textContent = c.company_name || '--';
+  document.getElementById('profileAccount').textContent = (c.account_number || '') + (c.country_code ? ' | ' + c.country_code : '');
+  if (c.credit_limit !== undefined) {
+    var avail = (c.credit_limit || 0) - (c.credit_used || 0);
+    var curr = c.currency || 'KES';
+    document.getElementById('profileCredit').textContent = curr + ' ' + Number(avail).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  document.getElementById('profileOpenTickets').textContent = c.open_tickets_count || '--';
+  document.getElementById('profileLastOrder').textContent = c.last_order_date ? formatDate(c.last_order_date) : '--';
+  document.getElementById('profileStats').style.display = 'grid';
+}
+
+function switchStaffTab(tabName, btn) {
+  staffCurrentTab = tabName;
+  document.querySelectorAll('.staff-tab').forEach(function(t) { t.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  document.getElementById('staffTabChat').style.display = 'none';
+  document.getElementById('staffTabNotes').style.display = 'none';
+  document.getElementById('staffTabHistory').style.display = 'none';
+  var tabId = 'staffTab' + tabName.charAt(0).toUpperCase() + tabName.slice(1);
+  var tabEl = document.getElementById(tabId);
+  if (tabEl) tabEl.style.display = tabName === 'history' ? 'block' : 'flex';
+  if (tabName === 'chat') {
+    staffUnreadCount = 0;
+    var badge = document.getElementById('chatTabBadge');
+    badge.style.display = 'none';
+    badge.textContent = '0';
+  }
+  if (tabName === 'notes') {
+    var noteInput = document.getElementById('staffNoteInput');
+    if (noteInput) noteInput.focus();
+  }
+}
+
+function loadStaffChatMessages(ticketId) {
+  var container = document.getElementById('staffChatMessages');
+  container.innerHTML = '<div class="staff-chat-empty"><p>Loading messages...</p></div>';
+  google.script.run.withSuccessHandler(onStaffMessagesLoaded).withFailureHandler(onStaffChatError).handleTicketRequest({
+    service: 'tickets', action: 'getComments', ticketId: ticketId
+  });
+}
+
+function onStaffMessagesLoaded(result) {
+  var container = document.getElementById('staffChatMessages');
+  container.innerHTML = '';
+  if (!result || !result.success) {
+    container.innerHTML = '<div class="staff-chat-empty"><p>Failed to load messages.</p></div>';
+    return;
+  }
+  var comments = result.comments || [];
+  var notesContainer = document.getElementById('staffNotesHistory');
+  notesContainer.innerHTML = '';
+  if (comments.length === 0) {
+    container.innerHTML = '<div class="staff-chat-empty"><p>No messages yet. Start the conversation.</p></div>';
+    return;
+  }
+  comments.forEach(function(msg) {
+    appendStaffChatMessage(msg, true);
+  });
+  staffLastFetchTime = new Date().toISOString();
+  scrollStaffChatToBottom();
+}
+
+function appendStaffChatMessage(msg, skipScroll) {
+  var container = document.getElementById('staffChatMessages');
+  var empty = document.getElementById('staffChatEmpty');
+  if (empty) empty.style.display = 'none';
+  var time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  var html = '';
+  if (msg.is_internal) {
+    html = '<div class="msg msg-internal"><div class="internal-note-header"><span class="lock-icon">&#128274;</span><span class="internal-label">Internal Note</span><span class="msg-time">' + time + '</span><span class="note-author">' + (msg.author_name || 'Staff') + '</span></div><div class="internal-bubble">' + escapeHtml(msg.content) + '</div></div>';
+    // Also add to notes tab
+    var notesContainer = document.getElementById('staffNotesHistory');
+    if (notesContainer) {
+      var noteDiv = document.createElement('div');
+      noteDiv.innerHTML = html;
+      notesContainer.appendChild(noteDiv.firstChild);
+    }
+  } else if (msg.author_type === 'CUSTOMER') {
+    html = '<div class="msg msg-customer"><div class="customer-bubble"><div class="msg-author">' + (msg.author_name || 'Customer') + '</div>' + escapeHtml(msg.content) + '<div class="msg-time">' + time + '</div></div></div>';
+  } else {
+    html = '<div class="msg msg-agent"><div class="agent-bubble"><div class="msg-author">' + (msg.author_name || 'Agent') + '</div>' + escapeHtml(msg.content) + '<div class="msg-time">' + time + '</div></div></div>';
+  }
+  var div = document.createElement('div');
+  div.innerHTML = html;
+  container.appendChild(div.firstChild);
+  if (!skipScroll) scrollStaffChatToBottom();
+}
+
+function escapeHtml(text) {
+  var d = document.createElement('div');
+  d.textContent = text || '';
+  return d.innerHTML;
+}
+
+function staffSendMessage(isInternal) {
+  var inputId = isInternal ? 'staffNoteInput' : 'staffChatInput';
+  var input = document.getElementById(inputId);
+  var content = (input.value || '').trim();
+  if (!content || !staffActiveTicketId) return;
+  // Optimistic append
+  var optimistic = {
+    content: content,
+    author_type: 'AGENT',
+    author_name: SESSION.name || 'You',
+    is_internal: isInternal,
+    created_at: new Date().toISOString()
+  };
+  appendStaffChatMessage(optimistic);
+  input.value = '';
+  if (!isInternal) staffChatInputResize(input);
+  google.script.run.withSuccessHandler(onStaffMessageSent).withFailureHandler(onStaffChatError).handleTicketRequest({
+    service: 'tickets', action: 'addComment', ticketId: staffActiveTicketId,
+    comment: {
+      content: content, author_type: 'AGENT', author_id: SESSION.userId,
+      author_name: SESSION.name, channel: 'PORTAL', is_internal: isInternal
+    }
+  });
+}
+
+function staffPostNote() { staffSendMessage(true); }
+
+function onStaffMessageSent(result) {
+  if (!result || !result.success) showStaffToast('Failed to send message');
+}
+
+function startStaffPolling(ticketId) {
+  stopStaffPolling();
+  staffPollInterval = setInterval(function() {
+    google.script.run.withSuccessHandler(onStaffNewMessages).handleTicketRequest({
+      service: 'tickets', action: 'getNewComments', ticketId: ticketId, since: staffLastFetchTime
+    });
+  }, 15000);
+}
+
+function stopStaffPolling() {
+  if (staffPollInterval) { clearInterval(staffPollInterval); staffPollInterval = null; }
+}
+
+function onStaffNewMessages(result) {
+  if (!result || !result.success || !result.newComments || !result.newComments.length) return;
+  result.newComments.forEach(function(msg) {
+    appendStaffChatMessage(msg);
+    if (msg.author_type === 'CUSTOMER') onNewCustomerMessage(msg);
+  });
+  staffLastFetchTime = result.checkedAt || new Date().toISOString();
+}
+
+function onNewCustomerMessage(msg) {
+  // Play notification sound
+  try {
+    var audio = new Audio('data:audio/wav;base64,UklGRl9vT19teleQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU' + 'AAAAAA');
+    // Minimal beep using oscillator as fallback
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 440;
+      gain.gain.value = 0.4;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } catch(e) {}
+  } catch(e) {}
+  // Browser notification
+  if (notifPermissionGranted) {
+    try {
+      new Notification('New message from ' + (msg.author_name || 'Customer'), {
+        body: (msg.content || '').substring(0, 80),
+        tag: staffActiveTicketId
+      });
+    } catch(e) {}
+  }
+  // Update badge if not on chat tab
+  if (staffCurrentTab !== 'chat') {
+    staffUnreadCount++;
+    var badge = document.getElementById('chatTabBadge');
+    badge.textContent = staffUnreadCount;
+    badge.style.display = 'flex';
+  }
+}
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') { notifPermissionGranted = true; return; }
+  if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then(function(p) { notifPermissionGranted = p === 'granted'; });
+  }
+}
+
+function loadCustomerTicketHistory(customerId) {
+  google.script.run.withSuccessHandler(renderCustomerHistory).handleTicketRequest({
+    service: 'tickets', action: 'getByCustomer', customerId: customerId, limit: 15
+  });
+}
+
+function renderCustomerHistory(result) {
+  var container = document.getElementById('customerTicketHistory');
+  if (!result || !result.success || !result.tickets || !result.tickets.length) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">No ticket history.</div>';
+    return;
+  }
+  var statusColors = {
+    OPEN: { bg: '#e0f2fe', color: '#0369a1' }, IN_PROGRESS: { bg: '#e0f2fe', color: '#0369a1' },
+    RESOLVED: { bg: '#dcfce7', color: '#16a34a' }, CLOSED: { bg: '#f1f5f9', color: '#64748b' },
+    ESCALATED: { bg: '#fee2e2', color: '#dc2626' }, NEW: { bg: '#e0f2fe', color: '#0369a1' },
+    PENDING_CUSTOMER: { bg: '#fef3c7', color: '#d97706' }
+  };
+  var html = '';
+  result.tickets.forEach(function(t) {
+    var isCurrent = t.ticket_id === staffActiveTicketId;
+    var sc = statusColors[t.status] || { bg: '#f1f5f9', color: '#64748b' };
+    html += '<div class="history-ticket-item" onclick="viewTicketFromHistory(\'' + t.ticket_id + '\')" style="' + (isCurrent ? 'border-left:3px solid #1A237E;' : '') + '">';
+    html += '<div class="history-ticket-num">' + (t.ticket_number || t.ticket_id) + '</div>';
+    html += '<div class="history-ticket-subject">' + escapeHtml(t.subject || '') + '</div>';
+    html += '<div class="history-ticket-meta"><span class="history-status-badge" style="background:' + sc.bg + ';color:' + sc.color + ';">' + (t.status || '--') + '</span>';
+    html += '<span class="history-ticket-date">' + formatDate(t.updated_at || t.created_at) + '</span></div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function staffAssignToMe() {
+  if (!staffActiveTicketId) return;
+  google.script.run.withSuccessHandler(function(r) {
+    if (r && r.success) showStaffToast('Ticket assigned to you');
+  }).handleTicketRequest({
+    service: 'tickets', action: 'assign', ticketId: staffActiveTicketId, assignTo: SESSION.userId
+  });
+}
+
+function staffChangeStatus(newStatus) {
+  if (!newStatus || !staffActiveTicketId) return;
+  google.script.run.withSuccessHandler(function(r) {
+    if (r && r.success) {
+      showStaffToast('Status updated to ' + newStatus);
+      document.getElementById('qaStatusSelect').value = '';
+    }
+  }).handleTicketRequest({
+    service: 'tickets', action: 'updateStatus', ticketId: staffActiveTicketId,
+    status: newStatus, agentId: SESSION.userId
+  });
+}
+
+function staffEscalate() {
+  if (!staffActiveTicketId) return;
+  if (!confirm('Escalate this ticket to management?')) return;
+  staffChangeStatus('ESCALATED');
+}
+
+function staffChatKeyDown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); staffSendMessage(false); }
+}
+
+function staffChatInputResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function scrollStaffChatToBottom() {
+  var el = document.getElementById('staffChatMessages');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function showStaffToast(msg) { showToast(msg, 'error'); }
+
+function onStaffChatError(err) {
+  showStaffToast('Chat error: ' + (err.message || 'Unknown error'));
+}
+
+function viewTicketFromHistory(ticketId) { openTicketModal(ticketId); }
+
+/* Hook into existing openTicketModal to load chat panel */
+var _origOpenTicketModal = openTicketModal;
+openTicketModal = function(ticketId) {
+  document.getElementById('tmTitle').textContent = 'Loading...';
+  new bootstrap.Modal(document.getElementById('ticketModal')).show();
+  google.script.run.withSuccessHandler(function(r) {
+    if (r.success) {
+      document.getElementById('tmTitle').textContent = r.ticket.ticket_number + ' - ' + r.ticket.subject;
+      document.getElementById('tmCustomer').textContent = r.customer?.company_name || '-';
+      document.getElementById('tmContact').textContent = r.contact?.name || '-';
+      document.getElementById('tmCategory').textContent = r.ticket.category || '-';
+      document.getElementById('tmPriority').innerHTML = getPriorityBadge(r.ticket.priority);
+      document.getElementById('tmAssigned').textContent = r.assignee?.name || 'Unassigned';
+      document.getElementById('tmCreated').textContent = formatDate(r.ticket.created_at);
+      var thread = '';
+      (r.comments || []).forEach(function(c) {
+        var cls = c.is_internal ? 'hp-bubble-internal' : c.author_type === 'CUSTOMER' ? 'hp-bubble-customer' : 'hp-bubble-agent';
+        thread += '<div class="' + cls + '"><strong>' + c.author_name + '</strong><br>' + c.content + '</div>';
+      });
+      document.getElementById('tmThread').innerHTML = thread || '<p class="text-muted">No comments yet</p>';
+      // Load chat panel with ticket data
+      loadStaffChatPanel(r.ticket);
+      requestNotificationPermission();
+    }
+  }).processRequest({ service: 'database', action: 'ticketDetail', ticketId: ticketId });
+};
+
+/* Stop polling when modal closes */
+document.getElementById('ticketModal').addEventListener('hidden.bs.modal', function() {
+  stopStaffPolling();
+  staffActiveTicketId = null;
+});
 </script>
 </body>
 </html>
