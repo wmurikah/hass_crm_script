@@ -193,3 +193,16 @@ function handleCustomerRequest(params) {
 function processRequest(params) {
   return doPost({ postData: { contents: JSON.stringify(params) } });
 }
+
+function getBackgroundUrl() {
+  try {
+    var folder = DriveApp.getFolderById('1AL9fUgYXM9DXj9-X_0YonrloqCXat2wq');
+    var files = folder.getFilesByName('backround.png');
+    if (files.hasNext()) {
+      var file = files.next();
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      return 'https://lh3.googleusercontent.com/d/' + file.getId();
+    }
+  } catch(e) { Logger.log('getBackgroundUrl: ' + e.message); }
+  return '';
+}

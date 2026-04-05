@@ -8,6 +8,14 @@
 // Sessions sheet → token_hash, is_active, expires_at, device_type(=role)
 // ================================================================
 
+function isDateInFuture(val) {
+  if (!val) return false;
+  var s = String(val).trim();
+  if (s === '' || s === 'null' || s === 'undefined') return false;
+  var d = new Date(s);
+  return !isNaN(d.getTime()) && d > new Date();
+}
+
 function handleAuthRequest(params) {
   try {
     switch (params.action) {
@@ -109,7 +117,7 @@ function findStaffByEmail(email, hashed) {
     var status = String(row.status || '').toUpperCase();
     if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive. Contact your administrator.' };
     if (status === 'LOCKED')   return { found: false, error: 'Your account is locked. Contact your administrator.' };
-    if (row.locked_until && new Date(row.locked_until) > new Date())
+    if (isDateInFuture(row.locked_until))
       return { found: false, error: 'Account temporarily locked. Try again later.' };
     var storedHash = String(row.password_hash || '').trim();
     if (storedHash && storedHash !== hashed)
@@ -133,7 +141,7 @@ function findCustomerByEmail(email, hashed) {
     var status = String(row.status || '').toUpperCase();
     if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive.' };
     if (status === 'LOCKED')   return { found: false, error: 'Your account is locked.' };
-    if (row.locked_until && new Date(row.locked_until) > new Date())
+    if (isDateInFuture(row.locked_until))
       return { found: false, error: 'Account temporarily locked. Try again later.' };
     var storedHash = String(row.password_hash || '').trim();
     if (storedHash && storedHash !== hashed)
