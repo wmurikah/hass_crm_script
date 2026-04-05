@@ -369,6 +369,19 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .leaderboard-bar-fill { height:100%; background:#16a34a; border-radius:2px; transition:width 0.6s; }
 @media(max-width:900px){.sla-kpis{grid-template-columns:repeat(2,1fr);} .sla-charts-row{grid-template-columns:1fr;}}
 
+/* ── SLA Filter Bar ── */
+.sla-filter-bar { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px 18px; margin-bottom:20px; }
+.sla-filter-group { display:flex; flex-direction:column; gap:5px; }
+.filter-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; }
+.filter-select { border:1.5px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:13px; color:#1e293b; background:#fff; cursor:pointer; font-family:inherit; min-width:140px; }
+.filter-select:focus { border-color:#1A237E; outline:none; }
+.filter-input { border:1.5px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:13px; color:#1e293b; font-family:inherit; }
+.filter-reset-btn { display:flex; align-items:center; gap:5px; padding:8px 14px; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; color:#64748b; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; margin-top:16px; transition:all 0.15s; align-self:flex-end; }
+.filter-reset-btn:hover { border-color:#dc2626; color:#dc2626; }
+.active-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.filter-pill { display:flex; align-items:center; gap:5px; padding:4px 10px; background:#e0e7ff; color:#1A237E; border-radius:20px; font-size:12px; font-weight:600; }
+.filter-pill button { background:none; border:none; cursor:pointer; color:#1A237E; font-size:14px; line-height:1; padding:0 0 0 2px; }
+
 /* ── Users & Roles Page ── */
 .users-tabs { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
 .users-tab { background:#fff; border:1px solid var(--slate-200); border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; color:var(--slate-600); cursor:pointer; font-family:inherit; transition:all 0.15s; }
@@ -651,18 +664,84 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </button>
       </div>
 
-      <!-- SLA Controls -->
-      <div class="sla-controls">
-        <div class="period-tabs" id="slaPeriodTabs">
-          <button class="period-tab active" data-period="month" onclick="onSLAPeriodChange('month',this)">This Month</button>
-          <button class="period-tab" data-period="quarter" onclick="onSLAPeriodChange('quarter',this)">This Quarter</button>
-          <button class="period-tab" data-period="ytd" onclick="onSLAPeriodChange('ytd',this)">Year to Date</button>
+      <!-- SLA Advanced Filters -->
+      <div class='sla-filter-bar' id='slaFilterBar'>
+
+        <!-- Year -->
+        <div class='sla-filter-group'>
+          <label class='filter-label'>Year</label>
+          <select id='filterYear' class='filter-select' onchange='applySLAFilters()'>
+            <option value='2026'>2026</option>
+            <option value='2025'>2025</option>
+            <option value='2024'>2024</option>
+          </select>
         </div>
-        <button class="btn-refresh" onclick="if(currentSLADimension==='internal'){loadSLAData(currentSLAPeriod);}else{loadExternalSLAData(currentSLAPeriod);}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-          Refresh
+
+        <!-- Period -->
+        <div class='sla-filter-group'>
+          <label class='filter-label'>Period</label>
+          <select id='filterPeriod' class='filter-select' onchange='onSLAPeriodFilterChange()'>
+            <option value='all'>Full Year</option>
+            <option value='q1'>Q1 (Jan-Mar)</option>
+            <option value='q2'>Q2 (Apr-Jun)</option>
+            <option value='q3'>Q3 (Jul-Sep)</option>
+            <option value='q4'>Q4 (Oct-Dec)</option>
+            <option value='month'>Specific Month</option>
+            <option value='custom'>Custom Range</option>
+          </select>
+        </div>
+
+        <!-- Month picker — shown only when period=month -->
+        <div class='sla-filter-group' id='filterMonthGroup' style='display:none'>
+          <label class='filter-label'>Month</label>
+          <select id='filterMonth' class='filter-select' onchange='applySLAFilters()'>
+            <option value='01'>January</option><option value='02'>February</option>
+            <option value='03'>March</option><option value='04'>April</option>
+            <option value='05'>May</option><option value='06'>June</option>
+            <option value='07'>July</option><option value='08'>August</option>
+            <option value='09'>September</option><option value='10'>October</option>
+            <option value='11'>November</option><option value='12'>December</option>
+          </select>
+        </div>
+
+        <!-- Custom range — shown only when period=custom -->
+        <div class='sla-filter-group' id='filterCustomGroup' style='display:none'>
+          <label class='filter-label'>From</label>
+          <input type='month' id='filterCustomFrom' class='filter-input' onchange='applySLAFilters()'>
+          <label class='filter-label' style='margin-left:6px;'>To</label>
+          <input type='month' id='filterCustomTo' class='filter-input' onchange='applySLAFilters()'>
+        </div>
+
+        <!-- Staff member (for internal SLA drill-down) -->
+        <div class='sla-filter-group' id='filterStaffGroup'>
+          <label class='filter-label'>Staff Member</label>
+          <select id='filterStaff' class='filter-select' onchange='applySLAFilters()'>
+            <option value='ALL'>All Staff</option>
+            <!-- populated dynamically from Users sheet -->
+          </select>
+        </div>
+
+        <!-- Department / Team -->
+        <div class='sla-filter-group'>
+          <label class='filter-label'>Department</label>
+          <select id='filterDepartment' class='filter-select' onchange='applySLAFilters()'>
+            <option value='ALL'>All Departments</option>
+            <option value='CUSTOMER_SERVICE'>Customer Service</option>
+            <option value='BUSINESS_DEVELOPMENT'>Business Development</option>
+            <option value='FINANCE'>Finance</option>
+            <option value='OPERATIONS'>Operations</option>
+          </select>
+        </div>
+
+        <!-- Reset filters -->
+        <button class='filter-reset-btn' onclick='resetSLAFilters()' title='Reset all filters'>
+          <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5'><polyline points='1 4 1 10 7 10'/><path d='M3.51 15a9 9 0 102.13-9.36L1 10'/></svg>
+          Reset
         </button>
       </div>
+
+      <!-- Active Filter Pills -->
+      <div class='active-filters' id='activeFilters' style='display:none'></div>
 
       <!-- ═══ INTERNAL SLA VIEW ═══ -->
       <div id="slaInternalView">
@@ -1256,8 +1335,9 @@ function showPage(name) {
     case 'sla':
       if (!window.slaLoaded) {
         window.slaLoaded=true;
-        if (currentSLADimension === 'external') { loadExternalSLAData('month'); }
-        else { loadSLAData('month'); }
+        populateStaffFilter();
+        if (currentSLADimension === 'external') { loadExternalSLAData(null); }
+        else { loadSLAData(null); }
       }
       break;
     case 'chat':
@@ -1382,6 +1462,87 @@ var currentSLAPeriod = 'month';
 var currentSLADimension = 'internal';
 var slaChartFinance, slaChartLA, slaChartTrend;
 
+/* ── SLA Advanced Filters ── */
+var slaFilters = { year:'2026', period:'all', month:null, customFrom:null, customTo:null, staff:'ALL', department:'ALL' };
+
+function onSLAPeriodFilterChange() {
+  var val = document.getElementById('filterPeriod').value;
+  var monthGrp  = document.getElementById('filterMonthGroup');
+  var customGrp = document.getElementById('filterCustomGroup');
+  if (monthGrp)  monthGrp.style.display  = val === 'month'  ? 'flex' : 'none';
+  if (customGrp) customGrp.style.display = val === 'custom' ? 'flex' : 'none';
+  applySLAFilters();
+}
+
+function applySLAFilters() {
+  slaFilters.year       = document.getElementById('filterYear').value;
+  slaFilters.period     = document.getElementById('filterPeriod').value;
+  slaFilters.month      = document.getElementById('filterMonth')     ? document.getElementById('filterMonth').value     : null;
+  slaFilters.customFrom = document.getElementById('filterCustomFrom') ? document.getElementById('filterCustomFrom').value : null;
+  slaFilters.customTo   = document.getElementById('filterCustomTo')   ? document.getElementById('filterCustomTo').value   : null;
+  slaFilters.staff      = document.getElementById('filterStaff').value;
+  slaFilters.department = document.getElementById('filterDepartment').value;
+
+  renderFilterPills();
+
+  if (currentSLADimension === 'internal') {
+    loadSLAData(null);
+  } else {
+    loadExternalSLAData(null);
+  }
+}
+
+function resetSLAFilters() {
+  document.getElementById('filterYear').value       = new Date().getFullYear().toString();
+  document.getElementById('filterPeriod').value     = 'all';
+  document.getElementById('filterStaff').value      = 'ALL';
+  document.getElementById('filterDepartment').value = 'ALL';
+  var mg = document.getElementById('filterMonthGroup');  if(mg) mg.style.display='none';
+  var cg = document.getElementById('filterCustomGroup'); if(cg) cg.style.display='none';
+  slaFilters = { year: new Date().getFullYear().toString(), period:'all', month:null, customFrom:null, customTo:null, staff:'ALL', department:'ALL' };
+  renderFilterPills();
+  applySLAFilters();
+}
+
+function populateStaffFilter() {
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data.success) return;
+      var sel = document.getElementById('filterStaff');
+      sel.innerHTML = '<option value="ALL">All Staff</option>';
+      data.staff.forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.user_id;
+        opt.textContent = u.name + ' (' + u.role + ')';
+        sel.appendChild(opt);
+      });
+    })
+    .handleSLARequest({ action: 'getStaffList' });
+}
+
+function renderFilterPills() {
+  var pills = [];
+  if (slaFilters.year !== new Date().getFullYear().toString()) pills.push({label:'Year: '+slaFilters.year, reset:function(){ document.getElementById('filterYear').value=new Date().getFullYear().toString(); applySLAFilters(); }});
+  if (slaFilters.period !== 'all') pills.push({label:'Period: '+slaFilters.period.toUpperCase(), reset:function(){ document.getElementById('filterPeriod').value='all'; onSLAPeriodFilterChange(); }});
+  if (slaFilters.staff !== 'ALL') {
+    var sel=document.getElementById('filterStaff');
+    var name=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].text:slaFilters.staff;
+    pills.push({label:'Staff: '+name.split('(')[0].trim(), reset:function(){ document.getElementById('filterStaff').value='ALL'; applySLAFilters(); }});
+  }
+  if (slaFilters.department !== 'ALL') pills.push({label:'Dept: '+slaFilters.department.replace('_',' '), reset:function(){ document.getElementById('filterDepartment').value='ALL'; applySLAFilters(); }});
+  var container = document.getElementById('activeFilters');
+  if (!container) return;
+  container.style.display = pills.length > 0 ? 'flex' : 'none';
+  container.innerHTML = pills.map(function(p, i){
+    return '<div class="filter-pill">'+p.label+'<button onclick="slaFilterPillReset('+i+')">&#x2715;</button></div>';
+  }).join('');
+  window._slaFilterPillResets = pills.map(function(p){ return p.reset; });
+}
+
+function slaFilterPillReset(i) {
+  if (window._slaFilterPillResets && window._slaFilterPillResets[i]) window._slaFilterPillResets[i]();
+}
+
 function setSLADimension(dim) {
   currentSLADimension = dim;
   var isInternal = dim === 'internal';
@@ -1393,31 +1554,18 @@ function setSLADimension(dim) {
   document.getElementById('slaExternalView').style.display  = !isInternal ? 'block' : 'none';
 
   if (isInternal) {
-    loadSLAData(currentSLAPeriod);
+    loadSLAData(null);
   } else {
-    loadExternalSLAData(currentSLAPeriod);
+    loadExternalSLAData(null);
   }
 }
 
 function onSLAPeriodChange(period, btn) {
   currentSLAPeriod = period;
-  if (btn) {
-    document.querySelectorAll('#slaPeriodTabs .period-tab').forEach(function(b){ b.classList.remove('active'); });
-    btn.classList.add('active');
-  }
-  if (currentSLADimension === 'internal') {
-    loadSLAData(period);
-  } else {
-    loadExternalSLAData(period);
-  }
+  applySLAFilters();
 }
 
-function loadSLAData(period, btn) {
-  currentSLAPeriod = period || 'month';
-  if (btn) {
-    document.querySelectorAll('#slaPeriodTabs .period-tab').forEach(function(b){ b.classList.remove('active'); });
-    btn.classList.add('active');
-  }
+function loadSLAData(period) {
   showSLALoading(true);
   google.script.run
     .withSuccessHandler(function(data){
@@ -1426,7 +1574,11 @@ function loadSLAData(period, btn) {
       else showSLAError(data.error);
     })
     .withFailureHandler(function(e){ showSLALoading(false); showSLAError(e.message); })
-    .handleSLARequest({ action:'getSLAAnalytics', period: currentSLAPeriod, affiliate: currentAffiliate });
+    .handleSLARequest({
+      action:     'getSLAAnalytics',
+      filters:    slaFilters,
+      affiliate:  currentAffiliate
+    });
 }
 
 function renderSLAData(data) {
@@ -1533,7 +1685,6 @@ function renderApproverLeaderboard(data) {
 var externalSLALoaded = false;
 
 function loadExternalSLAData(period) {
-  period = period || currentSLAPeriod;
   showSLALoading(true);
   google.script.run
     .withSuccessHandler(function(data) {
@@ -1542,7 +1693,11 @@ function loadExternalSLAData(period) {
       else showSLAError(data.error);
     })
     .withFailureHandler(function(e) { showSLALoading(false); showSLAError(e.message); })
-    .handleSLARequest({ action: 'getExternalSLAAnalytics', period: period, affiliate: currentAffiliate });
+    .handleSLARequest({
+      action:    'getExternalSLAAnalytics',
+      filters:   slaFilters,
+      affiliate: currentAffiliate
+    });
 }
 
 function renderExternalSLA(data) {
