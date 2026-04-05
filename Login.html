@@ -26,13 +26,20 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+body, .auth-wrapper {
+  background-color: #0D1442;
+  background-image: var(--bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   font-size: 16px;
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: var(--navy-900);
 }
 
 /* ── Background ── */
@@ -44,7 +51,6 @@ body {
   justify-content: center;
   padding: 40px 20px;
   position: relative;
-  background: url('https://images.unsplash.com/photo-1578321272176-b7bbc0679853?w=1920&q=80') center/cover no-repeat fixed;
 }
 
 .auth-wrapper::before {
@@ -62,12 +68,12 @@ body {
 
 /* ── Card ── */
 .auth-card {
-  background: var(--white);
+  background: #ffffff;
+  max-width: 560px;
+  width: min(560px, 95vw);
+  padding: 36px 48px;
   border-radius: 20px;
-  box-shadow: 0 12px 48px rgba(13, 20, 66, 0.18);
-  padding: 44px 40px;
-  width: 100%;
-  max-width: 440px;
+  box-shadow: 0 12px 48px rgba(13,20,66,0.18);
   animation: cardEntrance 0.45s ease-out both;
 }
 
@@ -547,6 +553,39 @@ body {
   font-size: 14px;
 }
 
+/* ── Login mode toggle ── */
+.login-toggle { display:flex; background:#f1f5f9; border-radius:10px; padding:4px; gap:4px; margin-bottom:24px; }
+.toggle-btn { flex:1; padding:9px 12px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:transparent; color:#64748b; transition:all 0.2s; font-family:inherit; }
+.toggle-btn:hover { color:#1A237E; }
+.toggle-btn.active { background:#1A237E; color:#fff; box-shadow:0 2px 8px rgba(26,35,126,0.25); }
+
+/* ── Staff note ── */
+.staff-note { background:#f0f4ff; border:1px solid #c7d2fe; border-radius:8px; padding:10px 14px; font-size:12px; color:#3730a3; display:flex; align-items:flex-start; gap:8px; line-height:1.6; margin-bottom:16px; }
+.staff-note svg { flex-shrink:0; margin-top:1px; color:#4f46e5; }
+.staff-note a { color:#1A237E; font-weight:600; }
+
+/* ── Privacy notice ── */
+.privacy-notice { font-size:11px; color:#94a3b8; text-align:center; margin:10px 0 0; line-height:1.6; }
+.privacy-notice a { color:#64748b; text-decoration:underline; }
+
+/* ── Privacy modal ── */
+.privacy-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px; }
+.privacy-modal { background:#fff; border-radius:16px; max-width:580px; width:100%; max-height:82vh; display:flex; flex-direction:column; box-shadow:0 24px 64px rgba(0,0,0,0.3); }
+.privacy-modal-header { padding:18px 24px 14px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.privacy-modal-title { display:flex; align-items:center; }
+.privacy-modal-header h3 { font-size:16px; font-weight:700; color:#0D1442; margin:0; }
+.modal-close-btn { background:none; border:none; font-size:20px; cursor:pointer; color:#94a3b8; padding:4px 8px; line-height:1; transition:color 0.15s; }
+.modal-close-btn:hover { color:#1e293b; }
+.privacy-modal-body { padding:20px 24px; overflow-y:auto; flex:1; font-size:13px; color:#374151; line-height:1.75; }
+.privacy-modal-body h4 { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#0D1442; margin:18px 0 6px; }
+.privacy-modal-body ul { padding-left:18px; margin:6px 0; }
+.privacy-modal-body li { margin-bottom:5px; }
+.policy-meta { background:#f0f4ff; border-radius:6px; padding:8px 12px; font-size:11px; color:#3730a3; margin-bottom:16px; }
+.policy-approval { margin-top:20px; padding-top:14px; border-top:1px solid #e2e8f0; font-size:11px; color:#94a3b8; line-height:1.6; }
+.privacy-modal-footer { padding:14px 24px; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; flex-shrink:0; }
+.btn-close-policy { padding:9px 24px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; color:#1e293b; font-family:inherit; transition:background 0.15s; }
+.btn-close-policy:hover { background:#e2e8f0; }
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   .auth-card {
@@ -578,24 +617,39 @@ body {
       <h1 class="auth-heading">Hass Petroleum Group</h1>
       <p class="auth-subheading">Customer and Dealer Portal</p>
 
+      <!-- Staff / Customer toggle -->
+      <div class="login-toggle" id="loginModeToggle">
+        <button class="toggle-btn active" id="toggleCustomer" onclick="setLoginMode('customer')">Customer Portal</button>
+        <button class="toggle-btn" id="toggleStaff" onclick="setLoginMode('staff')">Staff Login</button>
+      </div>
+
+      <!-- Staff note -->
+      <div class="staff-note" id="staffNote" style="display:none">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+        Hass staff should sign in with their <strong>@hasspetroleum.com</strong> Microsoft account.
+        IT issues: <a href="mailto:itsupport@hasspetroleum.com">itsupport@hasspetroleum.com</a>
+      </div>
+
       <form id="loginForm" autocomplete="on" novalidate>
 
         <!-- Account Type -->
-        <div class="field-group">
-          <label class="auth-label" for="accountType">Account Type <span style="color:var(--error)">*</span></label>
-          <select class="auth-select" id="accountType" required>
-            <option value="">Select account type</option>
-            <option value="Card Holder">Card Holder</option>
-            <option value="Dealer">Dealer</option>
-            <option value="Top-Up Account">Top-Up Account</option>
-            <option value="Corporate Account">Corporate Account</option>
-          </select>
-          <div class="field-error" id="accountTypeError"></div>
+        <div id="accountTypeRow">
+          <div class="field-group">
+            <label class="auth-label" for="accountType">Account Type <span style="color:var(--error)">*</span></label>
+            <select class="auth-select" id="accountType" required>
+              <option value="">Select account type</option>
+              <option value="Card Holder">Card Holder</option>
+              <option value="Dealer">Dealer</option>
+              <option value="Top-Up Account">Top-Up Account</option>
+              <option value="Corporate Account">Corporate Account</option>
+            </select>
+            <div class="field-error" id="accountTypeError"></div>
+          </div>
         </div>
 
         <!-- Email / Account Number -->
         <div class="field-group">
-          <label class="auth-label" for="loginEmail">Email or Account Number <span style="color:var(--error)">*</span></label>
+          <label class="auth-label" for="loginEmail" id="loginEmailLabel">Email or Account Number <span style="color:var(--error)">*</span></label>
           <input class="auth-input" type="text" id="loginEmail" required
                  placeholder="Enter your email or account number"
                  autocomplete="username">
@@ -649,23 +703,31 @@ body {
 
       </form>
 
+      <!-- Privacy notice -->
+      <p class="privacy-notice">By signing in you agree to the <a href="#" onclick="showPrivacyModal(); return false;">Hass Petroleum Privacy Policy</a>.</p>
+
       <!-- Switch to Sign Up -->
-      <p class="switch-prompt">Don't have an account? <a href="#" onclick="showView('signup'); return false;">Sign Up</a></p>
+      <div id="loginSignupPrompt">
+        <p class="switch-prompt">Don't have an account? <a href="#" onclick="showView('signup'); return false;">Sign Up</a></p>
+      </div>
 
-      <!-- SSO divider -->
-      <div class="divider"><span>OR</span></div>
+      <!-- SSO section -->
+      <div id="ssoSection">
+        <!-- SSO divider -->
+        <div class="divider"><span>OR</span></div>
 
-      <!-- Google SSO -->
-      <button type="button" class="btn-sso" id="googleSsoBtn" onclick="handleSso('google')">
-        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-        Continue with Google
-      </button>
+        <!-- Google SSO -->
+        <button type="button" class="btn-sso" id="googleSsoBtn" onclick="handleSso('google')">
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+          Continue with Google
+        </button>
 
-      <!-- Microsoft SSO -->
-      <button type="button" class="btn-sso" id="microsoftSsoBtn" onclick="handleSso('microsoft')">
-        <svg width="18" height="18" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
-        Continue with Microsoft
-      </button>
+        <!-- Microsoft SSO -->
+        <button type="button" class="btn-sso" id="microsoftSsoBtn" onclick="handleSso('microsoft')">
+          <svg width="18" height="18" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+          Continue with Microsoft
+        </button>
+      </div>
 
     </div>
     <!-- END LOGIN VIEW -->
@@ -894,15 +956,67 @@ body {
 
   <!-- Quick links -->
   <div class="quick-links">
-    <a href="#">Get a Hass Card</a>
+    <a href="https://hasspetroleum.com" target="_blank">hasspetroleum.com</a>
     <span>|</span>
-    <a href="#">Activate Your Card</a>
+    <a href="mailto:support@hasspetroleum.com">Contact Support</a>
     <span>|</span>
-    <a href="#">Contact Us</a>
+    <a href="#" onclick="showPrivacyModal(); return false;">Privacy Policy</a>
   </div>
 
 </div>
 <!-- END auth-wrapper -->
+
+<!-- Privacy Modal -->
+<div class="privacy-modal-overlay" id="privacyModalOverlay" style="display:none" onclick="if(event.target===this)closePrivacyModal()">
+  <div class="privacy-modal">
+    <div class="privacy-modal-header">
+      <div class="privacy-modal-title">
+        <img src="" id="privacyModalLogo" alt="Hass" style="height:32px;margin-right:10px;">
+        <h3>Privacy Policy</h3>
+      </div>
+      <button onclick="closePrivacyModal()" class="modal-close-btn">&#x2715;</button>
+    </div>
+    <div class="privacy-modal-body">
+      <p class="policy-meta">Hass Petroleum Group Privacy Policy &mdash; Customer &bull; Effective 2025 &bull; Approved by the Chief Executive Officer</p>
+
+      <h4>What We Collect</h4>
+      <p>Hass Petroleum collects personal data including your name, email address, phone number, company details, and transaction records to operate the customer portal and provide fuel ordering and delivery services.</p>
+
+      <h4>How We Use Your Data</h4>
+      <ul>
+        <li>To process orders, arrange deliveries, and send service updates</li>
+        <li>To operate, maintain, and improve the customer portal</li>
+        <li>To respond to support queries, complaints, and account requests</li>
+        <li>To authenticate users and maintain security of your account</li>
+        <li>To comply with applicable data protection laws in Kenya, Uganda, Tanzania, Rwanda, South Sudan, and Zambia</li>
+      </ul>
+
+      <h4>Data Sharing</h4>
+      <p>Your personal data will not be sold or disclosed to third parties except where required to deliver our services (such as logistics partners for deliveries), to comply with legal obligations, or with your prior consent.</p>
+
+      <h4>Your Rights</h4>
+      <ul>
+        <li>Access and receive a copy of your personal data</li>
+        <li>Request correction of inaccurate data</li>
+        <li>Request deletion of your data, subject to legal retention requirements</li>
+        <li>Withdraw consent at any time</li>
+        <li>Lodge a complaint with Hass or the relevant data protection authority</li>
+      </ul>
+
+      <h4>Data Security</h4>
+      <p>Hass Petroleum implements access controls and security measures to protect your personal information. Our customer service agents will <strong>never</strong> ask for your password.</p>
+
+      <h4>Contact Us</h4>
+      <p><strong>odp@hasspetroleum.com</strong> &nbsp;|&nbsp; <strong>support@hasspetroleum.com</strong><br>
+      Hass Petroleum Group, Hass Plaza, Lower Hill, Nairobi</p>
+
+      <p class="policy-approval">Reviewed by: Trixye Awuor Adala, HOD Legal and Compliance &bull; Approved by: Solomon Osundwa, COO &bull; Abdusalam Salim Mohamed, CFO &bull; Mohamud Salat Mohamed, CEO &bull; Date: July 2025</p>
+    </div>
+    <div class="privacy-modal-footer">
+      <button class="btn-close-policy" onclick="closePrivacyModal()">Close</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -921,6 +1035,11 @@ body {
           if (fallback) fallback.style.display = 'none';
         }
       }).getLogoUrl();
+
+      // Load background image from Drive
+      google.script.run.withSuccessHandler(function(url) {
+        if (url) document.documentElement.style.setProperty('--bg-image', 'url(' + url + ')');
+      }).getBackgroundUrl();
     }
 
     // If already have a valid token, redirect immediately
@@ -959,6 +1078,46 @@ body {
       eyeIcon.style.display = 'block';
       eyeOffIcon.style.display = 'none';
     }
+  };
+
+  /* ── Login mode toggle (Staff / Customer) ── */
+  window._loginMode = 'customer';
+
+  window.setLoginMode = function(mode) {
+    window._loginMode = mode;
+    var isStaff = mode === 'staff';
+
+    document.getElementById('toggleCustomer').classList.toggle('active', !isStaff);
+    document.getElementById('toggleStaff').classList.toggle('active', isStaff);
+
+    var els = {
+      accountTypeRow:   document.getElementById('accountTypeRow'),
+      signupPrompt:     document.getElementById('loginSignupPrompt'),
+      ssoSection:       document.getElementById('ssoSection'),
+      staffNote:        document.getElementById('staffNote'),
+      emailLabel:       document.getElementById('loginEmailLabel')
+    };
+
+    if (els.accountTypeRow) els.accountTypeRow.style.display = isStaff ? 'none' : 'block';
+    if (els.signupPrompt)   els.signupPrompt.style.display   = isStaff ? 'none' : 'block';
+    if (els.ssoSection)     els.ssoSection.style.display     = isStaff ? 'none' : 'block';
+    if (els.staffNote)      els.staffNote.style.display      = isStaff ? 'flex' : 'none';
+    if (els.emailLabel)     els.emailLabel.innerHTML          = (isStaff ? 'Staff Email' : 'Email or Account Number') + ' <span style="color:var(--error)">*</span>';
+  };
+
+  /* ── Privacy modal ── */
+  window.showPrivacyModal = function() {
+    var overlay = document.getElementById('privacyModalOverlay');
+    var logoEl  = document.getElementById('privacyModalLogo');
+    var logoSrc = document.getElementById('logo') ? document.getElementById('logo').src : '';
+    if (logoEl && logoSrc) logoEl.src = logoSrc;
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  };
+
+  window.closePrivacyModal = function() {
+    document.getElementById('privacyModalOverlay').style.display = 'none';
+    document.body.style.overflow = '';
   };
 
   /* ── Field error helpers ── */
@@ -1038,15 +1197,18 @@ body {
   /* ── Validate login form ── */
   function validateLoginForm() {
     var valid = true;
+    var isStaff = window._loginMode === 'staff';
     clearAllLoginErrors();
 
     var accountType = document.getElementById('accountType').value;
     var email = document.getElementById('loginEmail').value.trim();
     var password = document.getElementById('loginPassword').value;
 
-    if (!accountType) {
-      showFieldError('accountType', 'Please select an account type');
-      valid = false;
+    if (!isStaff) {
+      if (!accountType) {
+        showFieldError('accountType', 'Please select an account type');
+        valid = false;
+      }
     }
     if (!email) {
       showFieldError('loginEmail', 'Please enter your email or account number');
@@ -1057,7 +1219,7 @@ body {
       valid = false;
     }
 
-    if (accountType === 'Corporate Account') {
+    if (!isStaff && accountType === 'Corporate Account') {
       var corpName = document.getElementById('loginCorpName').value.trim();
       if (!corpName) {
         showFieldError('loginCorpName', 'Please enter your company name');
@@ -1077,7 +1239,7 @@ body {
       return;
     }
 
-    var accountType = document.getElementById('accountType').value;
+    var acctType = (window._loginMode === 'staff') ? '' : document.getElementById('accountType').value;
     var emailVal = document.getElementById('loginEmail').value.trim();
     var passwordVal = document.getElementById('loginPassword').value;
     var corpName = document.getElementById('loginCorpName') ? document.getElementById('loginCorpName').value.trim() : '';
@@ -1112,7 +1274,7 @@ body {
           action:        'login',
           email:         emailVal,
           password:      passwordVal,
-          accountType:   accountType,
+          accountType:   acctType,
           corporateName: corpName
         });
     } catch (e) {
