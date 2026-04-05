@@ -610,7 +610,7 @@ function doLogout(){
   var token = sessionStorage.getItem('hass_token') || (SESSION && SESSION.token) || '';
   sessionStorage.clear();
   if (typeof google !== 'undefined' && google.script && token) {
-    google.script.run.handlePortalAuth({ action: 'logout', token: token });
+    google.script.run.handleAuthRequest({ action: 'logout', token: token });
   }
   var base = window.location.href.split('?')[0];
   window.location.href = base;
