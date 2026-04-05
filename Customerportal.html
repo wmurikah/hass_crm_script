@@ -190,6 +190,8 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 .chat-toast.show { opacity:1; }
 .btn-chat-ticket { padding:5px 12px; background:#1A237E; color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s; }
 .btn-chat-ticket:hover { background:#283593; }
+.cp-logout-btn { display:flex; align-items:center; gap:6px; padding:7px 14px; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; color:#64748b; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.cp-logout-btn:hover { border-color:#dc2626; color:#dc2626; }
 </style>
 </head>
 <body>
@@ -209,9 +211,22 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 
 <!-- Main -->
 <div class="hp-main">
-  <header class="hp-header">
-    <h5 id="pageTitle" class="mb-0 fw-bold">Dashboard</h5>
-    <span class="text-muted" style="font-size:13px" id="userGreeting">Welcome</span>
+  <header class="hp-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <h5 id="pageTitle" class="mb-0 fw-bold">Dashboard</h5>
+      <span class="text-muted" style="font-size:13px" id="userGreeting">Welcome</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="customerGreeting" style="font-size:13px;color:#64748b;"></span>
+      <button onclick="logoutUser()" class="cp-logout-btn" title="Sign out">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Sign Out
+      </button>
+    </div>
   </header>
   <div class="hp-content">
 
@@ -616,11 +631,24 @@ function doLogout(){
   window.location.href = base;
 }
 
+function logoutUser() {
+  var token = (typeof SESSION !== 'undefined' && SESSION.token) ? SESSION.token : (sessionStorage.getItem('hass_token') || '');
+  if (token && typeof google !== 'undefined' && google.script) {
+    google.script.run.handleAuthRequest({ action: 'logout', token: token });
+  }
+  sessionStorage.clear();
+  var base = window.location.href.split('?')[0];
+  window.location.href = base;
+}
+
 document.addEventListener('DOMContentLoaded',function(){
   showPage('dashboard');
   // Populate user greeting
   var nameEl = document.getElementById('customerName');
   if (nameEl) nameEl.textContent = SESSION.name || 'Customer';
+  // Populate header greeting
+  var greetEl = document.getElementById('customerGreeting');
+  if (greetEl && SESSION.name) greetEl.textContent = 'Welcome, ' + SESSION.name.split(' ')[0];
 });
 
 /* ===== Consumption Analytics ===== */
