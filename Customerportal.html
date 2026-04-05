@@ -1,2723 +1,354 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hass Petroleum | Customer Portal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    /* ========================================
-       DESIGN TOKENS - Hass Petroleum Brand
-       Industrial / Energy Sector Aesthetic
-    ======================================== */
-    :root {
-      /* Brand Colors */
-      --navy-900: #0D1442;
-      --navy-800: #1A237E;
-      --navy-700: #283593;
-      --navy-600: #3949AB;
-      --orange-600: #E65100;
-      --orange-500: #FF6F00;
-      --orange-400: #FF8F00;
-      --orange-300: #FFA726;
-      
-      /* Neutrals */
-      --slate-950: #0f172a;
-      --slate-900: #1e293b;
-      --slate-800: #334155;
-      --slate-700: #475569;
-      --slate-600: #64748b;
-      --slate-500: #94a3b8;
-      --slate-400: #cbd5e1;
-      --slate-300: #e2e8f0;
-      --slate-200: #f1f5f9;
-      --slate-100: #f8fafc;
-      --white: #ffffff;
-      
-      /* Semantic */
-      --success-600: #16a34a;
-      --success-100: #dcfce7;
-      --warning-600: #d97706;
-      --warning-100: #fef3c7;
-      --error-600: #dc2626;
-      --error-100: #fee2e2;
-      --info-600: #0284c7;
-      --info-100: #e0f2fe;
-      
-      /* Shadows */
-      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-      
-      /* Layout */
-      --sidebar-width: 260px;
-      --header-height: 64px;
-      --radius-sm: 6px;
-      --radius: 8px;
-      --radius-lg: 12px;
-      --radius-xl: 16px;
-      
-      /* Transitions */
-      --transition-fast: 150ms ease;
-      --transition-base: 200ms ease;
-      --transition-slow: 300ms ease;
-    }
-
-    /* ========================================
-       RESET & BASE
-    ======================================== */
-    *, *::before, *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 16px;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--slate-100);
-      color: var(--slate-900);
-      line-height: 1.6;
-      min-height: 100vh;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    button {
-      font-family: inherit;
-      cursor: pointer;
-    }
-
-    input, select, textarea {
-      font-family: inherit;
-    }
-
-    /* ========================================
-       LAYOUT STRUCTURE
-    ======================================== */
-    .app {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* ========================================
-       SIDEBAR NAVIGATION
-    ======================================== */
-    .sidebar {
-      width: var(--sidebar-width);
-      background: linear-gradient(180deg, var(--navy-900) 0%, var(--navy-800) 100%);
-      color: var(--white);
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      z-index: 100;
-      transition: transform var(--transition-slow);
-    }
-
-    .sidebar::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: 1px;
-      background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
-    }
-
-    .sidebar-header {
-      padding: 24px 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .logo-mark {
-      width: 42px;
-      height: 42px;
-      background: linear-gradient(135deg, var(--orange-500) 0%, var(--orange-600) 100%);
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Space Mono', monospace;
-      font-weight: 700;
-      font-size: 20px;
-      color: var(--white);
-      box-shadow: 0 4px 12px rgba(255, 111, 0, 0.3);
-    }
-
-    .logo-text {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .logo-brand {
-      font-size: 17px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      line-height: 1.2;
-    }
-
-    .logo-brand span {
-      color: var(--orange-400);
-    }
-
-    .logo-sub {
-      font-size: 11px;
-      color: var(--slate-400);
-      font-weight: 500;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 0;
-    }
-
-    .nav-section {
-      margin-bottom: 8px;
-    }
-
-    .nav-section-title {
-      padding: 12px 24px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--slate-500);
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 11px 24px;
-      margin: 2px 12px;
-      border-radius: var(--radius);
-      font-size: 14px;
-      font-weight: 500;
-      color: rgba(255,255,255,0.7);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-      position: relative;
-    }
-
-    .nav-item:hover {
-      background: rgba(255,255,255,0.08);
-      color: var(--white);
-    }
-
-    .nav-item.active {
-      background: var(--orange-500);
-      color: var(--white);
-      box-shadow: 0 2px 8px rgba(255, 111, 0, 0.3);
-    }
-
-    .nav-item svg {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-      opacity: 0.85;
-    }
-
-    .nav-item.active svg {
-      opacity: 1;
-    }
-
-    .nav-badge {
-      margin-left: auto;
-      background: var(--error-600);
-      color: var(--white);
-      font-size: 11px;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 10px;
-      min-width: 20px;
-      text-align: center;
-    }
-
-    .nav-badge.warning {
-      background: var(--warning-600);
-    }
-
-    /* ========================================
-       MAIN CONTENT AREA
-    ======================================== */
-    .main {
-      flex: 1;
-      margin-left: var(--sidebar-width);
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    /* ========================================
-       TOP HEADER
-    ======================================== */
-    .header {
-      height: var(--header-height);
-      background: var(--white);
-      border-bottom: 1px solid var(--slate-200);
-      padding: 0 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .menu-toggle {
-      display: none;
-      background: none;
-      border: none;
-      padding: 8px;
-      color: var(--slate-600);
-      border-radius: var(--radius);
-    }
-
-    .menu-toggle:hover {
-      background: var(--slate-100);
-    }
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--slate-900);
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .header-btn {
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: none;
-      border: none;
-      color: var(--slate-600);
-      border-radius: var(--radius);
-      position: relative;
-      transition: all var(--transition-fast);
-    }
-
-    .header-btn:hover {
-      background: var(--slate-100);
-      color: var(--slate-900);
-    }
-
-    .header-btn svg {
-      width: 22px;
-      height: 22px;
-    }
-
-    .notification-dot {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 9px;
-      height: 9px;
-      background: var(--error-600);
-      border: 2px solid var(--white);
-      border-radius: 50%;
-    }
-
-    .user-menu {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 6px 12px 6px 6px;
-      border-radius: var(--radius-lg);
-      cursor: pointer;
-      transition: background var(--transition-fast);
-    }
-
-    .user-menu:hover {
-      background: var(--slate-100);
-    }
-
-    .user-avatar {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, var(--navy-700) 0%, var(--navy-800) 100%);
-      color: var(--white);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      font-size: 13px;
-    }
-
-    .user-info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .user-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--slate-900);
-      line-height: 1.3;
-    }
-
-    .user-company {
-      font-size: 12px;
-      color: var(--slate-500);
-      line-height: 1.3;
-    }
-
-    /* ========================================
-       PAGE CONTENT
-    ======================================== */
-    .content {
-      flex: 1;
-      padding: 24px;
-    }
-
-    /* ========================================
-       PAGE SECTIONS (SPA Navigation)
-    ======================================== */
-    .page {
-      display: none;
-      animation: fadeIn 0.2s ease;
-    }
-
-    .page.active {
-      display: block;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* ========================================
-       CARDS
-    ======================================== */
-    .card {
-      background: var(--white);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-
-    .card-header {
-      padding: 18px 24px;
-      border-bottom: 1px solid var(--slate-200);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-
-    .card-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--slate-900);
-    }
-
-    .card-body {
-      padding: 24px;
-    }
-
-    /* ========================================
-       CREDIT CARD DISPLAY
-    ======================================== */
-    .credit-card {
-      background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-900) 50%, var(--slate-950) 100%);
-      border-radius: var(--radius-xl);
-      padding: 28px;
-      color: var(--white);
-      position: relative;
-      overflow: hidden;
-      margin-bottom: 24px;
-    }
-
-    .credit-card::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      right: -20%;
-      width: 60%;
-      height: 200%;
-      background: radial-gradient(ellipse, rgba(255,111,0,0.15) 0%, transparent 70%);
-      pointer-events: none;
-    }
-
-    .credit-card::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255,111,0,0.5), transparent);
-    }
-
-    .credit-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 28px;
-      position: relative;
-      z-index: 1;
-    }
-
-    .credit-label {
-      font-size: 13px;
-      color: var(--slate-400);
-      margin-bottom: 6px;
-    }
-
-    .credit-value {
-      font-family: 'Space Mono', monospace;
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .credit-limit {
-      text-align: right;
-    }
-
-    .credit-limit .credit-value {
-      font-size: 20px;
-      color: var(--slate-300);
-    }
-
-    .credit-progress {
-      position: relative;
-      z-index: 1;
-      margin-bottom: 16px;
-    }
-
-    .credit-bar {
-      height: 8px;
-      background: rgba(255,255,255,0.15);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .credit-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--orange-500), var(--orange-400));
-      border-radius: 4px;
-      transition: width 0.5s ease;
-    }
-
-    .credit-stats {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      color: var(--slate-400);
-      position: relative;
-      z-index: 1;
-    }
-
-    /* ========================================
-       QUICK ACTIONS GRID
-    ======================================== */
-    .quick-actions {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .quick-action {
-      background: var(--white);
-      border: 2px solid var(--slate-200);
-      border-radius: var(--radius-lg);
-      padding: 24px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all var(--transition-base);
-    }
-
-    .quick-action:hover {
-      border-color: var(--orange-500);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-    }
-
-    .quick-action-icon {
-      width: 52px;
-      height: 52px;
-      margin: 0 auto 14px;
-      background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-700) 100%);
-      border-radius: var(--radius-lg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--white);
-    }
-
-    .quick-action-icon svg {
-      width: 26px;
-      height: 26px;
-    }
-
-    .quick-action-icon.orange {
-      background: linear-gradient(135deg, var(--orange-500) 0%, var(--orange-600) 100%);
-    }
-
-    .quick-action-icon.success {
-      background: linear-gradient(135deg, var(--success-600) 0%, #15803d 100%);
-    }
-
-    .quick-action-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--slate-900);
-      margin-bottom: 4px;
-    }
-
-    .quick-action-desc {
-      font-size: 12px;
-      color: var(--slate-500);
-    }
-
-    /* ========================================
-       STATS GRID
-    ======================================== */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .stat-card {
-      background: var(--white);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      box-shadow: var(--shadow);
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-    }
-
-    .stat-icon {
-      width: 44px;
-      height: 44px;
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .stat-icon.navy {
-      background: rgba(26, 35, 126, 0.1);
-      color: var(--navy-800);
-    }
-
-    .stat-icon.orange {
-      background: rgba(255, 111, 0, 0.1);
-      color: var(--orange-500);
-    }
-
-    .stat-icon.success {
-      background: var(--success-100);
-      color: var(--success-600);
-    }
-
-    .stat-icon.warning {
-      background: var(--warning-100);
-      color: var(--warning-600);
-    }
-
-    .stat-icon svg {
-      width: 22px;
-      height: 22px;
-    }
-
-    .stat-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .stat-value {
-      font-family: 'Space Mono', monospace;
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--slate-900);
-      line-height: 1.2;
-    }
-
-    .stat-label {
-      font-size: 13px;
-      color: var(--slate-600);
-      margin-top: 2px;
-    }
-
-    /* ========================================
-       TWO-COLUMN GRID
-    ======================================== */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 24px;
-    }
-
-    /* ========================================
-       DATA TABLES
-    ======================================== */
-    .table-wrap {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th, td {
-      padding: 12px 16px;
-      text-align: left;
-    }
-
-    th {
-      background: var(--slate-50);
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--slate-600);
-      border-bottom: 1px solid var(--slate-200);
-    }
-
-    td {
-      font-size: 14px;
-      color: var(--slate-700);
-      border-bottom: 1px solid var(--slate-100);
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr {
-      transition: background var(--transition-fast);
-    }
-
-    tbody tr:hover {
-      background: var(--slate-50);
-    }
-
-    td strong {
-      color: var(--slate-900);
-      font-weight: 600;
-    }
-
-    /* ========================================
-       STATUS BADGES
-    ======================================== */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .badge-new { background: var(--info-100); color: var(--info-600); }
-    .badge-open { background: var(--warning-100); color: var(--warning-600); }
-    .badge-progress { background: rgba(26, 35, 126, 0.1); color: var(--navy-800); }
-    .badge-resolved { background: var(--success-100); color: var(--success-600); }
-    .badge-closed { background: var(--slate-200); color: var(--slate-600); }
-    .badge-critical { background: var(--error-100); color: var(--error-600); }
-    .badge-high { background: var(--warning-100); color: var(--warning-600); }
-    .badge-medium { background: var(--info-100); color: var(--info-600); }
-    .badge-low { background: var(--slate-200); color: var(--slate-600); }
-
-    /* ========================================
-       BUTTONS
-    ======================================== */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 10px 18px;
-      border-radius: var(--radius);
-      font-size: 14px;
-      font-weight: 600;
-      border: none;
-      cursor: pointer;
-      transition: all var(--transition-fast);
-      white-space: nowrap;
-    }
-
-    .btn svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    .btn-primary {
-      background: var(--orange-500);
-      color: var(--white);
-    }
-
-    .btn-primary:hover {
-      background: var(--orange-600);
-      box-shadow: 0 4px 12px rgba(255, 111, 0, 0.3);
-    }
-
-    .btn-secondary {
-      background: var(--navy-800);
-      color: var(--white);
-    }
-
-    .btn-secondary:hover {
-      background: var(--navy-900);
-    }
-
-    .btn-outline {
-      background: transparent;
-      border: 2px solid var(--slate-300);
-      color: var(--slate-700);
-    }
-
-    .btn-outline:hover {
-      border-color: var(--navy-800);
-      color: var(--navy-800);
-    }
-
-    .btn-sm {
-      padding: 6px 12px;
-      font-size: 13px;
-    }
-
-    .btn-lg {
-      padding: 14px 24px;
-      font-size: 15px;
-    }
-
-    /* ========================================
-       FORMS
-    ======================================== */
-    .form-group {
-      margin-bottom: 20px;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--slate-700);
-      margin-bottom: 8px;
-    }
-
-    .form-label.required::after {
-      content: ' *';
-      color: var(--error-600);
-    }
-
-    .form-input,
-    .form-select,
-    .form-textarea {
-      width: 100%;
-      padding: 11px 14px;
-      border: 2px solid var(--slate-300);
-      border-radius: var(--radius);
-      font-size: 14px;
-      color: var(--slate-900);
-      background: var(--white);
-      transition: all var(--transition-fast);
-    }
-
-    .form-input:focus,
-    .form-select:focus,
-    .form-textarea:focus {
-      outline: none;
-      border-color: var(--navy-800);
-      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
-    }
-
-    .form-input::placeholder,
-    .form-textarea::placeholder {
-      color: var(--slate-400);
-    }
-
-    .form-textarea {
-      min-height: 120px;
-      resize: vertical;
-      line-height: 1.5;
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
-    }
-
-    .form-hint {
-      font-size: 13px;
-      color: var(--slate-500);
-      margin-top: 6px;
-    }
-
-    /* ========================================
-       FILE UPLOAD
-    ======================================== */
-    .file-upload {
-      border: 2px dashed var(--slate-300);
-      border-radius: var(--radius-lg);
-      padding: 32px;
-      text-align: center;
-      cursor: pointer;
-      transition: all var(--transition-base);
-    }
-
-    .file-upload:hover {
-      border-color: var(--navy-800);
-      background: rgba(26, 35, 126, 0.02);
-    }
-
-    .file-upload input {
-      display: none;
-    }
-
-    .file-upload-icon {
-      width: 52px;
-      height: 52px;
-      margin: 0 auto 16px;
-      background: var(--slate-100);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--slate-500);
-    }
-
-    .file-upload-icon svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .file-upload-text {
-      font-size: 14px;
-      color: var(--slate-600);
-    }
-
-    .file-upload-text strong {
-      color: var(--navy-800);
-    }
-
-    /* ========================================
-       ORDER BUILDER
-    ======================================== */
-    .order-line {
-      display: grid;
-      grid-template-columns: 2fr 1fr 120px 44px;
-      gap: 12px;
-      align-items: center;
-      padding: 16px;
-      background: var(--slate-50);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-    }
-
-    .order-line-total {
-      font-family: 'Space Mono', monospace;
-      font-weight: 600;
-      color: var(--slate-900);
-      text-align: right;
-    }
-
-    .remove-line {
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: none;
-      border: none;
-      color: var(--error-600);
-      border-radius: var(--radius);
-      cursor: pointer;
-      opacity: 0.6;
-      transition: all var(--transition-fast);
-    }
-
-    .remove-line:hover {
-      background: var(--error-100);
-      opacity: 1;
-    }
-
-    .order-summary {
-      background: var(--slate-50);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      margin-top: 24px;
-    }
-
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 10px 0;
-      font-size: 14px;
-      color: var(--slate-600);
-    }
-
-    .summary-row span:last-child {
-      font-family: 'Space Mono', monospace;
-      color: var(--slate-900);
-    }
-
-    .summary-row.total {
-      border-top: 2px solid var(--slate-300);
-      margin-top: 12px;
-      padding-top: 16px;
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--slate-900);
-    }
-
-    /* ========================================
-       DOCUMENT LIST
-    ======================================== */
-    .doc-item {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 16px;
-      border: 1px solid var(--slate-200);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-      transition: all var(--transition-fast);
-    }
-
-    .doc-item:hover {
-      border-color: var(--navy-800);
-      box-shadow: var(--shadow);
-    }
-
-    .doc-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .doc-icon {
-      width: 48px;
-      height: 48px;
-      background: var(--slate-100);
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--slate-600);
-      flex-shrink: 0;
-    }
-
-    .doc-icon svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .doc-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .doc-name {
-      font-weight: 600;
-      color: var(--slate-900);
-      margin-bottom: 2px;
-    }
-
-    .doc-meta {
-      font-size: 13px;
-      color: var(--slate-500);
-    }
-
-    .doc-status {
-      flex-shrink: 0;
-    }
-
-    /* ========================================
-       KNOWLEDGE BASE
-    ======================================== */
-    .kb-search {
-      position: relative;
-      margin-bottom: 24px;
-    }
-
-    .kb-search input {
-      width: 100%;
-      padding: 16px 20px 16px 52px;
-      border: 2px solid var(--slate-200);
-      border-radius: var(--radius-lg);
-      font-size: 16px;
-    }
-
-    .kb-search input:focus {
-      border-color: var(--navy-800);
-      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
-    }
-
-    .kb-search-icon {
-      position: absolute;
-      left: 18px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--slate-400);
-      width: 22px;
-      height: 22px;
-    }
-
-    .kb-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-    }
-
-    .kb-category {
-      background: var(--white);
-      border: 1px solid var(--slate-200);
-      border-radius: var(--radius-lg);
-      padding: 24px;
-      transition: all var(--transition-base);
-    }
-
-    .kb-category:hover {
-      border-color: var(--navy-800);
-      box-shadow: var(--shadow-md);
-      transform: translateY(-2px);
-    }
-
-    .kb-category-icon {
-      font-size: 36px;
-      margin-bottom: 14px;
-    }
-
-    .kb-category-title {
-      font-size: 17px;
-      font-weight: 600;
-      color: var(--slate-900);
-      margin-bottom: 8px;
-    }
-
-    .kb-category-desc {
-      font-size: 14px;
-      color: var(--slate-600);
-      margin-bottom: 12px;
-      line-height: 1.5;
-    }
-
-    .kb-category-count {
-      font-size: 13px;
-      color: var(--slate-500);
-    }
-
-    /* ========================================
-       MODAL
-    ======================================== */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.6);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      opacity: 0;
-      visibility: hidden;
-      transition: all var(--transition-base);
-    }
-
-    .modal-overlay.active {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .modal {
-      background: var(--white);
-      border-radius: var(--radius-xl);
-      width: 100%;
-      max-width: 640px;
-      max-height: 90vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      transform: scale(0.95) translateY(10px);
-      transition: transform var(--transition-base);
-    }
-
-    .modal-overlay.active .modal {
-      transform: scale(1) translateY(0);
-    }
-
-    .modal-header {
-      padding: 20px 24px;
-      border-bottom: 1px solid var(--slate-200);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .modal-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--slate-900);
-    }
-
-    .modal-close {
-      width: 36px;
-      height: 36px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: none;
-      border: none;
-      color: var(--slate-500);
-      border-radius: var(--radius);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-    }
-
-    .modal-close:hover {
-      background: var(--slate-100);
-      color: var(--slate-900);
-    }
-
-    .modal-body {
-      padding: 24px;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .modal-footer {
-      padding: 16px 24px;
-      border-top: 1px solid var(--slate-200);
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-
-    /* ========================================
-       TICKET THREAD
-    ======================================== */
-    .thread {
-      max-height: 360px;
-      overflow-y: auto;
-      padding: 20px;
-      background: var(--slate-50);
-      border-radius: var(--radius-lg);
-    }
-
-    .thread-message {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .thread-message:last-child {
-      margin-bottom: 0;
-    }
-
-    .thread-message.customer {
-      flex-direction: row-reverse;
-    }
-
-    .thread-avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-
-    .thread-message:not(.customer) .thread-avatar {
-      background: var(--navy-800);
-      color: var(--white);
-    }
-
-    .thread-message.customer .thread-avatar {
-      background: var(--orange-500);
-      color: var(--white);
-    }
-
-    .thread-bubble {
-      max-width: 75%;
-      padding: 12px 16px;
-      border-radius: var(--radius-lg);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .thread-message:not(.customer) .thread-bubble {
-      background: var(--white);
-      border: 1px solid var(--slate-200);
-      color: var(--slate-800);
-    }
-
-    .thread-message.customer .thread-bubble {
-      background: var(--navy-800);
-      color: var(--white);
-    }
-
-    .thread-meta {
-      font-size: 12px;
-      margin-top: 6px;
-      opacity: 0.7;
-    }
-
-    /* ========================================
-       LOCATION ITEMS
-    ======================================== */
-    .location-item {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 16px;
-      border: 1px solid var(--slate-200);
-      border-radius: var(--radius);
-      margin-bottom: 12px;
-    }
-
-    .location-item:last-child {
-      margin-bottom: 0;
-    }
-
-    .location-icon {
-      width: 48px;
-      height: 48px;
-      background: rgba(26, 35, 126, 0.1);
-      color: var(--navy-800);
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .location-icon svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .location-info {
-      flex: 1;
-    }
-
-    .location-name {
-      font-weight: 600;
-      color: var(--slate-900);
-      margin-bottom: 2px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .location-address,
-    .location-contact {
-      font-size: 13px;
-      color: var(--slate-500);
-    }
-
-    /* ========================================
-       SETTINGS CHECKBOXES
-    ======================================== */
-    .setting-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 16px 0;
-      border-bottom: 1px solid var(--slate-100);
-    }
-
-    .setting-item:last-child {
-      border-bottom: none;
-    }
-
-    .setting-item input[type="checkbox"] {
-      width: 20px;
-      height: 20px;
-      margin-top: 2px;
-      accent-color: var(--navy-800);
-    }
-
-    .setting-label {
-      font-weight: 600;
-      color: var(--slate-900);
-      margin-bottom: 2px;
-    }
-
-    .setting-desc {
-      font-size: 13px;
-      color: var(--slate-500);
-    }
-
-    /* ========================================
-       TOAST NOTIFICATIONS
-    ======================================== */
-    .toast-container {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 3000;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .toast {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 18px;
-      background: var(--slate-900);
-      color: var(--white);
-      border-radius: var(--radius);
-      min-width: 300px;
-      box-shadow: var(--shadow-xl);
-      animation: toastIn 0.3s ease;
-    }
-
-    .toast.success { background: var(--success-600); }
-    .toast.error { background: var(--error-600); }
-    .toast.warning { background: var(--warning-600); }
-
-    .toast svg {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-    }
-
-    @keyframes toastIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    /* ========================================
-       RESPONSIVE DESIGN
-    ======================================== */
-    @media (max-width: 1200px) {
-      .quick-actions {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      
-      .kb-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    @media (max-width: 1024px) {
-      .sidebar {
-        transform: translateX(-100%);
-      }
-
-      .sidebar.active {
-        transform: translateX(0);
-      }
-
-      .sidebar-backdrop {
-        display: block;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 99;
-        opacity: 0;
-        visibility: hidden;
-        transition: all var(--transition-base);
-      }
-
-      .sidebar-backdrop.active {
-        opacity: 1;
-        visibility: visible;
-      }
-
-      .main {
-        margin-left: 0;
-      }
-
-      .menu-toggle {
-        display: flex;
-      }
-
-      .grid-2 {
-        grid-template-columns: 1fr;
-      }
-
-      .form-row {
-        grid-template-columns: 1fr;
-      }
-
-      .order-line {
-        grid-template-columns: 1fr;
-        gap: 12px;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .stats-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .quick-actions {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-      }
-
-      .quick-action {
-        padding: 20px 16px;
-      }
-
-      .kb-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .content {
-        padding: 16px;
-      }
-
-      .credit-card {
-        padding: 20px;
-      }
-
-      .credit-value {
-        font-size: 26px;
-      }
-
-      .user-info {
-        display: none;
-      }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hass Petroleum - Customer Portal</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hp-navy-900: #0D1442; --hp-navy-800: #1A237E; --hp-navy-700: #283593; --hp-navy-600: #3949AB;
+  --hp-orange-600: #E65100; --hp-orange-500: #FF6F00; --hp-orange-400: #FF8F00;
+  --hp-sidebar-width: 260px; --hp-header-height: 64px;
+  --bs-primary: #1A237E; --bs-primary-rgb: 26,35,126;
+  --bs-font-sans-serif: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --bs-body-bg: #f1f5f9; --bs-body-color: #1e293b;
+  --bs-border-color: #e2e8f0; --bs-card-border-color: #e2e8f0; --bs-card-bg: #ffffff;
+}
+body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); margin: 0; }
+.hp-sidebar { width: var(--hp-sidebar-width); background: linear-gradient(180deg, var(--hp-navy-900) 0%, var(--hp-navy-800) 100%); color: #fff; position: fixed; top: 0; left: 0; height: 100vh; z-index: 1040; display: flex; flex-direction: column; }
+.hp-logo-mark { width: 40px; height: 40px; background: linear-gradient(135deg, var(--hp-orange-500), var(--hp-orange-600)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Space Mono', monospace; font-weight: 700; color: #fff; font-size: 18px; box-shadow: 0 4px 12px rgba(255,111,0,0.35); }
+.hp-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin: 2px 10px; border-radius: 8px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); cursor: pointer; transition: all 0.15s; text-decoration: none; }
+.hp-nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.hp-nav-item.active { background: var(--hp-orange-500); color: #fff; box-shadow: 0 2px 8px rgba(255,111,0,0.3); }
+.hp-main { margin-left: var(--hp-sidebar-width); }
+.hp-header { height: var(--hp-header-height); background: #ffffff; border-bottom: 1px solid var(--bs-border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 1030; }
+.hp-content { padding: 24px; }
+.hp-card { background: #ffffff; border: 1px solid var(--bs-border-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
+.hp-card-header { padding: 16px 20px; border-bottom: 1px solid var(--bs-border-color); display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 15px; color: #1e293b; }
+.hp-kpi { background: #fff; border: 1px solid var(--bs-border-color); border-radius: 10px; padding: 18px 20px; }
+.hp-kpi .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 8px; }
+.hp-kpi .value { font-family: 'Space Mono', monospace; font-size: 26px; font-weight: 700; line-height: 1; color: #1e293b; }
+.hp-kpi .sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.btn-hp-primary { background: var(--hp-orange-500); color: #fff; border: none; font-weight: 600; }
+.btn-hp-primary:hover { background: var(--hp-orange-600); color: #fff; box-shadow: 0 4px 12px rgba(255,111,0,0.25); }
+.btn-hp-navy { background: var(--hp-navy-800); color: #fff; border: none; font-weight: 600; }
+.btn-hp-navy:hover { background: var(--hp-navy-900); color: #fff; }
+.hp-table th { background: #f8fafc; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748b; border-bottom: 2px solid var(--bs-border-color); padding: 10px 14px; white-space: nowrap; }
+.hp-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #475569; }
+.hp-table tbody tr:hover td { background: #f8fafc; }
+.hp-table .cell-primary { font-weight: 600; color: #1e293b; }
+.hp-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; display: inline-flex; align-items: center; }
+.hp-badge-new { background: #e0f2fe; color: #0284c7; } .hp-badge-open { background: #fef3c7; color: #d97706; }
+.hp-badge-prog { background: rgba(26,35,126,0.1); color: #1A237E; } .hp-badge-done { background: #dcfce7; color: #16a34a; }
+.hp-badge-closed { background: #f1f5f9; color: #64748b; } .hp-badge-escd { background: #fee2e2; color: #dc2626; }
+.hp-badge-crit { background: #fee2e2; color: #dc2626; } .hp-badge-high { background: #fef3c7; color: #d97706; }
+.hp-badge-med { background: #e0f2fe; color: #0284c7; } .hp-badge-low { background: #f1f5f9; color: #64748b; }
+.hp-sla-bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; width: 100px; }
+.hp-sla-fill { height: 100%; border-radius: 3px; }
+.hp-sla-ok { background: #22c55e; } .hp-sla-warn { background: #f59e0b; } .hp-sla-crit { background: #ef4444; }
+.hp-modal-header { background: #f8fafc; border-bottom: 1px solid var(--bs-border-color); }
+.hp-form-label { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+.form-control:focus, .form-select:focus { border-color: var(--hp-navy-700); box-shadow: 0 0 0 3px rgba(40,53,147,0.12); }
+.hp-toast { min-width: 300px; border-radius: 8px; font-weight: 500; }
+.hp-credit-card { background: linear-gradient(135deg, var(--hp-navy-800) 0%, var(--hp-navy-900) 60%, #0f172a 100%); border-radius: 16px; padding: 28px; color: #fff; position: relative; overflow: hidden; }
+.hp-credit-card::before { content: ''; position: absolute; top: -40%; right: -10%; width: 55%; height: 200%; background: radial-gradient(ellipse, rgba(255,111,0,0.18) 0%, transparent 70%); pointer-events: none; }
+.hp-thread { background: #f8fafc; border-radius: 10px; padding: 16px; max-height: 360px; overflow-y: auto; }
+.hp-bubble-customer { background: var(--hp-navy-800); color: #fff; border-radius: 12px; padding: 10px 14px; max-width: 75%; margin-bottom: 10px; }
+.hp-bubble-agent { background: #ffffff; border: 1px solid var(--bs-border-color); border-radius: 12px; padding: 10px 14px; max-width: 75%; color: #334155; margin-bottom: 10px; margin-left: auto; }
+.hp-page { display: none; } .hp-page.active { display: block; }
+.hp-quick-action { text-align: center; padding: 24px 16px; border-radius: 12px; border: 1px solid var(--bs-border-color); background: #fff; cursor: pointer; transition: all 0.15s; }
+.hp-quick-action:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-2px); }
+.hp-quick-action .icon { font-size: 28px; margin-bottom: 8px; }
+.hp-quick-action .title { font-weight: 600; font-size: 14px; color: #1e293b; }
+::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sidebar-brand span { font-weight: 600; font-size: 15px; }
+.sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+.sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
+.order-line-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+</style>
 </head>
 <body>
-  <!-- Mobile Sidebar Backdrop -->
-  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+<!-- Sidebar -->
+<aside class="hp-sidebar">
+  <div class="sidebar-brand"><div class="hp-logo-mark">HP</div><span>Customer Portal</span></div>
+  <nav class="sidebar-nav">
+    <a class="hp-nav-item active" onclick="showPage('dashboard')" data-page="dashboard">&#9776; Dashboard</a>
+    <a class="hp-nav-item" onclick="showPage('orders')" data-page="orders">&#128230; Orders</a>
+    <a class="hp-nav-item" onclick="showPage('tickets')" data-page="tickets">&#127915; Tickets</a>
+    <a class="hp-nav-item" onclick="showPage('documents')" data-page="documents">&#128196; Documents</a>
+    <a class="hp-nav-item" onclick="showPage('account')" data-page="account">&#9881; Account</a>
+  </nav>
+  <div class="sidebar-footer"><a class="hp-nav-item" onclick="doLogout()">&#10140; Logout</a></div>
+</aside>
 
-  <div class="app">
-    <!-- ========================================
-         SIDEBAR NAVIGATION
-    ======================================== -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <a href="#" class="logo">
-          <div class="logo-mark">H</div>
-          <div class="logo-text">
-            <div class="logo-brand">Hass <span>Petroleum</span></div>
-            <div class="logo-sub">Customer Portal</div>
-          </div>
-        </a>
+<!-- Main -->
+<div class="hp-main">
+  <header class="hp-header">
+    <h5 id="pageTitle" class="mb-0 fw-bold">Dashboard</h5>
+    <span class="text-muted" style="font-size:13px" id="userGreeting">Welcome</span>
+  </header>
+  <div class="hp-content">
+
+    <!-- Dashboard -->
+    <div class="hp-page active" id="page-dashboard">
+      <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="hp-kpi"><div class="label">Account Balance</div><div class="value" id="kpiBalance">KES 0</div><div class="sub">Current statement</div></div></div>
+        <div class="col-md-3"><div class="hp-kpi"><div class="label">Open Orders</div><div class="value" id="kpiOrders">0</div><div class="sub">In progress</div></div></div>
+        <div class="col-md-3"><div class="hp-kpi"><div class="label">Active Tickets</div><div class="value" id="kpiTickets">0</div><div class="sub">Awaiting response</div></div></div>
+        <div class="col-md-3"><div class="hp-kpi"><div class="label">Credit Used</div><div class="value" id="kpiCredit">0%</div><div class="sub">Of credit limit</div></div></div>
       </div>
-      
-      <nav class="sidebar-nav">
-        <div class="nav-section">
-          <div class="nav-section-title">Main</div>
-          <a class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            Dashboard
-          </a>
+      <div class="row g-3 mb-4">
+        <div class="col-md-5">
+          <div class="hp-credit-card"><div style="position:relative;z-index:1">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:0.7;margin-bottom:16px">Hass Petroleum Account</div>
+            <div style="font-family:'Space Mono',monospace;font-size:20px;letter-spacing:2px;margin-bottom:20px" id="ccAccount">HASS-KE-000001</div>
+            <div class="d-flex justify-content-between">
+              <div><div style="font-size:10px;opacity:0.6">CREDIT LIMIT</div><div style="font-weight:700" id="ccLimit">KES 0</div></div>
+              <div><div style="font-size:10px;opacity:0.6">AVAILABLE</div><div style="font-weight:700" id="ccAvail">KES 0</div></div>
+              <div><div style="font-size:10px;opacity:0.6">COUNTRY</div><div style="font-weight:700" id="ccCountry">HPK</div></div>
+            </div>
+          </div></div>
         </div>
-        
-        <div class="nav-section">
-          <div class="nav-section-title">Orders</div>
-          <a class="nav-item" data-page="new-order" onclick="showPage('new-order')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            Place Order
-          </a>
-          <a class="nav-item" data-page="orders" onclick="showPage('orders')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-            Order History
-            <span class="nav-badge">3</span>
-          </a>
-        </div>
-        
-        <div class="nav-section">
-          <div class="nav-section-title">Support</div>
-          <a class="nav-item" data-page="new-ticket" onclick="showPage('new-ticket')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-            New Ticket
-          </a>
-          <a class="nav-item" data-page="tickets" onclick="showPage('tickets')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            My Tickets
-            <span class="nav-badge">2</span>
-          </a>
-          <a class="nav-item" data-page="knowledge" onclick="showPage('knowledge')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-            Help Center
-          </a>
-        </div>
-        
-        <div class="nav-section">
-          <div class="nav-section-title">Account</div>
-          <a class="nav-item" data-page="documents" onclick="showPage('documents')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            Documents
-            <span class="nav-badge warning">1</span>
-          </a>
-          <a class="nav-item" data-page="locations" onclick="showPage('locations')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            Delivery Locations
-          </a>
-          <a class="nav-item" data-page="settings" onclick="showPage('settings')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Settings
-          </a>
-        </div>
-      </nav>
-    </aside>
-
-    <!-- ========================================
-         MAIN CONTENT
-    ======================================== -->
-    <main class="main">
-      <!-- Header -->
-      <header class="header">
-        <div class="header-left">
-          <button class="menu-toggle" onclick="toggleSidebar()">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
-          <h1 class="page-title" id="pageTitle">Dashboard</h1>
-        </div>
-        <div class="header-right">
-          <button class="header-btn" onclick="showToast('Notifications coming soon', 'info')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            <span class="notification-dot"></span>
-          </button>
-          <div class="user-menu">
-            <div class="user-avatar">JD</div>
-            <div class="user-info">
-              <div class="user-name">John Doe</div>
-              <div class="user-company">Acme Industries</div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- Page Content -->
-      <div class="content">
-        <!-- ========================================
-             DASHBOARD PAGE
-        ======================================== -->
-        <section class="page active" id="page-dashboard">
-          <!-- Credit Card -->
-          <div class="credit-card">
-            <div class="credit-header">
-              <div>
-                <div class="credit-label">Available Credit</div>
-                <div class="credit-value">KES 2,450,000</div>
-              </div>
-              <div class="credit-limit">
-                <div class="credit-label">Credit Limit</div>
-                <div class="credit-value">KES 5,000,000</div>
-              </div>
-            </div>
-            <div class="credit-progress">
-              <div class="credit-bar">
-                <div class="credit-bar-fill" style="width: 51%;"></div>
-              </div>
-            </div>
-            <div class="credit-stats">
-              <span>Used: KES 2,550,000 (51%)</span>
-              <span>Next payment: Jan 15, 2026</span>
-            </div>
-          </div>
-
-          <!-- Quick Actions -->
-          <div class="quick-actions">
-            <a class="quick-action" onclick="showPage('new-order')">
-              <div class="quick-action-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-              </div>
-              <div class="quick-action-title">Place Order</div>
-              <div class="quick-action-desc">Order fuel products</div>
-            </a>
-            <a class="quick-action" onclick="showPage('new-ticket')">
-              <div class="quick-action-icon orange">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <div class="quick-action-title">Get Support</div>
-              <div class="quick-action-desc">Create a support ticket</div>
-            </a>
-            <a class="quick-action" onclick="showPage('documents')">
-              <div class="quick-action-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              </div>
-              <div class="quick-action-title">Upload Document</div>
-              <div class="quick-action-desc">Update KYC documents</div>
-            </a>
-            <a class="quick-action" onclick="showPage('knowledge')">
-              <div class="quick-action-icon success">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              </div>
-              <div class="quick-action-title">Help Center</div>
-              <div class="quick-action-desc">Find answers fast</div>
-            </a>
-          </div>
-
-          <!-- Stats Grid -->
-          <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-icon navy">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
-              </div>
-              <div class="stat-content">
-                <div class="stat-value">12</div>
-                <div class="stat-label">Orders This Month</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon orange">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              </div>
-              <div class="stat-content">
-                <div class="stat-value">3</div>
-                <div class="stat-label">Pending Deliveries</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon warning">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <div class="stat-content">
-                <div class="stat-value">2</div>
-                <div class="stat-label">Open Tickets</div>
-              </div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon success">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              </div>
-              <div class="stat-content">
-                <div class="stat-value">1</div>
-                <div class="stat-label">Docs Expiring</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Activity -->
-          <div class="grid-2">
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Recent Orders</span>
-                <button class="btn btn-sm btn-outline" onclick="showPage('orders')">View All</button>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Order #</th>
-                      <th>Date</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>ORD-KE-2025-000245</strong></td>
-                      <td>Jan 8, 2025</td>
-                      <td>KES 485,000</td>
-                      <td><span class="badge badge-progress">In Transit</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>ORD-KE-2025-000234</strong></td>
-                      <td>Jan 5, 2025</td>
-                      <td>KES 320,000</td>
-                      <td><span class="badge badge-resolved">Delivered</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>ORD-KE-2025-000221</strong></td>
-                      <td>Jan 2, 2025</td>
-                      <td>KES 275,500</td>
-                      <td><span class="badge badge-resolved">Delivered</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Open Tickets</span>
-                <button class="btn btn-sm btn-outline" onclick="showPage('tickets')">View All</button>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Ticket #</th>
-                      <th>Subject</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>TKT-KE-2025-000089</strong></td>
-                      <td>Delivery delay inquiry</td>
-                      <td><span class="badge badge-open">Awaiting Reply</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>TKT-KE-2025-000085</strong></td>
-                      <td>Invoice discrepancy</td>
-                      <td><span class="badge badge-progress">In Progress</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             NEW ORDER PAGE
-        ======================================== -->
-        <section class="page" id="page-new-order">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Place New Order</span>
-            </div>
-            <div class="card-body">
-              <form id="orderForm" onsubmit="submitOrder(event)">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label required">Delivery Location</label>
-                    <select class="form-select" id="orderLocation" required>
-                      <option value="">Select delivery location...</option>
-                      <option value="loc1">Nairobi Factory - Industrial Area</option>
-                      <option value="loc2">Mombasa Warehouse - Changamwe</option>
-                      <option value="loc3">Kisumu Depot - Kondele</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label required">Requested Delivery Date</label>
-                    <input type="date" class="form-input" id="orderDate" required>
-                  </div>
-                </div>
-
-                <h4 style="font-size: 15px; font-weight: 600; margin: 24px 0 16px; color: var(--slate-900);">Order Items</h4>
-                
-                <div id="orderLines">
-                  <div class="order-line">
-                    <select class="form-select product-select" required onchange="updateOrderTotals()">
-                      <option value="">Select product...</option>
-                      <option value="AGO" data-price="145.50">AGO (Diesel) - KES 145.50/L</option>
-                      <option value="PMS" data-price="165.80">PMS (Petrol) - KES 165.80/L</option>
-                      <option value="KERO" data-price="125.20">Kerosene - KES 125.20/L</option>
-                      <option value="JET" data-price="155.00">Jet A-1 - KES 155.00/L</option>
-                    </select>
-                    <input type="number" class="form-input qty-input" placeholder="Qty (Litres)" min="100" step="100" required oninput="updateOrderTotals()">
-                    <div class="order-line-total">KES 0.00</div>
-                    <div></div>
-                  </div>
-                </div>
-
-                <button type="button" class="btn btn-outline" onclick="addOrderLine()" style="margin-top: 8px;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                  Add Product
-                </button>
-
-                <div class="form-group" style="margin-top: 24px;">
-                  <label class="form-label">PO Number (Optional)</label>
-                  <input type="text" class="form-input" id="orderPO" placeholder="Your purchase order reference">
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Special Instructions</label>
-                  <textarea class="form-textarea" id="orderNotes" placeholder="Any special delivery requirements..."></textarea>
-                </div>
-
-                <div class="order-summary">
-                  <div class="summary-row">
-                    <span>Subtotal</span>
-                    <span id="orderSubtotal">KES 0.00</span>
-                  </div>
-                  <div class="summary-row">
-                    <span>VAT (16%)</span>
-                    <span id="orderVAT">KES 0.00</span>
-                  </div>
-                  <div class="summary-row">
-                    <span>Delivery Fee</span>
-                    <span>KES 5,000.00</span>
-                  </div>
-                  <div class="summary-row total">
-                    <span>Total</span>
-                    <span id="orderTotal">KES 5,000.00</span>
-                  </div>
-                </div>
-
-                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
-                  <button type="button" class="btn btn-outline">Save as Draft</button>
-                  <button type="submit" class="btn btn-primary btn-lg">Submit Order</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             ORDER HISTORY PAGE
-        ======================================== -->
-        <section class="page" id="page-orders">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Order History</span>
-              <button class="btn btn-primary" onclick="showPage('new-order')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                New Order
-              </button>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Order Number</th>
-                    <th>Date</th>
-                    <th>Products</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>ORD-KE-2025-000245</strong></td>
-                    <td>Jan 8, 2025</td>
-                    <td>AGO 3,000L</td>
-                    <td>KES 485,000</td>
-                    <td><span class="badge badge-progress">In Transit</span></td>
-                    <td><button class="btn btn-sm btn-outline">Track</button></td>
-                  </tr>
-                  <tr>
-                    <td><strong>ORD-KE-2025-000234</strong></td>
-                    <td>Jan 5, 2025</td>
-                    <td>AGO 2,000L, PMS 500L</td>
-                    <td>KES 320,000</td>
-                    <td><span class="badge badge-resolved">Delivered</span></td>
-                    <td><button class="btn btn-sm btn-outline">Reorder</button></td>
-                  </tr>
-                  <tr>
-                    <td><strong>ORD-KE-2025-000221</strong></td>
-                    <td>Jan 2, 2025</td>
-                    <td>PMS 1,500L</td>
-                    <td>KES 275,500</td>
-                    <td><span class="badge badge-resolved">Delivered</span></td>
-                    <td><button class="btn btn-sm btn-outline">Reorder</button></td>
-                  </tr>
-                  <tr>
-                    <td><strong>ORD-KE-2024-000198</strong></td>
-                    <td>Dec 28, 2024</td>
-                    <td>AGO 5,000L</td>
-                    <td>KES 727,500</td>
-                    <td><span class="badge badge-resolved">Delivered</span></td>
-                    <td><button class="btn btn-sm btn-outline">Reorder</button></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-        <!-- ========================================
-             NEW TICKET PAGE
-        ======================================== -->
-        <section class="page" id="page-new-ticket">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Create Support Ticket</span>
-            </div>
-            <div class="card-body">
-              <form id="ticketForm" onsubmit="submitTicket(event)">
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label required">Category</label>
-                    <select class="form-select" id="ticketCategory" required>
-                      <option value="">Select category...</option>
-                      <option value="DELIVERY">Delivery Issues</option>
-                      <option value="QUALITY">Product Quality</option>
-                      <option value="BILLING">Billing & Invoices</option>
-                      <option value="PRICING">Pricing Queries</option>
-                      <option value="ACCOUNT">Account Management</option>
-                      <option value="TECHNICAL">Technical Support</option>
-                      <option value="GENERAL">General Inquiry</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Related Order (Optional)</label>
-                    <select class="form-select" id="ticketOrder">
-                      <option value="">None</option>
-                      <option value="ORD-KE-2025-000245">ORD-KE-2025-000245 - Jan 8, 2025</option>
-                      <option value="ORD-KE-2025-000234">ORD-KE-2025-000234 - Jan 5, 2025</option>
-                      <option value="ORD-KE-2025-000221">ORD-KE-2025-000221 - Jan 2, 2025</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label required">Subject</label>
-                  <input type="text" class="form-input" id="ticketSubject" placeholder="Brief description of your issue" required>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label required">Description</label>
-                  <textarea class="form-textarea" id="ticketDescription" placeholder="Please provide as much detail as possible about your issue..." required style="min-height: 160px;"></textarea>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Attachments</label>
-                  <label class="file-upload">
-                    <input type="file" id="ticketFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
-                    <div class="file-upload-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    </div>
-                    <div class="file-upload-text">
-                      <strong>Click to upload</strong> or drag and drop<br>
-                      <small style="color: var(--slate-400);">PDF, Images, or Documents (max 10MB each)</small>
-                    </div>
-                  </label>
-                </div>
-
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                  <button type="button" class="btn btn-outline" onclick="showPage('dashboard')">Cancel</button>
-                  <button type="submit" class="btn btn-primary btn-lg">Submit Ticket</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             MY TICKETS PAGE
-        ======================================== -->
-        <section class="page" id="page-tickets">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">My Tickets</span>
-              <button class="btn btn-primary" onclick="showPage('new-ticket')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                New Ticket
-              </button>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ticket #</th>
-                    <th>Subject</th>
-                    <th>Category</th>
-                    <th>Priority</th>
-                    <th>Status</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr style="cursor: pointer;" onclick="openTicketModal()">
-                    <td><strong>TKT-KE-2025-000089</strong></td>
-                    <td>Delivery delay inquiry</td>
-                    <td>Delivery</td>
-                    <td><span class="badge badge-medium">Medium</span></td>
-                    <td><span class="badge badge-open">Awaiting Reply</span></td>
-                    <td>2 hours ago</td>
-                  </tr>
-                  <tr style="cursor: pointer;" onclick="openTicketModal()">
-                    <td><strong>TKT-KE-2025-000085</strong></td>
-                    <td>Invoice discrepancy for December</td>
-                    <td>Billing</td>
-                    <td><span class="badge badge-high">High</span></td>
-                    <td><span class="badge badge-progress">In Progress</span></td>
-                    <td>1 day ago</td>
-                  </tr>
-                  <tr style="cursor: pointer;" onclick="openTicketModal()">
-                    <td><strong>TKT-KE-2024-000076</strong></td>
-                    <td>Request for credit limit increase</td>
-                    <td>Account</td>
-                    <td><span class="badge badge-low">Low</span></td>
-                    <td><span class="badge badge-resolved">Resolved</span></td>
-                    <td>Dec 20, 2024</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             DOCUMENTS PAGE
-        ======================================== -->
-        <section class="page" id="page-documents">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">My Documents</span>
-              <button class="btn btn-primary" onclick="openUploadModal()">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload Document
-              </button>
-            </div>
-            <div class="card-body">
-              <div class="doc-item">
-                <div class="doc-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <div class="doc-info">
-                  <div class="doc-name">Certificate of Incorporation</div>
-                  <div class="doc-meta">Uploaded Jan 5, 2024 • No expiry</div>
-                </div>
-                <div class="doc-status">
-                  <span class="badge badge-resolved">Approved</span>
-                </div>
-              </div>
-
-              <div class="doc-item">
-                <div class="doc-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <div class="doc-info">
-                  <div class="doc-name">KRA PIN Certificate</div>
-                  <div class="doc-meta">Uploaded Jan 5, 2024 • No expiry</div>
-                </div>
-                <div class="doc-status">
-                  <span class="badge badge-resolved">Approved</span>
-                </div>
-              </div>
-
-              <div class="doc-item" style="border-color: var(--warning-600);">
-                <div class="doc-icon" style="background: var(--warning-100); color: var(--warning-600);">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <div class="doc-info">
-                  <div class="doc-name">Tax Compliance Certificate</div>
-                  <div class="doc-meta">Uploaded Mar 15, 2024 • <strong style="color: var(--warning-600);">Expires Feb 8, 2025</strong></div>
-                </div>
-                <div class="doc-status" style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-                  <span class="badge" style="background: var(--warning-100); color: var(--warning-600);">Expiring Soon</span>
-                  <button class="btn btn-sm btn-outline">Update</button>
-                </div>
-              </div>
-
-              <div class="doc-item">
-                <div class="doc-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                </div>
-                <div class="doc-info">
-                  <div class="doc-name">Business Permit</div>
-                  <div class="doc-meta">Uploaded Jan 10, 2024 • Expires Dec 31, 2025</div>
-                </div>
-                <div class="doc-status">
-                  <span class="badge badge-resolved">Approved</span>
-                </div>
-              </div>
-
-              <div class="doc-item" style="border-style: dashed;">
-                <div class="doc-icon" style="background: var(--slate-100); color: var(--slate-400);">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                </div>
-                <div class="doc-info">
-                  <div class="doc-name" style="color: var(--slate-500);">Director ID Copy</div>
-                  <div class="doc-meta">Required document - not yet uploaded</div>
-                </div>
-                <div class="doc-status">
-                  <button class="btn btn-sm btn-primary">Upload</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             KNOWLEDGE BASE PAGE
-        ======================================== -->
-        <section class="page" id="page-knowledge">
-          <div class="kb-search">
-            <svg class="kb-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" class="form-input" placeholder="Search help articles..." id="kbSearch">
-          </div>
-
-          <div class="kb-grid">
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">📚</div>
-              <div class="kb-category-title">Getting Started</div>
-              <div class="kb-category-desc">Account setup, portal navigation, and placing your first order</div>
-              <div class="kb-category-count">8 articles</div>
-            </a>
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">📦</div>
-              <div class="kb-category-title">Orders & Deliveries</div>
-              <div class="kb-category-desc">Placing orders, tracking deliveries, and scheduling</div>
-              <div class="kb-category-count">12 articles</div>
-            </a>
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">💳</div>
-              <div class="kb-category-title">Billing & Payments</div>
-              <div class="kb-category-desc">Invoices, payment methods, and credit management</div>
-              <div class="kb-category-count">9 articles</div>
-            </a>
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">📋</div>
-              <div class="kb-category-title">Account Management</div>
-              <div class="kb-category-desc">Profile updates, documents, and user preferences</div>
-              <div class="kb-category-count">6 articles</div>
-            </a>
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">🔧</div>
-              <div class="kb-category-title">Products & Quality</div>
-              <div class="kb-category-desc">Product specifications and quality standards</div>
-              <div class="kb-category-count">5 articles</div>
-            </a>
-            <a href="#" class="kb-category">
-              <div class="kb-category-icon">❓</div>
-              <div class="kb-category-title">FAQ</div>
-              <div class="kb-category-desc">Frequently asked questions and quick answers</div>
-              <div class="kb-category-count">15 articles</div>
-            </a>
-          </div>
-        </section>
-location-name">Nairobi Factory <span class="badge badge-resolved">Default</span></div>
-                  <div class="location-address">Industrial Area, Off Enterprise Road, Nairobi</div>
-                  <div class="location-contact">Contact: John Omondi • +254 722 123456</div>
-                </div>
-                <button class="btn btn-sm btn-outline">Edit</button>
-              </div>
-
-              <div class="location-item">
-                <div class="location-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                </div>
-                <div class="location-info">
-                  <div class="location-name">Mombasa Warehouse</div>
-                  <div class="location-address">Changamwe, Airport Road, Mombasa</div>
-                  <div class="location-contact">Contact: Mary Wanjiku • +254 733 456789</div>
-                </div>
-                <button class="btn btn-sm btn-outline">Edit</button>
-              </div>
-
-              <div class="location-item">
-                <div class="location-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                </div>
-                <div class="location-info">
-                  <div class="location-name">Kisumu Depot</div>
-                  <div class="location-address">Kondele, Kisumu-Kakamega Road</div>
-                  <div class="location-contact">Contact: Peter Otieno • +254 711 789012</div>
-                </div>
-                <button class="btn btn-sm btn-outline">Edit</button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- ========================================
-             SETTINGS PAGE
-        ======================================== -->
-        <section class="page" id="page-settings">
-          <div class="grid-2">
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Profile Settings</span>
-              </div>
-              <div class="card-body">
-                <form id="profileForm" onsubmit="saveProfile(event)">
-                  <div class="form-group">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" class="form-input" value="John Doe">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-input" value="john.doe@acmeindustries.com">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Phone</label>
-                    <input type="tel" class="form-input" value="+254 722 123456">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Preferred Language</label>
-                    <select class="form-select">
-                      <option value="en" selected>English</option>
-                      <option value="sw">Swahili</option>
-                    </select>
-                  </div>
-                  <button type="submit" class="btn btn-primary">Save Changes</button>
-                </form>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-header">
-                <span class="card-title">Notification Preferences</span>
-              </div>
-              <div class="card-body" style="padding-top: 8px; padding-bottom: 8px;">
-                <div class="setting-item">
-                  <input type="checkbox" id="notifOrders" checked>
-                  <label for="notifOrders" style="flex: 1; cursor: pointer;">
-                    <div class="setting-label">Order Updates</div>
-                    <div class="setting-desc">Receive notifications when order status changes</div>
-                  </label>
-                </div>
-                <div class="setting-item">
-                  <input type="checkbox" id="notifTickets" checked>
-                  <label for="notifTickets" style="flex: 1; cursor: pointer;">
-                    <div class="setting-label">Ticket Responses</div>
-                    <div class="setting-desc">Get notified when support responds to your tickets</div>
-                  </label>
-                </div>
-                <div class="setting-item">
-                  <input type="checkbox" id="notifDocs" checked>
-                  <label for="notifDocs" style="flex: 1; cursor: pointer;">
-                    <div class="setting-label">Document Reminders</div>
-                    <div class="setting-desc">Reminders before your documents expire</div>
-                  </label>
-                </div>
-                <div class="setting-item">
-                  <input type="checkbox" id="notifMarketing">
-                  <label for="notifMarketing" style="flex: 1; cursor: pointer;">
-                    <div class="setting-label">Marketing Communications</div>
-                    <div class="setting-desc">Product updates and promotional offers</div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
+        <div class="col-md-7"><div class="row g-3">
+          <div class="col-6"><div class="hp-quick-action" onclick="showPage('orders')"><div class="icon">&#128230;</div><div class="title">New Order</div></div></div>
+          <div class="col-6"><div class="hp-quick-action" onclick="showPage('tickets')"><div class="icon">&#127915;</div><div class="title">New Ticket</div></div></div>
+          <div class="col-6"><div class="hp-quick-action" onclick="showPage('documents')"><div class="icon">&#128196;</div><div class="title">Upload Document</div></div></div>
+          <div class="col-6"><div class="hp-quick-action" onclick="showPage('account')"><div class="icon">&#128200;</div><div class="title">View Statements</div></div></div>
+        </div></div>
       </div>
-    </main>
-  </div>
-
-  <!-- ========================================
-       TICKET DETAIL MODAL
-  ======================================== -->
-  <div class="modal-overlay" id="ticketModal">
-    <div class="modal" style="max-width: 720px;">
-      <div class="modal-header">
-        <span class="modal-title">TKT-KE-2025-000089</span>
-        <button class="modal-close" onclick="closeModal('ticketModal')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+      <div class="hp-card mb-4">
+        <div class="hp-card-header"><span>Recent Orders</span><a class="btn btn-sm btn-hp-navy" onclick="showPage('orders')">View All</a></div>
+        <div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Order #</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody id="recentOrdersBody"><tr><td colspan="4" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div>
       </div>
-      <div class="modal-body">
-        <div style="margin-bottom: 20px;">
-          <h3 style="font-size: 17px; font-weight: 600; margin-bottom: 8px;">Delivery delay inquiry</h3>
-          <div style="display: flex; gap: 16px; font-size: 13px; color: var(--slate-500); flex-wrap: wrap;">
-            <span>Category: <strong style="color: var(--slate-700);">Delivery</strong></span>
-            <span>Priority: <span class="badge badge-medium">Medium</span></span>
-            <span>Status: <span class="badge badge-open">Awaiting Reply</span></span>
-          </div>
-        </div>
+      <div class="hp-card">
+        <div class="hp-card-header"><span>Open Tickets</span><a class="btn btn-sm btn-hp-navy" onclick="showPage('tickets')">View All</a></div>
+        <div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Ticket #</th><th>Subject</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+        <tbody id="openTicketsBody"><tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div>
+      </div>
+    </div>
 
-        <div class="thread">
-          <div class="thread-message customer">
-            <div class="thread-avatar">JD</div>
-            <div class="thread-bubble">
-              <div>Hi, I placed order ORD-KE-2025-000245 on January 8th and was told delivery would be on January 9th. It's now past the expected time. Can you please provide an update?</div>
-              <div class="thread-meta">Jan 9, 2025 at 10:30 AM</div>
-            </div>
+    <!-- Orders -->
+    <div class="hp-page" id="page-orders">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="mb-0 fw-bold">My Orders</h5>
+        <button class="btn btn-hp-primary" id="btnNewOrder" onclick="document.getElementById('orderFormCard').style.display='block'">+ New Order</button>
+      </div>
+      <div class="hp-card mb-4" id="orderFormCard" style="display:none">
+        <div class="hp-card-header"><span>New Order</span><button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('orderFormCard').style.display='none'">&times;</button></div>
+        <div class="p-4">
+          <div class="row g-3 mb-3">
+            <div class="col-md-4"><label class="hp-form-label">Delivery Location</label><select class="form-select form-select-sm" id="orderLocation"><option>Select location...</option></select></div>
+            <div class="col-md-4"><label class="hp-form-label">Requested Date</label><input type="date" class="form-control form-control-sm" id="orderDate"></div>
+            <div class="col-md-4"><label class="hp-form-label">PO Number</label><input type="text" class="form-control form-control-sm" id="orderPO" placeholder="Optional"></div>
           </div>
-          <div class="thread-message">
-            <div class="thread-avatar">HP</div>
-            <div class="thread-bubble">
-              <div>Good morning. Thank you for reaching out. I'm checking with our logistics team regarding your delivery status. I'll update you shortly.</div>
-              <div class="thread-meta">Jan 9, 2025 at 11:15 AM - Sarah K.</div>
-            </div>
+          <label class="hp-form-label">Line Items</label>
+          <div id="orderLines"><div class="order-line-item">
+            <select class="form-select form-select-sm" onchange="calcTotals()"><option value="">Select product...</option></select>
+            <input type="number" class="form-control form-control-sm" placeholder="Qty" min="1" onchange="calcTotals()">
+            <input type="number" class="form-control form-control-sm" placeholder="Price" readonly>
+            <input type="text" class="form-control form-control-sm" placeholder="Total" readonly>
+            <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.order-line-item').remove();calcTotals()">&times;</button>
+          </div></div>
+          <button class="btn btn-sm btn-outline-secondary mt-2" onclick="addOrderLine()">+ Add Line</button>
+          <hr>
+          <div class="row g-3">
+            <div class="col-md-3"><div class="hp-form-label">Subtotal</div><div id="orderSubtotal" class="fw-bold">0.00</div></div>
+            <div class="col-md-3"><div class="hp-form-label">VAT (16%)</div><div id="orderVAT" class="fw-bold">0.00</div></div>
+            <div class="col-md-3"><div class="hp-form-label">Delivery Fee</div><input type="number" class="form-control form-control-sm" id="orderDeliveryFee" value="0" onchange="calcTotals()"></div>
+            <div class="col-md-3"><div class="hp-form-label">Grand Total</div><div id="orderGrandTotal" class="fw-bold fs-5" style="color:var(--hp-navy-800)">0.00</div></div>
           </div>
-          <div class="thread-message">
-            <div class="thread-avatar">HP</div>
-            <div class="thread-bubble">
-              <div>Update: Your delivery is currently in transit. There was a slight delay due to traffic conditions on Mombasa Road. The tanker is approximately 30 minutes away from your location. Our driver will contact you upon arrival.</div>
-              <div class="thread-meta">Jan 9, 2025 at 11:45 AM - Sarah K.</div>
-            </div>
-          </div>
+          <div class="mt-3"><label class="hp-form-label">Special Instructions</label><textarea class="form-control form-control-sm" id="orderInstructions" rows="2"></textarea></div>
+          <div class="mt-3 text-end"><button class="btn btn-hp-primary" onclick="submitOrder()">Submit Order</button></div>
         </div>
+      </div>
+      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Order #</th><th>Date</th><th>Amount</th><th>Status</th><th>Payment</th></tr></thead>
+      <tbody id="allOrdersBody"><tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div></div>
+    </div>
 
-        <div style="margin-top: 20px;">
-          <label class="form-label">Add Reply</label>
-          <textarea class="form-textarea" placeholder="Type your reply here..." style="min-height: 100px;"></textarea>
-          <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
-            <button class="btn btn-primary">Send Reply</button>
-          </div>
-        </div>
+    <!-- Tickets -->
+    <div class="hp-page" id="page-tickets">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="mb-0 fw-bold">My Tickets</h5>
+        <button class="btn btn-hp-primary" data-bs-toggle="modal" data-bs-target="#newTicketModal">+ New Ticket</button>
+      </div>
+      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Ticket #</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody id="allTicketsBody"><tr><td colspan="6" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div></div>
+    </div>
+
+    <!-- Documents -->
+    <div class="hp-page" id="page-documents">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="mb-0 fw-bold">My Documents</h5>
+        <button class="btn btn-hp-primary" data-bs-toggle="modal" data-bs-target="#uploadDocModal">+ Upload Document</button>
+      </div>
+      <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Expiry</th><th>Uploaded</th></tr></thead>
+      <tbody id="allDocsBody"><tr><td colspan="5" class="text-center text-muted py-4">Loading...</td></tr></tbody></table></div></div>
+    </div>
+
+    <!-- Account -->
+    <div class="hp-page" id="page-account">
+      <h5 class="mb-4 fw-bold">My Account</h5>
+      <div class="row g-4">
+        <div class="col-md-6"><div class="hp-card"><div class="hp-card-header">Account Details</div><div class="p-4" id="accountDetails"><p class="text-muted">Loading...</p></div></div></div>
+        <div class="col-md-6"><div class="hp-card"><div class="hp-card-header">Change Password</div><div class="p-4">
+          <div class="mb-3"><label class="hp-form-label">Current Password</label><input type="password" class="form-control form-control-sm" id="curPwd"></div>
+          <div class="mb-3"><label class="hp-form-label">New Password</label><input type="password" class="form-control form-control-sm" id="newPwd"></div>
+          <div class="mb-3"><label class="hp-form-label">Confirm Password</label><input type="password" class="form-control form-control-sm" id="conPwd"></div>
+          <button class="btn btn-hp-primary btn-sm" onclick="changePassword()">Update Password</button>
+        </div></div></div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- ========================================
-       DOCUMENT UPLOAD MODAL
-  ======================================== -->
-  <div class="modal-overlay" id="uploadModal">
-    <div class="modal">
-      <div class="modal-header">
-        <span class="modal-title">Upload Document</span>
-        <button class="modal-close" onclick="closeModal('uploadModal')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label required">Document Type</label>
-          <select class="form-select" required>
-            <option value="">Select document type...</option>
-            <option value="TAX_CERT">Tax Compliance Certificate</option>
-            <option value="BUSINESS_LICENSE">Business License</option>
-            <option value="ID_COPY">Director ID Copy</option>
-            <option value="INSURANCE">Insurance Certificate</option>
-            <option value="OTHER">Other Document</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Document Number</label>
-          <input type="text" class="form-input" placeholder="e.g., Certificate number">
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Issue Date</label>
-            <input type="date" class="form-input">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Expiry Date</label>
-            <input type="date" class="form-input">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label required">File</label>
-          <label class="file-upload">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" required>
-            <div class="file-upload-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            </div>
-            <div class="file-upload-text">
-              <strong>Click to upload</strong> or drag and drop<br>
-              <small style="color: var(--slate-400);">PDF or Image files (max 10MB)</small>
-            </div>
-          </label>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeModal('uploadModal')">Cancel</button>
-        <button class="btn btn-primary">Upload Document</button>
-      </div>
-    </div>
+<!-- New Ticket Modal -->
+<div class="modal fade" id="newTicketModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header hp-modal-header"><h6 class="modal-title fw-bold">New Support Ticket</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-3"><label class="hp-form-label">Category</label><select class="form-select form-select-sm" id="ticketCategory"><option>GENERAL</option><option>ORDER</option><option>BILLING</option><option>DELIVERY</option><option>TECHNICAL</option><option>COMPLAINT</option></select></div>
+    <div class="mb-3"><label class="hp-form-label">Priority</label><select class="form-select form-select-sm" id="ticketPriority"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select></div>
+    <div class="mb-3"><label class="hp-form-label">Subject</label><input type="text" class="form-control form-control-sm" id="ticketSubject"></div>
+    <div class="mb-3"><label class="hp-form-label">Description</label><textarea class="form-control form-control-sm" id="ticketDesc" rows="4"></textarea></div>
   </div>
+  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="submitTicket()">Submit</button></div>
+</div></div></div>
 
-  <!-- ========================================
-       TOAST CONTAINER
-  ======================================== -->
-  <div class="toast-container" id="toastContainer"></div>
+<!-- Ticket Detail Modal -->
+<div class="modal fade" id="ticketDetailModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
+  <div class="modal-header hp-modal-header"><h6 class="modal-title fw-bold" id="tdTitle">Ticket</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="row mb-3" id="tdFields"></div>
+    <div class="hp-thread" id="tdThread"></div>
+    <div class="mt-3"><textarea class="form-control form-control-sm" id="tdReply" rows="3" placeholder="Type your reply..."></textarea></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-sm btn-hp-primary" onclick="sendReply()">Send Reply</button></div>
+</div></div></div>
 
-  <!-- ========================================
-       JAVASCRIPT
-  ======================================== -->
-  <script>
-    // ========================================
-    // CONFIGURATION
-    // ========================================
-    const CONFIG = {
-      API_URL: 'https://script.google.com/macros/s/AKfycbwmt3FlKQpMd8Mv3e8pq6KcvunIlrCDOQFsSrsWBcn3xLhC4xz6URugDbYweqWwNZR2/exec',
-      VAT_RATE: 0.16,
-      DELIVERY_FEE: 5000
-    };
+<!-- Upload Document Modal -->
+<div class="modal fade" id="uploadDocModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header hp-modal-header"><h6 class="modal-title fw-bold">Upload Document</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <div class="mb-3"><label class="hp-form-label">Type</label><select class="form-select form-select-sm" id="docType"><option>KRA_PIN</option><option>TAX_CERTIFICATE</option><option>CERTIFICATE_OF_INCORPORATION</option><option>BUSINESS_LICENSE</option><option>ID_COPY</option><option>CONTRACT</option><option>OTHER</option></select></div>
+    <div class="mb-3"><label class="hp-form-label">File</label><input type="file" class="form-control form-control-sm" id="docFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"></div>
+    <div class="mb-3"><label class="hp-form-label">Document Number</label><input type="text" class="form-control form-control-sm" id="docNum"></div>
+    <div class="mb-3"><label class="hp-form-label">Expiry Date</label><input type="date" class="form-control form-control-sm" id="docExpiry"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="uploadDoc()">Upload</button></div>
+</div></div></div>
 
-    // ========================================
-    // PAGE NAVIGATION
-    // ========================================
-    function showPage(pageId) {
-      // Hide all pages
-      document.querySelectorAll('.page').forEach(page => {
-        page.classList.remove('active');
-      });
-      
-      // Show target page
-      const targetPage = document.getElementById('page-' + pageId);
-      if (targetPage) {
-        targetPage.classList.add('active');
-      }
-      
-      // Update nav active state
-      document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.page === pageId) {
-          item.classList.add('active');
-        }
-      });
-      
-      // Update page title
-      const pageTitles = {
-        'dashboard': 'Dashboard',
-        'new-order': 'Place New Order',
-        'orders': 'Order History',
-        'new-ticket': 'Create Support Ticket',
-        'tickets': 'My Tickets',
-        'knowledge': 'Help Center',
-        'documents': 'My Documents',
-        'locations': 'Delivery Locations',
-        'settings': 'Settings'
-      };
-      
-      document.getElementById('pageTitle').textContent = pageTitles[pageId] || 'Dashboard';
-      
-      // Close mobile sidebar
-      if (window.innerWidth <= 1024) {
-        closeSidebar();
-      }
-      
-      // Scroll to top
-      window.scrollTo(0, 0);
-    }
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100"><div class="toast hp-toast" id="appToast" role="alert"><div class="toast-body" id="toastBody"></div></div></div>
 
-    // ========================================
-    // SIDEBAR TOGGLE (Mobile)
-    // ========================================
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const backdrop = document.getElementById('sidebarBackdrop');
-      
-      sidebar.classList.toggle('active');
-      backdrop.classList.toggle('active');
-    }
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const AFFILIATE_MAP={KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',HTW:'HTW'};
+let currentCustomer=null, currentContact=null;
 
-    function closeSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const backdrop = document.getElementById('sidebarBackdrop');
-      
-      sidebar.classList.remove('active');
-      backdrop.classList.remove('active');
-    }
+function showPage(id){
+  document.querySelectorAll('.hp-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.hp-nav-item').forEach(n=>n.classList.remove('active'));
+  var pg=document.getElementById('page-'+id); if(pg) pg.classList.add('active');
+  var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
+  var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',account:'My Account'};
+  document.getElementById('pageTitle').textContent=t[id]||id;
+}
 
-    // ========================================
-    // MODAL FUNCTIONS
-    // ========================================
-    function openModal(modalId) {
-      document.getElementById(modalId).classList.add('active');
-      document.body.style.overflow = 'hidden';
-    }
+function showToast(msg,type){
+  var t=document.getElementById('appToast'),b=document.getElementById('toastBody');
+  b.textContent=msg; t.className='toast hp-toast bg-'+(type==='error'?'danger':type==='success'?'success':'primary')+' text-white';
+  new bootstrap.Toast(t,{delay:3000}).show();
+}
 
-    function closeModal(modalId) {
-      document.getElementById(modalId).classList.remove('active');
-      document.body.style.overflow = '';
-    }
+function getStatusBadge(s){
+  var m={NEW:'new',OPEN:'open',IN_PROGRESS:'prog',RESOLVED:'done',CLOSED:'closed',DELIVERED:'done',DRAFT:'closed',
+    SUBMITTED:'new',PENDING_APPROVAL:'open',APPROVED:'prog',SCHEDULED:'prog',IN_TRANSIT:'prog',CANCELLED:'closed',
+    REJECTED:'escd',ESCALATED:'escd',PENDING_REVIEW:'open',PAID:'done',INVOICED:'prog',OVERDUE:'escd',PENDING:'open'};
+  return '<span class="hp-badge hp-badge-'+(m[s]||'closed')+'">'+s+'</span>';
+}
 
-    function openTicketModal() {
-      openModal('ticketModal');
-    }
+function getPriorityBadge(p){
+  var m={CRITICAL:'crit',HIGH:'high',MEDIUM:'med',LOW:'low'};
+  return '<span class="hp-badge hp-badge-'+(m[p]||'low')+'">'+p+'</span>';
+}
 
-    function openUploadModal() {
-      openModal('uploadModal');
-    }
+function formatCurrency(a,c){c=c||'KES';return c+' '+Number(a||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function formatDate(d){if(!d)return'-';try{return new Date(d).toLocaleDateString();}catch(e){return d;}}
 
-    // Close modal on backdrop click
-    document.querySelectorAll('.modal-overlay').forEach(overlay => {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          overlay.classList.remove('active');
-          document.body.style.overflow = '';
-        }
-      });
-    });
+function addOrderLine(){
+  var c=document.getElementById('orderLines'), d=document.createElement('div'); d.className='order-line-item';
+  d.innerHTML='<select class="form-select form-select-sm" onchange="calcTotals()"><option value="">Select product...</option></select>'+
+    '<input type="number" class="form-control form-control-sm" placeholder="Qty" min="1" onchange="calcTotals()">'+
+    '<input type="number" class="form-control form-control-sm" placeholder="Price" readonly>'+
+    '<input type="text" class="form-control form-control-sm" placeholder="Total" readonly>'+
+    '<button class="btn btn-sm btn-outline-danger" onclick="this.closest(\'.order-line-item\').remove();calcTotals()">&times;</button>';
+  c.appendChild(d);
+}
 
-    // Close modal on Escape key
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-overlay.active').forEach(modal => {
-          modal.classList.remove('active');
-        });
-        document.body.style.overflow = '';
-      }
-    });
+function calcTotals(){
+  var sub=0;
+  document.querySelectorAll('.order-line-item').forEach(function(r){
+    var ins=r.querySelectorAll('input');var q=parseFloat(ins[0]?.value)||0,p=parseFloat(ins[1]?.value)||0,t=q*p;
+    if(ins[2])ins[2].value=t.toFixed(2); sub+=t;
+  });
+  var vat=sub*0.16, fee=parseFloat(document.getElementById('orderDeliveryFee').value)||0;
+  document.getElementById('orderSubtotal').textContent=sub.toFixed(2);
+  document.getElementById('orderVAT').textContent=vat.toFixed(2);
+  document.getElementById('orderGrandTotal').textContent=(sub+vat+fee).toFixed(2);
+}
 
-    // ========================================
-    // ORDER FORM FUNCTIONS
-    // ========================================
-    function addOrderLine() {
-      const container = document.getElementById('orderLines');
-      const newLine = document.createElement('div');
-      newLine.className = 'order-line';
-      newLine.innerHTML = `
-        <select class="form-select product-select" required onchange="updateOrderTotals()">
-          <option value="">Select product...</option>
-          <option value="AGO" data-price="145.50">AGO (Diesel) - KES 145.50/L</option>
-          <option value="PMS" data-price="165.80">PMS (Petrol) - KES 165.80/L</option>
-          <option value="KERO" data-price="125.20">Kerosene - KES 125.20/L</option>
-          <option value="JET" data-price="155.00">Jet A-1 - KES 155.00/L</option>
-        </select>
-        <input type="number" class="form-input qty-input" placeholder="Qty (Litres)" min="100" step="100" required oninput="updateOrderTotals()">
-        <div class="order-line-total">KES 0.00</div>
-        <button type="button" class="remove-line" onclick="removeOrderLine(this)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      `;
-      container.appendChild(newLine);
-    }
+function submitOrder(){
+  showToast('Submitting order...','info');
+  google.script.run.withSuccessHandler(function(r){
+    if(r.success){showToast('Order submitted: '+r.orderNumber,'success');document.getElementById('orderFormCard').style.display='none';}
+    else showToast(r.error||'Failed','error');
+  }).withFailureHandler(function(e){showToast(e.message,'error');})
+  .processRequest({service:'orders',action:'create',data:{customer_id:currentCustomer?.customer_id},context:{actorType:'CUSTOMER',actorId:currentContact?.contact_id}});
+}
 
-    function removeOrderLine(btn) {
-      const line = btn.closest('.order-line');
-      line.remove();
-      updateOrderTotals();
-    }
+function submitTicket(){
+  var d={customer_id:currentCustomer?.customer_id,contact_id:currentContact?.contact_id,
+    category:document.getElementById('ticketCategory').value,priority:document.getElementById('ticketPriority').value,
+    subject:document.getElementById('ticketSubject').value,description:document.getElementById('ticketDesc').value};
+  google.script.run.withSuccessHandler(function(r){
+    if(r.success){showToast('Ticket created: '+r.ticketNumber,'success');bootstrap.Modal.getInstance(document.getElementById('newTicketModal')).hide();}
+    else showToast(r.error||'Failed','error');
+  }).withFailureHandler(function(e){showToast(e.message,'error');})
+  .processRequest({service:'tickets',action:'create',data:d,context:{actorType:'CUSTOMER',actorId:currentContact?.contact_id}});
+}
 
-    function updateOrderTotals() {
-      let subtotal = 0;
-      
-      document.querySelectorAll('.order-line').forEach(line => {
-        const select = line.querySelector('.product-select');
-        const qtyInput = line.querySelector('.qty-input');
-        const totalEl = line.querySelector('.order-line-total');
-        
-        const selectedOption = select.options[select.selectedIndex];
-        const price = selectedOption.dataset.price ? parseFloat(selectedOption.dataset.price) : 0;
-        const qty = parseFloat(qtyInput.value) || 0;
-        const lineTotal = price * qty;
-        
-        totalEl.textContent = 'KES ' + lineTotal.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        subtotal += lineTotal;
-      });
-      
-      const vat = subtotal * CONFIG.VAT_RATE;
-      const total = subtotal + vat + CONFIG.DELIVERY_FEE;
-      
-      document.getElementById('orderSubtotal').textContent = 'KES ' + subtotal.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('orderVAT').textContent = 'KES ' + vat.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      document.getElementById('orderTotal').textContent = 'KES ' + total.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+function uploadDoc(){
+  var fi=document.getElementById('docFile');
+  if(!fi.files.length){showToast('Select a file','error');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var b64=e.target.result.split(',')[1];
+    google.script.run.withSuccessHandler(function(r){
+      if(r.success){showToast('Document uploaded','success');bootstrap.Modal.getInstance(document.getElementById('uploadDocModal')).hide();}
+      else showToast(r.error||'Failed','error');
+    }).processRequest({service:'documents',action:'upload',data:{
+      customer_id:currentCustomer?.customer_id,document_type:document.getElementById('docType').value,
+      file_name:fi.files[0].name,document_number:document.getElementById('docNum').value,expiry_date:document.getElementById('docExpiry').value
+    },fileContent:b64,context:{actorType:'CUSTOMER',actorId:currentContact?.contact_id}});
+  };
+  reader.readAsDataURL(fi.files[0]);
+}
 
-    function submitOrder(e) {
-      e.preventDefault();
-      showToast('Order submitted successfully! You will receive a confirmation shortly.', 'success');
-      setTimeout(() => showPage('orders'), 2000);
-    }
+function sendReply(){showToast('Sending...','info');}
+function changePassword(){
+  var n=document.getElementById('newPwd').value,c=document.getElementById('conPwd').value;
+  if(n!==c){showToast('Passwords do not match','error');return;}
+  google.script.run.withSuccessHandler(function(r){
+    if(r.success)showToast('Password updated','success');else showToast(r.error||'Failed','error');
+  }).processRequest({service:'auth',action:'changePassword',currentPassword:document.getElementById('curPwd').value,newPassword:n});
+}
 
-    // ========================================
-    // TICKET FORM FUNCTIONS
-    // ========================================
-    function submitTicket(e) {
-      e.preventDefault();
-      showToast('Ticket created successfully! Our team will respond within 24 hours.', 'success');
-      setTimeout(() => showPage('tickets'), 2000);
-    }
+function doLogout(){google.script.run.withSuccessHandler(function(){google.script.host.close();}).processRequest({service:'auth',action:'logout'});}
 
-    // ========================================
-    // SETTINGS FORM
-    // ========================================
-    function saveProfile(e) {
-      e.preventDefault();
-      showToast('Profile updated successfully!', 'success');
-    }
-
-    // ========================================
-    // TOAST NOTIFICATIONS
-    // ========================================
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = 'toast ' + type;
-      
-      let icon = '';
-      if (type === 'success') {
-        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-      } else if (type === 'error') {
-        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-      } else if (type === 'warning') {
-        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-      } else {
-        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
-      }
-      
-      toast.innerHTML = icon + '<span>' + message + '</span>';
-      container.appendChild(toast);
-      
-      // Auto-remove after 5 seconds
-      setTimeout(() => {
-        toast.style.animation = 'toastIn 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
-      }, 5000);
-    }
-
-    // ========================================
-    // INITIALIZATION
-    // ========================================
-    document.addEventListener('DOMContentLoaded', function() {
-      // Set minimum date for order delivery (tomorrow)
-      const orderDateInput = document.getElementById('orderDate');
-      if (orderDateInput) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        orderDateInput.min = tomorrow.toISOString().split('T')[0];
-        orderDateInput.value = tomorrow.toISOString().split('T')[0];
-      }
-      
-      // Initialize order totals
-      updateOrderTotals();
-    });
-
-    // ========================================
-    // API HELPER (for future backend integration)
-    // ========================================
-    async function apiCall(service, action, data = {}) {
-      try {
-        const response = await fetch(CONFIG.API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            service: service,
-            action: action,
-            ...data
-          })
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-          throw new Error(result.error || 'An error occurred');
-        }
-        
-        return result;
-      } catch (error) {
-        console.error('API Error:', error);
-        showToast(error.message || 'Network error. Please try again.', 'error');
-        throw error;
-      }
-    }
-  </script>
+document.addEventListener('DOMContentLoaded',function(){showPage('dashboard');});
+</script>
 </body>
 </html>

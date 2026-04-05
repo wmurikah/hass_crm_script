@@ -1,1114 +1,1027 @@
 /**
- * HASS PETROLEUM CMS - INTEGRATION SERVICE
- * Version: 1.0.0
- * 
- * Handles:
- * - Oracle EBS integration (customer, orders, invoices sync)
- * - Webhook processing (inbound/outbound)
- * - External API integrations
- * - Data synchronization jobs
- * - Integration health monitoring
+ * AuthService.gs
+ * Hass Petroleum CMS Authentication Service
+ *
+ * Handles staff (Google SSO) and customer (email/password) authentication,
+ * session management, password resets, and OAuth callbacks.
+ *
+ * Dependencies: DatabaseSetup.gs / DatabaseService.gs
+ *   - getById, findRow, appendRow, updateRow, findWhere, logAudit, clearSheetCache
  */
 
-// ============================================================================
-// CONFIGURATION
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
-const INTEGRATION_CONFIG = {
-  RETRY_ATTEMPTS: 3,
-  RETRY_DELAY_MS: 2000,
-  TIMEOUT_MS: 30000,
-  BATCH_SIZE: 100,
-  SYNC_INTERVAL_MINUTES: 15,
-};
+var AUTH_SESSION_EXPIRY_HOURS = 24;
+var AUTH_MAX_FAILED_ATTEMPTS = 5;
+var AUTH_LOCKOUT_MINUTES = 30;
+var AUTH_ALLOWED_DOMAINS = ['hasspetroleum.com', 'hassgroup.com'];
+var AUTH_GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo?id_token=';
+
+// ---------------------------------------------------------------------------
+// Main Router
+// ---------------------------------------------------------------------------
 
 /**
- * Gets integration configuration from Script Properties.
+ * Routes an incoming authentication request to the appropriate handler.
+ *
+ * @param {Object} params - Must include an `action` property.
+ * @returns {Object} Standardised response {success, data/error}.
  */
-function getIntegrationConfig() {
-  const props = PropertiesService.getScriptProperties();
-  return {
-    // Oracle EBS
-    oracleApiUrl: props.getProperty('ORACLE_API_URL') || '',
-    oracleApiKey: props.getProperty('ORACLE_API_KEY') || '',
-    oracleUsername: props.getProperty('ORACLE_USERNAME') || '',
-    oraclePassword: props.getProperty('ORACLE_PASSWORD') || '',
-    
-    // Webhooks
-    webhookSecret: props.getProperty('WEBHOOK_SECRET') || '',
-    
-    // External APIs
-    mapsApiKey: props.getProperty('GOOGLE_MAPS_API_KEY') || '',
-  };
-}
-
-// ============================================================================
-// ORACLE EBS INTEGRATION
-// ============================================================================
-
-/**
- * Syncs a customer to Oracle EBS.
- * @param {string} customerId - Customer ID
- * @returns {Object} Sync result
- */
-function syncCustomerToOracle(customerId) {
-  const startTime = new Date();
-  
+function handleAuthRequest(params) {
   try {
-    const config = getIntegrationConfig();
-    
-    if (!config.oracleApiUrl) {
-      return { success: false, error: 'Oracle integration not configured' };
+    if (!params || !params.action) {
+      return { success: false, error: 'Missing required parameter: action' };
     }
-    
-    const customer = getById('Customers', customerId);
-    if (!customer) {
-      return { success: false, error: 'Customer not found' };
-    }
-    
-    // Get contacts
-    const contacts = findWhere('Contacts', { 
-      customer_id: customerId, 
-      status: 'ACTIVE' 
-    }).data || [];
-    
-    // Get delivery locations
-    const locations = findWhere('DeliveryLocations', {
-      customer_id: customerId,
-      status: 'ACTIVE',
-    }).data || [];
-    
-    // Build Oracle payload
-    const payload = {
-      account_number: customer.account_number,
-      company_name: customer.company_name,
-      trading_name: customer.trading_name,
-      tax_pin: customer.tax_pin,
-      registration_number: customer.registration_number,
-      payment_terms: customer.payment_terms,
-      credit_limit: customer.credit_limit,
-      currency_code: customer.currency_code,
-      country_code: customer.country_code,
-      contacts: contacts.map(c => ({
-        first_name: c.first_name,
-        last_name: c.last_name,
-        email: c.email,
-        phone: c.phone,
-        is_primary: c.contact_type === 'PRIMARY',
-      })),
-      ship_to_locations: locations.map(l => ({
-        name: l.location_name,
-        address: l.address,
-        city: l.city,
-        gps_lat: l.gps_lat,
-        gps_lng: l.gps_lng,
-      })),
-    };
-    
-    // Call Oracle API
-    const response = callOracleApi('/customers', 'POST', payload, config);
-    
-    const duration = new Date() - startTime;
-    
-    // Log integration
-    logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/customers', payload, response.data, response.status, duration);
-    
-    if (response.success) {
-      // Update customer with Oracle ID
-      if (response.data.oracle_customer_id) {
-        updateRow('Customers', 'customer_id', customerId, {
-          oracle_customer_id: response.data.oracle_customer_id,
-          last_synced_at: new Date(),
-        });
-        clearSheetCache('Customers');
-      }
-      
-      return {
-        success: true,
-        oracleCustomerId: response.data.oracle_customer_id,
-      };
-    }
-    
-    return { success: false, error: response.error || 'Oracle sync failed' };
-    
-  } catch (e) {
-    const duration = new Date() - startTime;
-    logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/customers', { customerId }, { error: e.message }, 500, duration);
-    Logger.log('syncCustomerToOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
 
-/**
- * Syncs an order to Oracle EBS.
- * @param {string} orderId - Order ID
- * @returns {Object} Sync result
- */
-function syncOrderToOracle(orderId) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    if (!config.oracleApiUrl) {
-      return { success: false, error: 'Oracle integration not configured' };
-    }
-    
-    const order = getById('Orders', orderId);
-    if (!order) {
-      return { success: false, error: 'Order not found' };
-    }
-    
-    const customer = getById('Customers', order.customer_id);
-    if (!customer || !customer.oracle_customer_id) {
-      // Sync customer first
-      const customerSync = syncCustomerToOracle(order.customer_id);
-      if (!customerSync.success) {
-        return { success: false, error: 'Failed to sync customer first: ' + customerSync.error };
-      }
-    }
-    
-    // Get order lines
-    const lines = findWhere('OrderLines', { order_id: orderId }).data || [];
-    
-    // Get delivery location
-    const location = order.delivery_location_id ? 
-      getById('DeliveryLocations', order.delivery_location_id) : null;
-    
-    // Build Oracle payload
-    const payload = {
-      order_number: order.order_number,
-      oracle_customer_id: customer.oracle_customer_id,
-      order_date: order.created_at,
-      requested_delivery_date: order.requested_date,
-      po_number: order.po_number,
-      currency_code: order.currency_code,
-      payment_terms: customer.payment_terms,
-      ship_to: location ? {
-        name: location.location_name,
-        address: location.address,
-        city: location.city,
-      } : null,
-      lines: lines.map((l, idx) => ({
-        line_number: idx + 1,
-        product_code: l.product_id,
-        product_name: l.product_name,
-        quantity: l.quantity,
-        unit_of_measure: l.unit_of_measure,
-        unit_price: l.unit_price,
-        line_total: l.line_total,
-      })),
-      total_amount: order.total_amount,
-    };
-    
-    // Call Oracle API
-    const response = callOracleApi('/orders', 'POST', payload, config);
-    
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/orders', payload, response.data, response.status, duration);
-    
-    if (response.success) {
-      // Update order with Oracle ID
-      if (response.data.oracle_order_id) {
-        updateRow('Orders', 'order_id', orderId, {
-          oracle_order_id: response.data.oracle_order_id,
-        });
-        clearSheetCache('Orders');
-      }
-      
-      return {
-        success: true,
-        oracleOrderId: response.data.oracle_order_id,
-      };
-    }
-    
-    return { success: false, error: response.error || 'Oracle sync failed' };
-    
-  } catch (e) {
-    const duration = new Date() - startTime;
-    logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/orders', { orderId }, { error: e.message }, 500, duration);
-    Logger.log('syncOrderToOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Fetches customer data from Oracle EBS.
- * @param {string} oracleCustomerId - Oracle customer ID
- * @returns {Object} Customer data
- */
-function fetchCustomerFromOracle(oracleCustomerId) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    if (!config.oracleApiUrl) {
-      return { success: false, error: 'Oracle integration not configured' };
-    }
-    
-    const response = callOracleApi(`/customers/${oracleCustomerId}`, 'GET', null, config);
-    
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('ORACLE_EBS', 'INBOUND', `/customers/${oracleCustomerId}`, {}, response.data, response.status, duration);
-    
-    return response;
-    
-  } catch (e) {
-    Logger.log('fetchCustomerFromOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Fetches order status from Oracle EBS.
- * @param {string} oracleOrderId - Oracle order ID
- * @returns {Object} Order status
- */
-function fetchOrderStatusFromOracle(oracleOrderId) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    if (!config.oracleApiUrl) {
-      return { success: false, error: 'Oracle integration not configured' };
-    }
-    
-    const response = callOracleApi(`/orders/${oracleOrderId}/status`, 'GET', null, config);
-    
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('ORACLE_EBS', 'INBOUND', `/orders/${oracleOrderId}/status`, {}, response.data, response.status, duration);
-    
-    return response;
-    
-  } catch (e) {
-    Logger.log('fetchOrderStatusFromOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Fetches invoices from Oracle for a customer.
- * @param {string} oracleCustomerId - Oracle customer ID
- * @param {Object} dateRange - Date range filter
- * @returns {Object} Invoices
- */
-function fetchInvoicesFromOracle(oracleCustomerId, dateRange = {}) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    if (!config.oracleApiUrl) {
-      return { success: false, error: 'Oracle integration not configured' };
-    }
-    
-    let endpoint = `/customers/${oracleCustomerId}/invoices`;
-    
-    if (dateRange.from || dateRange.to) {
-      const params = [];
-      if (dateRange.from) params.push(`from=${dateRange.from}`);
-      if (dateRange.to) params.push(`to=${dateRange.to}`);
-      endpoint += '?' + params.join('&');
-    }
-    
-    const response = callOracleApi(endpoint, 'GET', null, config);
-    
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('ORACLE_EBS', 'INBOUND', endpoint, {}, response.data, response.status, duration);
-    
-    return response;
-    
-  } catch (e) {
-    Logger.log('fetchInvoicesFromOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Calls Oracle API with retry logic.
- * @param {string} endpoint - API endpoint
- * @param {string} method - HTTP method
- * @param {Object} payload - Request body
- * @param {Object} config - API configuration
- * @returns {Object} Response
- */
-function callOracleApi(endpoint, method, payload, config) {
-  for (let attempt = 1; attempt <= INTEGRATION_CONFIG.RETRY_ATTEMPTS; attempt++) {
-    try {
-      const options = {
-        method: method,
-        headers: {
-          'Authorization': `Basic ${Utilities.base64Encode(config.oracleUsername + ':' + config.oraclePassword)}`,
-          'Content-Type': 'application/json',
-          'X-API-Key': config.oracleApiKey,
-        },
-        muteHttpExceptions: true,
-      };
-      
-      if (payload && method !== 'GET') {
-        options.payload = JSON.stringify(payload);
-      }
-      
-      const response = UrlFetchApp.fetch(config.oracleApiUrl + endpoint, options);
-      const statusCode = response.getResponseCode();
-      const responseData = JSON.parse(response.getContentText() || '{}');
-      
-      if (statusCode >= 200 && statusCode < 300) {
-        return {
-          success: true,
-          status: statusCode,
-          data: responseData,
-        };
-      }
-      
-      // Retry on 5xx errors
-      if (statusCode >= 500 && attempt < INTEGRATION_CONFIG.RETRY_ATTEMPTS) {
-        Utilities.sleep(INTEGRATION_CONFIG.RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      
-      return {
-        success: false,
-        status: statusCode,
-        error: responseData.message || responseData.error || `HTTP ${statusCode}`,
-        data: responseData,
-      };
-      
-    } catch (e) {
-      if (attempt < INTEGRATION_CONFIG.RETRY_ATTEMPTS) {
-        Utilities.sleep(INTEGRATION_CONFIG.RETRY_DELAY_MS * attempt);
-        continue;
-      }
-      
-      return {
-        success: false,
-        status: 500,
-        error: e.message,
-      };
-    }
-  }
-  
-  return { success: false, error: 'Max retries exceeded' };
-}
-
-// ============================================================================
-// WEBHOOK HANDLING
-// ============================================================================
-
-/**
- * Processes incoming webhook.
- * @param {Object} webhookData - Webhook payload
- * @param {string} signature - Webhook signature for verification
- * @returns {Object} Processing result
- */
-function processWebhook(webhookData, signature) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    // Verify signature if secret configured
-    if (config.webhookSecret) {
-      const expectedSignature = computeWebhookSignature(JSON.stringify(webhookData), config.webhookSecret);
-      if (signature !== expectedSignature) {
-        logIntegrationCall('WEBHOOK', 'INBOUND', webhookData.type || 'unknown', webhookData, { error: 'Invalid signature' }, 401, 0);
-        return { success: false, error: 'Invalid webhook signature' };
-      }
-    }
-    
-    const eventType = webhookData.type || webhookData.event;
-    const eventData = webhookData.data || webhookData.payload || webhookData;
-    
-    // Route to appropriate handler
-    let result;
-    
-    switch (eventType) {
-      case 'customer.created':
-      case 'customer.updated':
-        result = handleCustomerWebhook(eventType, eventData);
-        break;
-        
-      case 'order.status_changed':
-        result = handleOrderStatusWebhook(eventData);
-        break;
-        
-      case 'invoice.created':
-      case 'invoice.paid':
-        result = handleInvoiceWebhook(eventType, eventData);
-        break;
-        
-      case 'payment.received':
-        result = handlePaymentWebhook(eventData);
-        break;
-        
+    switch (params.action) {
+      case 'staffLogin':
+        return staffLogin(params);
+      case 'customerLogin':
+        return customerLogin(params);
+      case 'customerRegister':
+        return customerRegister(params);
+      case 'validateSession':
+        return validateSession(params);
+      case 'logout':
+        return logout(params);
+      case 'changePassword':
+        return changePassword(params);
+      case 'resetPassword':
+        return resetPasswordRequest(params);
+      case 'confirmReset':
+        return confirmPasswordReset(params);
+      case 'oauthCallback':
+        return handleOAuthCallback(params);
       default:
-        result = { success: true, message: 'Webhook type not handled', type: eventType };
+        return { success: false, error: 'Unknown auth action: ' + params.action };
     }
-    
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('WEBHOOK', 'INBOUND', eventType || 'unknown', webhookData, result, result.success ? 200 : 400, duration);
-    
-    return result;
-    
   } catch (e) {
-    const duration = new Date() - startTime;
-    logIntegrationCall('WEBHOOK', 'INBOUND', webhookData?.type || 'unknown', webhookData, { error: e.message }, 500, duration);
-    Logger.log('processWebhook error: ' + e.message);
-    return { success: false, error: e.message };
+    Logger.log('[AuthService] handleAuthRequest error: ' + e.message);
+    return { success: false, error: 'Authentication service error: ' + e.message };
   }
 }
 
+// ---------------------------------------------------------------------------
+// Staff Login (Google SSO)
+// ---------------------------------------------------------------------------
+
 /**
- * Handles customer webhook events.
- * @param {string} eventType - Event type
- * @param {Object} data - Event data
- * @returns {Object} Result
+ * Authenticates a staff member via a Google ID token.
+ *
+ * Flow:
+ *  1. Verify the token against Google's tokeninfo endpoint.
+ *  2. Ensure the email domain is in the allow-list.
+ *  3. Look up the user in the Users collection.
+ *  4. Create and return a session.
+ *
+ * @param {Object} params - { token: string }
+ * @returns {Object} { success, data: { session, user } } or error.
  */
-function handleCustomerWebhook(eventType, data) {
+function staffLogin(params) {
   try {
-    // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
-    
-    if (!customer) {
-      return { success: true, message: 'Customer not found in CMS', skipped: true };
+    if (!params.token) {
+      return { success: false, error: 'Google ID token is required' };
     }
-    
-    // Update customer data
-    const updates = {};
-    
-    if (data.credit_limit !== undefined) {
-      updates.credit_limit = data.credit_limit;
-    }
-    
-    if (data.credit_used !== undefined) {
-      updates.credit_used = data.credit_used;
-    }
-    
-    if (data.status) {
-      updates.oracle_status = data.status;
-    }
-    
-    if (Object.keys(updates).length > 0) {
-      updates.last_synced_at = new Date();
-      updateRow('Customers', 'customer_id', customer.customer_id, updates);
-      clearSheetCache('Customers');
-    }
-    
-    return { success: true, customerId: customer.customer_id };
-    
-  } catch (e) {
-    Logger.log('handleCustomerWebhook error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
 
-/**
- * Handles order status webhook.
- * @param {Object} data - Event data
- * @returns {Object} Result
- */
-function handleOrderStatusWebhook(data) {
-  try {
-    // Find order by Oracle ID
-    const order = findRow('Orders', 'oracle_order_id', data.oracle_order_id);
-    
-    if (!order) {
-      return { success: true, message: 'Order not found in CMS', skipped: true };
-    }
-    
-    // Map Oracle status to CMS status
-    const statusMap = {
-      'BOOKED': 'APPROVED',
-      'ENTERED': 'SUBMITTED',
-      'AWAITING_SHIPPING': 'SCHEDULED',
-      'SHIPPED': 'IN_TRANSIT',
-      'CLOSED': 'DELIVERED',
-      'CANCELLED': 'CANCELLED',
-    };
-    
-    const cmsStatus = statusMap[data.status] || order.status;
-    
-    if (cmsStatus !== order.status) {
-      updateOrderStatus(order.order_id, cmsStatus, {
-        actorType: 'SYSTEM',
-        actorId: 'ORACLE_WEBHOOK',
-        actorEmail: '',
-      });
-    }
-    
-    return { success: true, orderId: order.order_id, newStatus: cmsStatus };
-    
-  } catch (e) {
-    Logger.log('handleOrderStatusWebhook error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Handles invoice webhook.
- * @param {string} eventType - Event type
- * @param {Object} data - Event data
- * @returns {Object} Result
- */
-function handleInvoiceWebhook(eventType, data) {
-  try {
-    // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
-    
-    if (!customer) {
-      return { success: true, message: 'Customer not found', skipped: true };
-    }
-    
-    // Find related order if any
-    let order = null;
-    if (data.oracle_order_id) {
-      order = findRow('Orders', 'oracle_order_id', data.oracle_order_id);
-    }
-    
-    // Update order payment status
-    if (order) {
-      let paymentStatus = order.payment_status;
-      
-      if (eventType === 'invoice.created') {
-        paymentStatus = 'INVOICED';
-      } else if (eventType === 'invoice.paid') {
-        paymentStatus = 'PAID';
-      }
-      
-      if (paymentStatus !== order.payment_status) {
-        updateRow('Orders', 'order_id', order.order_id, {
-          payment_status: paymentStatus,
-          invoice_number: data.invoice_number || order.invoice_number,
-          invoice_date: data.invoice_date || order.invoice_date,
-        });
-        clearSheetCache('Orders');
-      }
-    }
-    
-    // Update customer credit used
-    if (eventType === 'invoice.paid' && data.amount) {
-      const newCreditUsed = Math.max(0, (customer.credit_used || 0) - data.amount);
-      updateRow('Customers', 'customer_id', customer.customer_id, {
-        credit_used: newCreditUsed,
-      });
-      clearSheetCache('Customers');
-    }
-    
-    return { success: true };
-    
-  } catch (e) {
-    Logger.log('handleInvoiceWebhook error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Handles payment webhook.
- * @param {Object} data - Event data
- * @returns {Object} Result
- */
-function handlePaymentWebhook(data) {
-  try {
-    // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
-    
-    if (!customer) {
-      return { success: true, message: 'Customer not found', skipped: true };
-    }
-    
-    // Update credit used
-    if (data.amount) {
-      const newCreditUsed = Math.max(0, (customer.credit_used || 0) - data.amount);
-      updateRow('Customers', 'customer_id', customer.customer_id, {
-        credit_used: newCreditUsed,
-        last_payment_date: data.payment_date || new Date(),
-        last_payment_amount: data.amount,
-      });
-      clearSheetCache('Customers');
-    }
-    
-    return { success: true, customerId: customer.customer_id };
-    
-  } catch (e) {
-    Logger.log('handlePaymentWebhook error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
-
-/**
- * Computes webhook signature for verification.
- * @param {string} payload - Webhook payload
- * @param {string} secret - Webhook secret
- * @returns {string} Signature
- */
-function computeWebhookSignature(payload, secret) {
-  const signature = Utilities.computeHmacSha256Signature(payload, secret);
-  return Utilities.base64Encode(signature);
-}
-
-// ============================================================================
-// OUTBOUND WEBHOOKS
-// ============================================================================
-
-/**
- * Sends webhook to external system.
- * @param {string} webhookUrl - Target URL
- * @param {Object} payload - Webhook payload
- * @param {string} eventType - Event type
- * @returns {Object} Result
- */
-function sendWebhook(webhookUrl, payload, eventType) {
-  const startTime = new Date();
-  
-  try {
-    const config = getIntegrationConfig();
-    
-    const webhookPayload = {
-      type: eventType,
-      timestamp: new Date().toISOString(),
-      data: payload,
-    };
-    
-    // Sign webhook if secret configured
-    let signature = '';
-    if (config.webhookSecret) {
-      signature = computeWebhookSignature(JSON.stringify(webhookPayload), config.webhookSecret);
-    }
-    
-    const response = UrlFetchApp.fetch(webhookUrl, {
-      method: 'POST',
-      contentType: 'application/json',
-      headers: {
-        'X-Webhook-Signature': signature,
-        'X-Webhook-Event': eventType,
-      },
-      payload: JSON.stringify(webhookPayload),
-      muteHttpExceptions: true,
+    // 1. Verify token with Google
+    var response = UrlFetchApp.fetch(AUTH_GOOGLE_TOKENINFO_URL + params.token, {
+      muteHttpExceptions: true
     });
-    
-    const statusCode = response.getResponseCode();
-    const duration = new Date() - startTime;
-    
-    logIntegrationCall('WEBHOOK', 'OUTBOUND', webhookUrl, webhookPayload, 
-      { status: statusCode }, statusCode, duration);
-    
-    return {
-      success: statusCode >= 200 && statusCode < 300,
-      status: statusCode,
-    };
-    
-  } catch (e) {
-    const duration = new Date() - startTime;
-    logIntegrationCall('WEBHOOK', 'OUTBOUND', webhookUrl, { eventType }, { error: e.message }, 500, duration);
-    Logger.log('sendWebhook error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
 
-// ============================================================================
-// GPS/MAPS INTEGRATION
-// ============================================================================
-
-/**
- * Geocodes an address.
- * @param {string} address - Address to geocode
- * @returns {Object} Lat/lng coordinates
- */
-function geocodeAddress(address) {
-  try {
-    const config = getIntegrationConfig();
-    
-    if (!config.mapsApiKey) {
-      // Use Apps Script Maps service as fallback
-      const geocoder = Maps.newGeocoder();
-      const response = geocoder.geocode(address);
-      
-      if (response.status === 'OK' && response.results.length > 0) {
-        const location = response.results[0].geometry.location;
-        return {
-          success: true,
-          lat: location.lat,
-          lng: location.lng,
-          formatted_address: response.results[0].formatted_address,
-        };
-      }
-      
-      return { success: false, error: 'Address not found' };
+    if (response.getResponseCode() !== 200) {
+      return { success: false, error: 'Invalid or expired Google token' };
     }
-    
-    // Use Google Maps API
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${config.mapsApiKey}`;
-    const response = UrlFetchApp.fetch(url);
-    const data = JSON.parse(response.getContentText());
-    
-    if (data.status === 'OK' && data.results.length > 0) {
-      const location = data.results[0].geometry.location;
-      return {
-        success: true,
-        lat: location.lat,
-        lng: location.lng,
-        formatted_address: data.results[0].formatted_address,
-      };
+
+    var tokenPayload = JSON.parse(response.getContentText());
+    var email = (tokenPayload.email || '').toLowerCase().trim();
+
+    if (!email) {
+      return { success: false, error: 'Token does not contain an email address' };
     }
-    
-    return { success: false, error: data.status || 'Geocoding failed' };
-    
-  } catch (e) {
-    Logger.log('geocodeAddress error: ' + e.message);
-    return { success: false, error: e.message };
-  }
-}
 
-/**
- * Calculates distance between two points.
- * @param {number} lat1 - Point 1 latitude
- * @param {number} lng1 - Point 1 longitude
- * @param {number} lat2 - Point 2 latitude
- * @param {number} lng2 - Point 2 longitude
- * @returns {number} Distance in kilometers
- */
-function calculateDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371; // Earth's radius in km
-  const dLat = toRadians(lat2 - lat1);
-  const dLng = toRadians(lng2 - lng1);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRadians(degrees) {
-  return degrees * (Math.PI / 180);
-}
-
-// ============================================================================
-// SYNC JOBS
-// ============================================================================
-
-/**
- * Syncs pending orders to Oracle.
- * Run via scheduled trigger.
- */
-function syncPendingOrdersToOracle() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
-    return { success: false, error: 'Could not obtain lock' };
-  }
-  
-  try {
-    // Find orders that need syncing
-    const orders = findWhere('Orders', {
-      status: ['APPROVED', 'DELIVERED'],
-      oracle_order_id: '',
-    }, { limit: INTEGRATION_CONFIG.BATCH_SIZE }).data || [];
-    
-    let synced = 0;
-    let failed = 0;
-    
-    for (const order of orders) {
-      const result = syncOrderToOracle(order.order_id);
-      if (result.success) {
-        synced++;
-      } else {
-        failed++;
-      }
-      
-      // Rate limiting
-      Utilities.sleep(500);
+    // 2. Domain check
+    if (!isAllowedDomain(email)) {
+      return { success: false, error: 'Email domain is not authorised for staff access' };
     }
-    
+
+    // 3. Look up user record
+    var user = findRow('Users', 'email', email);
+    if (!user) {
+      return { success: false, error: 'No staff account found for this email. Contact an administrator.' };
+    }
+
+    if (user.status === 'inactive' || user.status === 'suspended') {
+      return { success: false, error: 'Account is ' + user.status + '. Contact an administrator.' };
+    }
+
+    // 4. Create session
+    var session = createSession('staff', user.id, {
+      email: email,
+      name: tokenPayload.name || user.name,
+      role: user.role,
+      picture: tokenPayload.picture || ''
+    });
+
+    // Update last login timestamp
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Users', 'id', user.id, { last_login: new Date().toISOString() });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('staff_login', 'Users', user.id, null, { email: email });
+
     return {
       success: true,
-      synced: synced,
-      failed: failed,
-      total: orders.length,
-    };
-    
-  } catch (e) {
-    Logger.log('syncPendingOrdersToOracle error: ' + e.message);
-    return { success: false, error: e.message };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * Fetches order statuses from Oracle.
- * Run via scheduled trigger.
- */
-function syncOrderStatusesFromOracle() {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
-    return { success: false, error: 'Could not obtain lock' };
-  }
-  
-  try {
-    // Find orders with Oracle IDs that might have status updates
-    const orders = findWhere('Orders', {
-      status: ['APPROVED', 'SCHEDULED', 'LOADING', 'LOADED', 'IN_TRANSIT'],
-    }, { limit: INTEGRATION_CONFIG.BATCH_SIZE }).data || [];
-    
-    const ordersWithOracleId = orders.filter(o => o.oracle_order_id);
-    
-    let updated = 0;
-    
-    for (const order of ordersWithOracleId) {
-      const result = fetchOrderStatusFromOracle(order.oracle_order_id);
-      
-      if (result.success && result.data.status) {
-        const statusMap = {
-          'SHIPPED': 'IN_TRANSIT',
-          'CLOSED': 'DELIVERED',
-        };
-        
-        const newStatus = statusMap[result.data.status];
-        
-        if (newStatus && newStatus !== order.status) {
-          updateOrderStatus(order.order_id, newStatus, {
-            actorType: 'SYSTEM',
-            actorId: 'ORACLE_SYNC',
-            actorEmail: '',
-          });
-          updated++;
+      data: {
+        session: session,
+        user: {
+          id: user.id,
+          name: user.name || tokenPayload.name,
+          email: email,
+          role: user.role,
+          picture: tokenPayload.picture || ''
         }
       }
-      
-      Utilities.sleep(500);
+    };
+  } catch (e) {
+    Logger.log('[AuthService] staffLogin error: ' + e.message);
+    return { success: false, error: 'Staff login failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Customer Login (email / password)
+// ---------------------------------------------------------------------------
+
+/**
+ * Authenticates a customer using email and password with rate-limiting.
+ *
+ * @param {Object} params - { email: string, password: string }
+ * @returns {Object} { success, data: { session, contact } } or error.
+ */
+function customerLogin(params) {
+  try {
+    if (!params.email || !params.password) {
+      return { success: false, error: 'Email and password are required' };
     }
-    
+
+    var email = params.email.toLowerCase().trim();
+
+    var contact = findRow('Contacts', 'email', email);
+    if (!contact) {
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    // Rate-limit check
+    var rateLimitResult = checkRateLimit(contact.id);
+    if (!rateLimitResult.allowed) {
+      return {
+        success: false,
+        error: 'Account temporarily locked due to too many failed attempts. Please try again after ' +
+               rateLimitResult.minutes_remaining + ' minutes.'
+      };
+    }
+
+    // Verify password
+    var hashedInput = hashPassword(params.password);
+    if (hashedInput !== contact.password_hash) {
+      incrementFailedAttempts(contact.id);
+      return { success: false, error: 'Invalid email or password' };
+    }
+
+    // Successful — reset failed attempts
+    resetFailedAttempts(contact.id);
+
+    // Check account status
+    if (contact.status === 'inactive' || contact.status === 'suspended') {
+      return { success: false, error: 'Account is ' + contact.status + '. Please contact support.' };
+    }
+
+    // Create session
+    var session = createSession('customer', contact.id, {
+      email: email,
+      name: contact.name || contact.first_name || '',
+      contact_type: contact.contact_type || 'individual'
+    });
+
+    // Update last login
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', contact.id, { last_login: new Date().toISOString() });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('customer_login', 'Contacts', contact.id, null, { email: email });
+
     return {
       success: true,
-      checked: ordersWithOracleId.length,
-      updated: updated,
+      data: {
+        session: session,
+        contact: {
+          id: contact.id,
+          name: contact.name || ((contact.first_name || '') + ' ' + (contact.last_name || '')).trim(),
+          email: email,
+          contact_type: contact.contact_type || 'individual'
+        }
+      }
     };
-    
   } catch (e) {
-    Logger.log('syncOrderStatusesFromOracle error: ' + e.message);
-    return { success: false, error: e.message };
+    Logger.log('[AuthService] customerLogin error: ' + e.message);
+    return { success: false, error: 'Customer login failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Customer Registration
+// ---------------------------------------------------------------------------
+
+/**
+ * Registers a new customer account.
+ *
+ * @param {Object} params - { email, password, name, phone, ... }
+ * @returns {Object} { success, data: { contact } } or error.
+ */
+function customerRegister(params) {
+  try {
+    if (!params.email || !params.password) {
+      return { success: false, error: 'Email and password are required' };
+    }
+
+    if (params.password.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters' };
+    }
+
+    var email = params.email.toLowerCase().trim();
+
+    // Check for existing account
+    var existing = findRow('Contacts', 'email', email);
+    if (existing) {
+      return { success: false, error: 'An account with this email already exists' };
+    }
+
+    var now = new Date().toISOString();
+    var contactData = {
+      id: Utilities.getUuid(),
+      email: email,
+      password_hash: hashPassword(params.password),
+      name: params.name || '',
+      first_name: params.first_name || '',
+      last_name: params.last_name || '',
+      phone: params.phone || '',
+      contact_type: params.contact_type || 'individual',
+      status: 'active',
+      failed_login_attempts: 0,
+      locked_until: '',
+      created_at: now,
+      updated_at: now
+    };
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      appendRow('Contacts', contactData);
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('customer_register', 'Contacts', contactData.id, null, { email: email });
+
+    return {
+      success: true,
+      data: {
+        contact: {
+          id: contactData.id,
+          email: email,
+          name: contactData.name || ((contactData.first_name || '') + ' ' + (contactData.last_name || '')).trim(),
+          contact_type: contactData.contact_type
+        }
+      }
+    };
+  } catch (e) {
+    Logger.log('[AuthService] customerRegister error: ' + e.message);
+    return { success: false, error: 'Registration failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session Validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates an existing session token.
+ *
+ * Checks that the session exists, is active, and has not expired (24 h).
+ * On success the last_activity timestamp is refreshed.
+ *
+ * @param {Object} params - { session_id: string }
+ * @returns {Object} { success, data: { session } } or error.
+ */
+function validateSession(params) {
+  try {
+    if (!params.session_id) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    var session = findRow('Sessions', 'session_id', params.session_id);
+    if (!session) {
+      return { success: false, error: 'Session not found' };
+    }
+
+    if (!session.is_active || session.is_active === 'false' || session.is_active === false) {
+      return { success: false, error: 'Session is no longer active' };
+    }
+
+    // Expiry check (24 hours)
+    var createdAt = new Date(session.created_at);
+    var now = new Date();
+    var hoursElapsed = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+
+    if (hoursElapsed > AUTH_SESSION_EXPIRY_HOURS) {
+      // Mark expired
+      var lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(30000);
+        updateRow('Sessions', 'session_id', params.session_id, {
+          is_active: false,
+          expired_at: now.toISOString()
+        });
+      } finally {
+        lock.releaseLock();
+      }
+      return { success: false, error: 'Session has expired. Please log in again.' };
+    }
+
+    // Refresh last_activity
+    var lock2 = LockService.getScriptLock();
+    try {
+      lock2.waitLock(30000);
+      updateRow('Sessions', 'session_id', params.session_id, {
+        last_activity: now.toISOString()
+      });
+    } finally {
+      lock2.releaseLock();
+    }
+
+    return {
+      success: true,
+      data: {
+        session: {
+          session_id: session.session_id,
+          user_type: session.user_type,
+          user_id: session.user_id,
+          metadata: session.metadata ? (typeof session.metadata === 'string' ? JSON.parse(session.metadata) : session.metadata) : {},
+          created_at: session.created_at,
+          last_activity: now.toISOString()
+        }
+      }
+    };
+  } catch (e) {
+    Logger.log('[AuthService] validateSession error: ' + e.message);
+    return { success: false, error: 'Session validation failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Logout
+// ---------------------------------------------------------------------------
+
+/**
+ * Ends a session by marking it inactive.
+ *
+ * @param {Object} params - { session_id: string }
+ * @returns {Object} { success: true } or error.
+ */
+function logout(params) {
+  try {
+    if (!params.session_id) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Sessions', 'session_id', params.session_id, {
+        is_active: false,
+        logged_out_at: new Date().toISOString()
+      });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('logout', 'Sessions', params.session_id, null, null);
+
+    return { success: true, data: { message: 'Logged out successfully' } };
+  } catch (e) {
+    Logger.log('[AuthService] logout error: ' + e.message);
+    return { success: false, error: 'Logout failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Change Password
+// ---------------------------------------------------------------------------
+
+/**
+ * Changes a customer's password after verifying the current one.
+ *
+ * @param {Object} params - { contact_id, old_password, new_password }
+ * @returns {Object} { success: true } or error.
+ */
+function changePassword(params) {
+  try {
+    if (!params.contact_id || !params.old_password || !params.new_password) {
+      return { success: false, error: 'Contact ID, old password, and new password are required' };
+    }
+
+    if (params.new_password.length < 8) {
+      return { success: false, error: 'New password must be at least 8 characters' };
+    }
+
+    if (params.old_password === params.new_password) {
+      return { success: false, error: 'New password must differ from the current password' };
+    }
+
+    var contact = getById('Contacts', params.contact_id);
+    if (!contact) {
+      return { success: false, error: 'Contact not found' };
+    }
+
+    // Verify old password
+    var oldHash = hashPassword(params.old_password);
+    if (oldHash !== contact.password_hash) {
+      return { success: false, error: 'Current password is incorrect' };
+    }
+
+    var newHash = hashPassword(params.new_password);
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', params.contact_id, {
+        password_hash: newHash,
+        updated_at: new Date().toISOString()
+      });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('change_password', 'Contacts', params.contact_id, null, null);
+
+    return { success: true, data: { message: 'Password changed successfully' } };
+  } catch (e) {
+    Logger.log('[AuthService] changePassword error: ' + e.message);
+    return { success: false, error: 'Password change failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Password Reset Request
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a password-reset token and stores it on the contact record.
+ *
+ * @param {Object} params - { email: string }
+ * @returns {Object} { success, data: { message, reset_token } } or error.
+ */
+function resetPasswordRequest(params) {
+  try {
+    if (!params.email) {
+      return { success: false, error: 'Email is required' };
+    }
+
+    var email = params.email.toLowerCase().trim();
+    var contact = findRow('Contacts', 'email', email);
+
+    // Always return success to avoid email enumeration
+    if (!contact) {
+      return {
+        success: true,
+        data: { message: 'If that email exists, a reset link has been sent.' }
+      };
+    }
+
+    var resetToken = Utilities.getUuid();
+    var expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // 1-hour token validity
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', contact.id, {
+        reset_token: resetToken,
+        reset_token_expires: expiresAt.toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('reset_password_request', 'Contacts', contact.id, null, { email: email });
+
+    return {
+      success: true,
+      data: {
+        message: 'If that email exists, a reset link has been sent.',
+        reset_token: resetToken // consumed by the caller (e.g. email service)
+      }
+    };
+  } catch (e) {
+    Logger.log('[AuthService] resetPasswordRequest error: ' + e.message);
+    return { success: false, error: 'Password reset request failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Confirm Password Reset
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates a reset token and sets the new password.
+ *
+ * @param {Object} params - { reset_token, new_password }
+ * @returns {Object} { success: true } or error.
+ */
+function confirmPasswordReset(params) {
+  try {
+    if (!params.reset_token || !params.new_password) {
+      return { success: false, error: 'Reset token and new password are required' };
+    }
+
+    if (params.new_password.length < 8) {
+      return { success: false, error: 'Password must be at least 8 characters' };
+    }
+
+    var contact = findRow('Contacts', 'reset_token', params.reset_token);
+    if (!contact) {
+      return { success: false, error: 'Invalid or expired reset token' };
+    }
+
+    // Check token expiry
+    if (contact.reset_token_expires) {
+      var expiresAt = new Date(contact.reset_token_expires);
+      if (new Date() > expiresAt) {
+        return { success: false, error: 'Reset token has expired. Please request a new one.' };
+      }
+    }
+
+    var newHash = hashPassword(params.new_password);
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', contact.id, {
+        password_hash: newHash,
+        reset_token: '',
+        reset_token_expires: '',
+        failed_login_attempts: 0,
+        locked_until: '',
+        updated_at: new Date().toISOString()
+      });
+    } finally {
+      lock.releaseLock();
+    }
+
+    logAudit('confirm_password_reset', 'Contacts', contact.id, null, null);
+
+    return { success: true, data: { message: 'Password has been reset successfully' } };
+  } catch (e) {
+    Logger.log('[AuthService] confirmPasswordReset error: ' + e.message);
+    return { success: false, error: 'Password reset confirmation failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OAuth Callback (Google / Microsoft for customer portal)
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles the OAuth callback for Google or Microsoft identity providers.
+ *
+ * If the customer already exists the session is created; otherwise a new
+ * contact record is provisioned automatically.
+ *
+ * @param {Object} params - { provider: 'google'|'microsoft', code, redirect_uri }
+ * @returns {Object} { success, data: { session, contact } } or error.
+ */
+function handleOAuthCallback(params) {
+  try {
+    if (!params.provider || !params.code) {
+      return { success: false, error: 'OAuth provider and authorisation code are required' };
+    }
+
+    var provider = params.provider.toLowerCase();
+    var userInfo;
+
+    if (provider === 'google') {
+      userInfo = _exchangeGoogleOAuthCode(params.code, params.redirect_uri);
+    } else if (provider === 'microsoft') {
+      userInfo = _exchangeMicrosoftOAuthCode(params.code, params.redirect_uri);
+    } else {
+      return { success: false, error: 'Unsupported OAuth provider: ' + provider };
+    }
+
+    if (!userInfo || !userInfo.email) {
+      return { success: false, error: 'Could not retrieve user information from ' + provider };
+    }
+
+    var email = userInfo.email.toLowerCase().trim();
+
+    // Find or create contact
+    var contact = findRow('Contacts', 'email', email);
+    var isNewAccount = false;
+
+    if (!contact) {
+      isNewAccount = true;
+      var now = new Date().toISOString();
+      var contactData = {
+        id: Utilities.getUuid(),
+        email: email,
+        name: userInfo.name || '',
+        first_name: userInfo.given_name || '',
+        last_name: userInfo.family_name || '',
+        password_hash: '',
+        contact_type: 'individual',
+        oauth_provider: provider,
+        oauth_id: userInfo.sub || userInfo.id || '',
+        status: 'active',
+        failed_login_attempts: 0,
+        locked_until: '',
+        created_at: now,
+        updated_at: now
+      };
+
+      var lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(30000);
+        appendRow('Contacts', contactData);
+      } finally {
+        lock.releaseLock();
+      }
+
+      contact = contactData;
+    }
+
+    if (contact.status === 'inactive' || contact.status === 'suspended') {
+      return { success: false, error: 'Account is ' + contact.status + '. Please contact support.' };
+    }
+
+    // Create session
+    var session = createSession('customer', contact.id, {
+      email: email,
+      name: contact.name || userInfo.name || '',
+      contact_type: contact.contact_type || 'individual',
+      oauth_provider: provider
+    });
+
+    // Update last login and OAuth details
+    var lock2 = LockService.getScriptLock();
+    try {
+      lock2.waitLock(30000);
+      updateRow('Contacts', 'id', contact.id, {
+        last_login: new Date().toISOString(),
+        oauth_provider: provider,
+        oauth_id: userInfo.sub || userInfo.id || contact.oauth_id || ''
+      });
+    } finally {
+      lock2.releaseLock();
+    }
+
+    logAudit('oauth_login', 'Contacts', contact.id, null, {
+      email: email,
+      provider: provider,
+      new_account: isNewAccount
+    });
+
+    return {
+      success: true,
+      data: {
+        session: session,
+        contact: {
+          id: contact.id,
+          name: contact.name || userInfo.name || '',
+          email: email,
+          contact_type: contact.contact_type || 'individual',
+          is_new_account: isNewAccount
+        }
+      }
+    };
+  } catch (e) {
+    Logger.log('[AuthService] handleOAuthCallback error: ' + e.message);
+    return { success: false, error: 'OAuth authentication failed: ' + e.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal OAuth Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Exchanges a Google authorisation code for user profile information.
+ * @private
+ */
+function _exchangeGoogleOAuthCode(code, redirectUri) {
+  var props = PropertiesService.getScriptProperties();
+  var clientId = props.getProperty('GOOGLE_OAUTH_CLIENT_ID');
+  var clientSecret = props.getProperty('GOOGLE_OAUTH_CLIENT_SECRET');
+
+  var tokenResponse = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post',
+    contentType: 'application/x-www-form-urlencoded',
+    payload: {
+      code: code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri || '',
+      grant_type: 'authorization_code'
+    },
+    muteHttpExceptions: true
+  });
+
+  if (tokenResponse.getResponseCode() !== 200) {
+    Logger.log('[AuthService] Google token exchange failed: ' + tokenResponse.getContentText());
+    return null;
+  }
+
+  var tokens = JSON.parse(tokenResponse.getContentText());
+
+  var userInfoResponse = UrlFetchApp.fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: 'Bearer ' + tokens.access_token },
+    muteHttpExceptions: true
+  });
+
+  if (userInfoResponse.getResponseCode() !== 200) {
+    Logger.log('[AuthService] Google userinfo fetch failed: ' + userInfoResponse.getContentText());
+    return null;
+  }
+
+  return JSON.parse(userInfoResponse.getContentText());
+}
+
+/**
+ * Exchanges a Microsoft authorisation code for user profile information.
+ * @private
+ */
+function _exchangeMicrosoftOAuthCode(code, redirectUri) {
+  var props = PropertiesService.getScriptProperties();
+  var clientId = props.getProperty('MICROSOFT_OAUTH_CLIENT_ID');
+  var clientSecret = props.getProperty('MICROSOFT_OAUTH_CLIENT_SECRET');
+  var tenantId = props.getProperty('MICROSOFT_OAUTH_TENANT_ID') || 'common';
+
+  var tokenResponse = UrlFetchApp.fetch(
+    'https://login.microsoftonline.com/' + tenantId + '/oauth2/v2.0/token',
+    {
+      method: 'post',
+      contentType: 'application/x-www-form-urlencoded',
+      payload: {
+        code: code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri || '',
+        grant_type: 'authorization_code',
+        scope: 'openid profile email'
+      },
+      muteHttpExceptions: true
+    }
+  );
+
+  if (tokenResponse.getResponseCode() !== 200) {
+    Logger.log('[AuthService] Microsoft token exchange failed: ' + tokenResponse.getContentText());
+    return null;
+  }
+
+  var tokens = JSON.parse(tokenResponse.getContentText());
+
+  var userInfoResponse = UrlFetchApp.fetch('https://graph.microsoft.com/v1.0/me', {
+    headers: { Authorization: 'Bearer ' + tokens.access_token },
+    muteHttpExceptions: true
+  });
+
+  if (userInfoResponse.getResponseCode() !== 200) {
+    Logger.log('[AuthService] Microsoft userinfo fetch failed: ' + userInfoResponse.getContentText());
+    return null;
+  }
+
+  var profile = JSON.parse(userInfoResponse.getContentText());
+  return {
+    email: profile.mail || profile.userPrincipalName || '',
+    name: profile.displayName || '',
+    given_name: profile.givenName || '',
+    family_name: profile.surname || '',
+    id: profile.id || ''
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Hash Password
+// ---------------------------------------------------------------------------
+
+/**
+ * Produces a SHA-256 hex digest of the given password string.
+ *
+ * @param {string} password - Plain-text password.
+ * @returns {string} Lowercase hex-encoded hash.
+ */
+function hashPassword(password) {
+  var rawBytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password);
+  var hex = '';
+  for (var i = 0; i < rawBytes.length; i++) {
+    var b = rawBytes[i];
+    if (b < 0) {
+      b += 256;
+    }
+    var hexByte = b.toString(16);
+    if (hexByte.length === 1) {
+      hexByte = '0' + hexByte;
+    }
+    hex += hexByte;
+  }
+  return hex;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Generate Session Token
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a universally unique session token.
+ *
+ * @returns {string} UUID v4 string.
+ */
+function generateSessionToken() {
+  return Utilities.getUuid();
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Create Session
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a new session record in the Sessions collection.
+ *
+ * @param {string} userType - 'staff' or 'customer'.
+ * @param {string} userId   - The user/contact ID.
+ * @param {Object} metadata - Arbitrary metadata to store with the session.
+ * @returns {Object} The session object { session_id, user_type, user_id, ... }.
+ */
+function createSession(userType, userId, metadata) {
+  var now = new Date().toISOString();
+  var sessionData = {
+    session_id: generateSessionToken(),
+    user_type: userType,
+    user_id: userId,
+    metadata: JSON.stringify(metadata || {}),
+    is_active: true,
+    created_at: now,
+    last_activity: now
+  };
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    appendRow('Sessions', sessionData);
   } finally {
     lock.releaseLock();
   }
-}
 
-// ============================================================================
-// HEALTH & MONITORING
-// ============================================================================
-
-/**
- * Checks integration health status.
- * @returns {Object} Health status
- */
-function checkIntegrationHealth() {
-  const health = {
-    oracle: { status: 'unknown', latency: null },
-    webhooks: { status: 'ok' },
-    maps: { status: 'unknown' },
-  };
-  
-  const config = getIntegrationConfig();
-  
-  // Check Oracle connectivity
-  if (config.oracleApiUrl) {
-    try {
-      const startTime = new Date();
-      const response = callOracleApi('/health', 'GET', null, config);
-      health.oracle.latency = new Date() - startTime;
-      health.oracle.status = response.success ? 'ok' : 'error';
-      health.oracle.error = response.error;
-    } catch (e) {
-      health.oracle.status = 'error';
-      health.oracle.error = e.message;
-    }
-  } else {
-    health.oracle.status = 'not_configured';
-  }
-  
-  // Check Maps API
-  if (config.mapsApiKey) {
-    health.maps.status = 'configured';
-  } else {
-    health.maps.status = 'using_fallback';
-  }
-  
-  // Get recent integration errors
-  const recentErrors = findWhere('IntegrationLog', {
-    status_code: [400, 401, 403, 404, 500, 502, 503],
-  }, { sortBy: 'created_at', sortOrder: 'desc', limit: 10 }).data || [];
-  
   return {
-    success: true,
-    health: health,
-    recentErrors: recentErrors.length,
-    lastError: recentErrors[0] || null,
+    session_id: sessionData.session_id,
+    user_type: sessionData.user_type,
+    user_id: sessionData.user_id,
+    metadata: metadata || {},
+    created_at: sessionData.created_at
   };
 }
 
+// ---------------------------------------------------------------------------
+// Helper: Rate Limiting
+// ---------------------------------------------------------------------------
+
 /**
- * Gets integration statistics.
- * @param {number} hours - Hours to look back
- * @returns {Object} Statistics
+ * Checks whether a contact is currently rate-limited.
+ *
+ * @param {string} contactId
+ * @returns {Object} { allowed: boolean, minutes_remaining: number }
  */
-function getIntegrationStats(hours = 24) {
+function checkRateLimit(contactId) {
   try {
-    const cutoff = new Date();
-    cutoff.setHours(cutoff.getHours() - hours);
-    
-    const logs = getSheetData('IntegrationLog')
-      .filter(l => new Date(l.created_at) >= cutoff);
-    
-    const stats = {
-      total: logs.length,
-      byIntegration: {},
-      byDirection: { INBOUND: 0, OUTBOUND: 0 },
-      byStatus: { success: 0, error: 0 },
-      avgLatency: 0,
-    };
-    
-    let totalLatency = 0;
-    
-    for (const log of logs) {
-      // By integration
-      stats.byIntegration[log.integration] = (stats.byIntegration[log.integration] || 0) + 1;
-      
-      // By direction
-      if (stats.byDirection[log.direction] !== undefined) {
-        stats.byDirection[log.direction]++;
-      }
-      
-      // By status
-      if (log.status_code >= 200 && log.status_code < 400) {
-        stats.byStatus.success++;
-      } else {
-        stats.byStatus.error++;
-      }
-      
-      // Latency
-      if (log.duration_ms) {
-        totalLatency += log.duration_ms;
+    var contact = getById('Contacts', contactId);
+    if (!contact) {
+      return { allowed: true, minutes_remaining: 0 };
+    }
+
+    var failedAttempts = parseInt(contact.failed_login_attempts, 10) || 0;
+
+    if (failedAttempts < AUTH_MAX_FAILED_ATTEMPTS) {
+      return { allowed: true, minutes_remaining: 0 };
+    }
+
+    // Account has hit the limit — check lockout window
+    if (contact.locked_until) {
+      var lockedUntil = new Date(contact.locked_until);
+      var now = new Date();
+      if (now < lockedUntil) {
+        var remaining = Math.ceil((lockedUntil.getTime() - now.getTime()) / (1000 * 60));
+        return { allowed: false, minutes_remaining: remaining };
       }
     }
-    
-    stats.avgLatency = logs.length > 0 ? Math.round(totalLatency / logs.length) : 0;
-    stats.successRate = logs.length > 0 ? 
-      Math.round((stats.byStatus.success / logs.length) * 100) : 100;
-    
-    return {
-      success: true,
-      hours: hours,
-      stats: stats,
-    };
-    
+
+    // Lockout has expired — allow and reset
+    resetFailedAttempts(contactId);
+    return { allowed: true, minutes_remaining: 0 };
   } catch (e) {
-    Logger.log('getIntegrationStats error: ' + e.message);
-    return { success: false, error: e.message };
+    Logger.log('[AuthService] checkRateLimit error: ' + e.message);
+    // Fail open so the user is not permanently locked out by a bug
+    return { allowed: true, minutes_remaining: 0 };
   }
 }
 
-// ============================================================================
-// LOGGING
-// ============================================================================
-
 /**
- * Logs integration API call.
- * @param {string} integration - Integration name
- * @param {string} direction - INBOUND or OUTBOUND
- * @param {string} endpoint - API endpoint
- * @param {Object} request - Request data
- * @param {Object} response - Response data
- * @param {number} statusCode - HTTP status code
- * @param {number} durationMs - Duration in milliseconds
+ * Increments the failed login counter and, when the limit is reached,
+ * sets the locked_until timestamp.
+ *
+ * @param {string} contactId
  */
-function logIntegrationCall(integration, direction, endpoint, request, response, statusCode, durationMs) {
+function incrementFailedAttempts(contactId) {
   try {
-    appendRow('IntegrationLog', {
-      log_id: generateId('INT'),
-      integration: integration,
-      direction: direction,
-      endpoint: endpoint,
-      method: direction === 'OUTBOUND' ? 'POST' : 'WEBHOOK',
-      request_body: JSON.stringify(request || {}).substring(0, 5000),
-      response_body: JSON.stringify(response || {}).substring(0, 5000),
-      status_code: statusCode,
-      error_message: statusCode >= 400 ? (response?.error || response?.message || '') : '',
-      duration_ms: durationMs || 0,
-      reference_type: '',
-      reference_id: '',
-      created_at: new Date(),
-    });
+    var contact = getById('Contacts', contactId);
+    if (!contact) {
+      return;
+    }
+
+    var failedAttempts = (parseInt(contact.failed_login_attempts, 10) || 0) + 1;
+    var updates = {
+      failed_login_attempts: failedAttempts,
+      updated_at: new Date().toISOString()
+    };
+
+    if (failedAttempts >= AUTH_MAX_FAILED_ATTEMPTS) {
+      var lockedUntil = new Date();
+      lockedUntil.setMinutes(lockedUntil.getMinutes() + AUTH_LOCKOUT_MINUTES);
+      updates.locked_until = lockedUntil.toISOString();
+    }
+
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', contactId, updates);
+    } finally {
+      lock.releaseLock();
+    }
   } catch (e) {
-    Logger.log('logIntegrationCall error: ' + e.message);
+    Logger.log('[AuthService] incrementFailedAttempts error: ' + e.message);
   }
 }
 
-// ============================================================================
-// WEB APP HANDLER
-// ============================================================================
+/**
+ * Resets the failed-attempt counter and clears any lockout timestamp.
+ *
+ * @param {string} contactId
+ */
+function resetFailedAttempts(contactId) {
+  try {
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(30000);
+      updateRow('Contacts', 'id', contactId, {
+        failed_login_attempts: 0,
+        locked_until: '',
+        updated_at: new Date().toISOString()
+      });
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (e) {
+    Logger.log('[AuthService] resetFailedAttempts error: ' + e.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: Domain Allow-List
+// ---------------------------------------------------------------------------
 
 /**
- * Handles integration API requests.
- * @param {Object} params - Request parameters
- * @returns {Object} Response
+ * Checks whether the given email belongs to one of the allowed staff domains.
+ *
+ * @param {string} email
+ * @returns {boolean}
  */
-function handleIntegrationRequest(params) {
-  const action = params.action;
-  
-  switch (action) {
-    // Oracle sync
-    case 'syncCustomer':
-      return syncCustomerToOracle(params.customerId);
-      
-    case 'syncOrder':
-      return syncOrderToOracle(params.orderId);
-      
-    case 'fetchCustomer':
-      return fetchCustomerFromOracle(params.oracleCustomerId);
-      
-    case 'fetchOrderStatus':
-      return fetchOrderStatusFromOracle(params.oracleOrderId);
-      
-    case 'fetchInvoices':
-      return fetchInvoicesFromOracle(params.oracleCustomerId, params.dateRange);
-      
-    // Webhooks
-    case 'processWebhook':
-      return processWebhook(params.data, params.signature);
-      
-    case 'sendWebhook':
-      return sendWebhook(params.url, params.payload, params.eventType);
-      
-    // Geocoding
-    case 'geocode':
-      return geocodeAddress(params.address);
-      
-    case 'distance':
-      return {
-        success: true,
-        distance: calculateDistance(params.lat1, params.lng1, params.lat2, params.lng2),
-      };
-      
-    // Health & stats
-    case 'health':
-      return checkIntegrationHealth();
-      
-    case 'stats':
-      return getIntegrationStats(params.hours);
-      
-    // Sync jobs
-    case 'syncPendingOrders':
-      return syncPendingOrdersToOracle();
-      
-    case 'syncOrderStatuses':
-      return syncOrderStatusesFromOracle();
-      
-    default:
-      return { success: false, error: 'Unknown action: ' + action };
+function isAllowedDomain(email) {
+  if (!email || email.indexOf('@') === -1) {
+    return false;
   }
+  var domain = email.split('@')[1].toLowerCase();
+  for (var i = 0; i < AUTH_ALLOWED_DOMAINS.length; i++) {
+    if (domain === AUTH_ALLOWED_DOMAINS[i]) {
+      return true;
+    }
+  }
+  return false;
 }
