@@ -11,8 +11,9 @@
 function handleSLARequest(params) {
   try {
     switch(params.action) {
-      case 'getSLAAnalytics': return getSLAAnalytics(params.period, params.affiliate);
-      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.period, params.affiliate);
+      case 'getSLAAnalytics': return getSLAAnalytics(params.filters, params.affiliate);
+      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters, params.affiliate);
+      case 'getStaffList': return getStaffList();
       default: return { success:false, error:'Unknown SLA action' };
     }
   } catch(e) {
@@ -21,20 +22,89 @@ function handleSLARequest(params) {
   }
 }
 
-function getSLAAnalytics(period, affiliateFilter) {
+function parseFilters(filters, affiliate) {
+  if (!filters) filters = {};
+  var year = parseInt(filters.year || new Date().getFullYear());
+  var startDate, endDate;
+
+  switch(filters.period) {
+    case 'q1': startDate = new Date(year,0,1);  endDate = new Date(year,2,31,23,59,59); break;
+    case 'q2': startDate = new Date(year,3,1);  endDate = new Date(year,5,30,23,59,59); break;
+    case 'q3': startDate = new Date(year,6,1);  endDate = new Date(year,8,30,23,59,59); break;
+    case 'q4': startDate = new Date(year,9,1);  endDate = new Date(year,11,31,23,59,59); break;
+    case 'month':
+      var m = parseInt(filters.month||'01') - 1;
+      startDate = new Date(year,m,1);
+      endDate   = new Date(year,m+1,0,23,59,59);
+      break;
+    case 'custom':
+      startDate = filters.customFrom ? new Date(filters.customFrom+'-01') : new Date(year,0,1);
+      if (filters.customTo) {
+        var p = filters.customTo.split('-');
+        endDate = new Date(parseInt(p[0]), parseInt(p[1]), 0, 23,59,59);
+      } else { endDate = new Date(); }
+      break;
+    default: // 'all' or anything else = full year
+      startDate = new Date(year,0,1);
+      endDate   = new Date(year,11,31,23,59,59);
+  }
+
+  return {
+    startDate:  startDate,
+    endDate:    endDate,
+    staffId:    filters.staff       || 'ALL',
+    department: filters.department  || 'ALL',
+    affiliate:  affiliate           || 'ALL'
+  };
+}
+
+function getStaffList() {
+  try {
+    var ss = getSpreadsheet();
+    var users = sheetToObjects(ss.getSheetByName('Users'));
+    var staff = users
+      .filter(function(u){ return u.status === 'ACTIVE'; })
+      .map(function(u){
+        return {
+          user_id: u.user_id,
+          name: ((u.first_name||'')+' '+(u.last_name||'')).trim(),
+          role: u.role,
+          department: u.department
+        };
+      })
+      .sort(function(a,b){ return a.name.localeCompare(b.name); });
+    return { success:true, staff:staff };
+  } catch(e) {
+    return { success:false, error:e.message };
+  }
+}
+
+function getSLAAnalytics(filters, affiliateFilter) {
   var ss      = getSpreadsheet();
   var orders  = sheetToObjects(ss.getSheetByName('Orders'));
-  var range   = parsePeriod(period);
+  var f       = parseFilters(filters, affiliateFilter);
 
   // Filter delivered orders in date range
   var filtered = orders.filter(function(o){
     if (!['DELIVERED','IN_TRANSIT'].includes(o.status)) return false;
     var created = new Date(o.created_at);
     if (isNaN(created)) return false;
-    if (created < range.startDate || created > range.endDate) return false;
-    if (affiliateFilter && affiliateFilter !== 'ALL' && o.country_code !== affiliateFilter) return false;
+    if (created < f.startDate || created > f.endDate) return false;
+    if (f.affiliate !== 'ALL' && o.country_code !== f.affiliate) return false;
     return true;
   });
+
+  // Apply staff filter
+  if (f.staffId !== 'ALL') {
+    filtered = filtered.filter(function(o){ return o.approved_by === f.staffId; });
+  }
+
+  // Apply department filter
+  if (f.department !== 'ALL') {
+    var users = sheetToObjects(ss.getSheetByName('Users'));
+    var deptUsers = users.filter(function(u){ return u.department === f.department; }).map(function(u){ return u.user_id; });
+    filtered = filtered.filter(function(o){ return deptUsers.includes(o.approved_by); });
+  }
 
   // Map country_code to affiliate label
   var affMap = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC' };
@@ -159,20 +229,28 @@ function getSLAAnalytics(period, affiliateFilter) {
   };
 }
 
-function getExternalSLAAnalytics(period, affiliateFilter) {
+function getExternalSLAAnalytics(filters, affiliateFilter) {
   var ss       = getSpreadsheet();
   var tickets  = sheetToObjects(ss.getSheetByName('Tickets'));
   var comments = sheetToObjects(ss.getSheetByName('TicketComments'));
   var orders   = sheetToObjects(ss.getSheetByName('Orders'));
   var users    = sheetToObjects(ss.getSheetByName('Users'));
-  var range    = parsePeriod(period);
+  var f        = parseFilters(filters, affiliateFilter);
   var affMap   = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC' };
+
+  // Apply department filter — get list of user IDs in the department
+  var deptUsers = null;
+  if (f.department !== 'ALL') {
+    deptUsers = users.filter(function(u){ return u.department === f.department; }).map(function(u){ return u.user_id; });
+  }
 
   // Filter tickets in date range
   var filteredTickets = tickets.filter(function(t) {
     var created = new Date(t.created_at);
-    if (isNaN(created) || created < range.startDate || created > range.endDate) return false;
-    if (affiliateFilter && affiliateFilter !== 'ALL' && t.country_code !== affiliateFilter) return false;
+    if (isNaN(created) || created < f.startDate || created > f.endDate) return false;
+    if (f.affiliate !== 'ALL' && t.country_code !== f.affiliate) return false;
+    if (f.staffId !== 'ALL' && t.assigned_to !== f.staffId) return false;
+    if (deptUsers && !deptUsers.includes(t.assigned_to)) return false;
     return true;
   });
 
@@ -207,8 +285,8 @@ function getExternalSLAAnalytics(period, affiliateFilter) {
   var filteredOrders = orders.filter(function(o) {
     if (!o.delivered_at || !o.submitted_at) return false;
     var created = new Date(o.created_at);
-    if (isNaN(created) || created < range.startDate || created > range.endDate) return false;
-    if (affiliateFilter && affiliateFilter !== 'ALL' && o.country_code !== affiliateFilter) return false;
+    if (isNaN(created) || created < f.startDate || created > f.endDate) return false;
+    if (f.affiliate !== 'ALL' && o.country_code !== f.affiliate) return false;
     return true;
   });
   var fulfilment = filteredOrders.map(function(o) {

@@ -70,7 +70,7 @@ body {
 .auth-card {
   max-width: 580px;
   width: min(580px, 94vw);
-  padding: 38px 52px 32px;
+  padding: 26px 52px 32px;
   border-radius: 20px;
   box-shadow: 0 12px 48px rgba(13, 20, 66, 0.16), 0 2px 8px rgba(0,0,0,0.08);
   background: #ffffff;
@@ -102,12 +102,18 @@ body {
 
 /* ── Logo ── */
 .auth-logo {
-  text-align: center;
-  margin-bottom: 8px;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .auth-logo img {
-  width: 160px;
-  height: auto;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 50%;
 }
 .auth-logo-fallback {
   font-size: 20px;
@@ -735,7 +741,7 @@ body {
 
     <!-- Logo -->
     <div class="auth-logo">
-      <img id="logo" src="" alt="Hass Petroleum Group" width="160" style="display:none;">
+      <img id="logo" src="" alt="Hass Petroleum Group" width="48" style="display:none;border-radius:50%;">
       <div id="logoFallback" class="auth-logo-fallback">Hass Petroleum Group</div>
     </div>
 
