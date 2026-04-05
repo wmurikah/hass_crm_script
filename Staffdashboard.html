@@ -7,6 +7,7 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/feather-icons"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --navy-900: #0D1442;
@@ -329,6 +330,47 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--slate-100); }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ── SLA Analytics ── */
+.sla-controls { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+.period-tabs { display:flex; background:var(--slate-100); border-radius:10px; padding:3px; gap:2px; }
+.period-tab { padding:7px 14px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:transparent; color:var(--slate-600); transition:all 0.15s; font-family:inherit; }
+.period-tab:hover { color:var(--slate-800); }
+.period-tab.active { background:#fff; color:var(--navy-800); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.btn-refresh { display:flex; align-items:center; gap:6px; padding:7px 14px; border:1px solid var(--slate-200); border-radius:8px; background:#fff; color:var(--slate-800); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+.btn-refresh:hover { border-color:var(--navy-700); color:var(--navy-800); }
+
+.sla-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+.kpi-card { background:#fff; border:1px solid var(--slate-200); border-top:4px solid var(--accent); border-radius:12px; padding:18px 20px; }
+.kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--slate-600); margin-bottom:8px; }
+.kpi-value { font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--slate-800); line-height:1; }
+.kpi-sub { font-size:11px; color:#94a3b8; margin-top:4px; }
+
+.sla-charts-row { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+.sla-chart-card { background:#fff; border:1px solid var(--slate-200); border-radius:12px; padding:20px; }
+.sla-chart-title { font-size:14px; font-weight:700; color:var(--slate-800); margin-bottom:2px; }
+.sla-chart-sub { font-size:11px; color:var(--slate-600); margin-bottom:16px; }
+.sla-chart-wrap { position:relative; height:260px; }
+
+.sla-trend-card { background:#fff; border:1px solid var(--slate-200); border-radius:12px; padding:20px; margin-bottom:24px; }
+.sla-trend-wrap { position:relative; height:280px; }
+
+.sla-table-card { background:#fff; border:1px solid var(--slate-200); border-radius:12px; overflow:hidden; }
+.sla-table-header { padding:16px 20px; border-bottom:1px solid var(--slate-200); font-size:15px; font-weight:700; color:var(--slate-800); }
+.sla-table { width:100%; border-collapse:collapse; font-size:13px; }
+.sla-table th { background:var(--slate-50); font-size:11px; font-weight:700; text-transform:uppercase; color:var(--slate-600); padding:10px 14px; text-align:left; border-bottom:2px solid var(--slate-200); }
+.sla-table td { padding:12px 14px; border-bottom:1px solid var(--slate-100); color:var(--slate-800); }
+.sla-table tr:hover td { background:var(--slate-50); }
+.pct-badge { padding:3px 8px; border-radius:20px; font-size:11px; font-weight:700; }
+.pct-good { background:#dcfce7; color:#15803d; }
+.pct-warn { background:#fef3c7; color:#92400e; }
+.pct-bad { background:#fee2e2; color:var(--red-500); }
+
+.sla-loader { display:none; align-items:center; justify-content:center; padding:60px 0; color:var(--slate-600); font-size:14px; gap:10px; }
+.sla-error { display:none; background:#fee2e2; color:var(--red-500); padding:12px 16px; border-radius:8px; font-size:13px; font-weight:500; margin-bottom:16px; }
+
+@media(max-width:900px) { .sla-kpis { grid-template-columns:repeat(2,1fr); } .sla-charts-row { grid-template-columns:1fr; } }
+@keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -443,7 +485,79 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     </div>
 
     <div class="page-section" id="page-sla">
-      <div class="page-placeholder">SLA Analytics — loaded by SD-2 prompt</div>
+
+      <!-- Period selector -->
+      <div class="sla-controls">
+        <div class="period-tabs" id="slaPeriodTabs">
+          <button class="period-tab active" data-period="month" onclick="loadSLAData('month',this)">This Month</button>
+          <button class="period-tab" data-period="quarter" onclick="loadSLAData('quarter',this)">This Quarter</button>
+          <button class="period-tab" data-period="ytd" onclick="loadSLAData('ytd',this)">Year to Date</button>
+        </div>
+        <button class="btn-refresh" onclick="loadSLAData(currentSLAPeriod)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Loading / Error -->
+      <div class="sla-loader" id="slaLoader">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        Loading SLA data...
+      </div>
+      <div class="sla-error" id="slaError"></div>
+
+      <!-- KPI row -->
+      <div class="sla-kpis" id="slaKpis">
+        <div class="kpi-card" style="--accent:#1A237E"><div class="kpi-label">Avg Finance Approval</div><div class="kpi-value" id="kpiAvgFinance">--</div><div class="kpi-sub">minutes</div></div>
+        <div class="kpi-card" style="--accent:#FF6F00"><div class="kpi-label">Avg LA Approval</div><div class="kpi-value" id="kpiAvgLA">--</div><div class="kpi-sub">minutes</div></div>
+        <div class="kpi-card" style="--accent:#16a34a"><div class="kpi-label">On-Time Rate</div><div class="kpi-value" id="kpiOnTime">--</div><div class="kpi-sub">% within SLA</div></div>
+        <div class="kpi-card" style="--accent:#d97706"><div class="kpi-label">Total Orders</div><div class="kpi-value" id="kpiTotalOrders">--</div><div class="kpi-sub">in period</div></div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="sla-charts-row">
+        <div class="sla-chart-card">
+          <div class="sla-chart-title">Finance Approval Time (minutes) — by Affiliate</div>
+          <div class="sla-chart-sub">Time from order submission to finance approval</div>
+          <div class="sla-chart-wrap"><canvas id="chartFinance"></canvas></div>
+        </div>
+        <div class="sla-chart-card">
+          <div class="sla-chart-title">Loading Authority Approval Time (minutes) — by Affiliate</div>
+          <div class="sla-chart-sub">Time from finance approval to loading authority issued</div>
+          <div class="sla-chart-wrap"><canvas id="chartLA"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Trend chart -->
+      <div class="sla-trend-card">
+        <div class="sla-chart-title">Monthly SLA Trend</div>
+        <div class="sla-chart-sub">Average approval times over recent months</div>
+        <div class="sla-trend-wrap"><canvas id="chartTrend"></canvas></div>
+      </div>
+
+      <!-- Affiliate table -->
+      <div class="sla-table-card">
+        <div class="sla-table-header">Affiliate Performance Breakdown</div>
+        <div style="overflow-x:auto">
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th>Affiliate</th>
+                <th>Orders</th>
+                <th>Avg Finance (min)</th>
+                <th>% Within 60min</th>
+                <th>Avg LA (min)</th>
+                <th>% Within 120min</th>
+                <th>On-Time Delivery %</th>
+              </tr>
+            </thead>
+            <tbody id="slaTableBody">
+              <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Select a period to load data</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
 
     <div class="page-section" id="page-orders">
@@ -488,6 +602,7 @@ if (!SESSION || !SESSION.token) { window.location.href = window.location.href.sp
 /* ── State ── */
 var currentPage = 'dashboard';
 var currentAffiliate = 'ALL';
+var slaLoaded = false;
 
 /* ── Page Switching ── */
 function showPage(name) {
@@ -517,6 +632,9 @@ function showPage(name) {
 
   // Close mobile sidebar
   closeSidebar();
+
+  // Auto-load SLA data on first visit
+  if (name === 'sla' && !slaLoaded) { slaLoaded = true; loadSLAData('month'); }
 }
 
 /* ── Role-Based Nav Visibility ── */
@@ -598,6 +716,158 @@ document.addEventListener('DOMContentLoaded', function(){
   feather.replace();
   initDashboard();
 });
+
+/* ── SLA Analytics ── */
+var currentSLAPeriod = 'month';
+var slaChartFinance, slaChartLA, slaChartTrend;
+
+function loadSLAData(period, btn) {
+  currentSLAPeriod = period || 'month';
+  if (btn) {
+    document.querySelectorAll('#slaPeriodTabs .period-tab').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+  }
+  showSLALoading(true);
+  document.getElementById('slaError').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(function(data){
+      showSLALoading(false);
+      if (data.success) renderSLAData(data);
+      else showSLAError(data.error);
+    })
+    .withFailureHandler(function(e){ showSLALoading(false); showSLAError(e.message); })
+    .handleSLARequest({ action:'getSLAAnalytics', period: currentSLAPeriod, affiliate: currentAffiliate });
+}
+
+function renderSLAData(data) {
+  // KPIs
+  document.getElementById('kpiAvgFinance').textContent  = Math.round(data.kpis.avgFinance);
+  document.getElementById('kpiAvgLA').textContent       = Math.round(data.kpis.avgLA);
+  document.getElementById('kpiOnTime').textContent      = data.kpis.onTimePct + '%';
+  document.getElementById('kpiTotalOrders').textContent = data.kpis.totalOrders;
+
+  var affiliateColors = { HPK:'#1A237E', HPU:'#FF6F00', HPT:'#0d9488', HPR:'#7c3aed', HSS:'#db2777', HPZ:'#ea580c', HPC:'#0284c7', HTW:'#64748b' };
+
+  // Finance chart
+  if (slaChartFinance) slaChartFinance.destroy();
+  var fCtx = document.getElementById('chartFinance').getContext('2d');
+  slaChartFinance = new Chart(fCtx, {
+    type: 'bar',
+    data: {
+      labels: data.byAffiliate.map(function(a){ return a.affiliate; }),
+      datasets: [{
+        label: 'Avg Finance Approval (min)',
+        data: data.byAffiliate.map(function(a){ return a.avgFinance; }),
+        backgroundColor: data.byAffiliate.map(function(a){ return affiliateColors[a.affiliate] || '#94a3b8'; }),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(ctx) {
+              var d = data.byAffiliate[ctx.dataIndex];
+              return 'Orders: ' + d.orders + '  |  SLA%: ' + d.financeSLAPct + '%';
+            }
+          }
+        }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Minutes' }, grid: { color: 'rgba(226,232,240,0.6)' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // LA chart
+  if (slaChartLA) slaChartLA.destroy();
+  var lCtx = document.getElementById('chartLA').getContext('2d');
+  slaChartLA = new Chart(lCtx, {
+    type: 'bar',
+    data: {
+      labels: data.byAffiliate.map(function(a){ return a.affiliate; }),
+      datasets: [{
+        label: 'Avg LA Approval (min)',
+        data: data.byAffiliate.map(function(a){ return a.avgLA; }),
+        backgroundColor: data.byAffiliate.map(function(a){ return (affiliateColors[a.affiliate] || '#94a3b8') + 'cc'; }),
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { title: { display: true, text: 'Minutes' }, grid: { color: 'rgba(226,232,240,0.6)' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Trend chart
+  if (slaChartTrend) slaChartTrend.destroy();
+  var tCtx = document.getElementById('chartTrend').getContext('2d');
+  slaChartTrend = new Chart(tCtx, {
+    type: 'line',
+    data: {
+      labels: data.monthlyTrend.map(function(m){ return m.month; }),
+      datasets: [
+        {
+          label: 'Finance Approval (min)',
+          data: data.monthlyTrend.map(function(m){ return m.avgFinance; }),
+          borderColor: '#1A237E',
+          backgroundColor: 'rgba(26,35,126,0.06)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4
+        },
+        {
+          label: 'LA Approval (min)',
+          data: data.monthlyTrend.map(function(m){ return m.avgLA; }),
+          borderColor: '#FF6F00',
+          backgroundColor: 'rgba(255,111,0,0.06)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top' } }
+    }
+  });
+
+  // Affiliate table
+  var tbody = document.getElementById('slaTableBody');
+  tbody.innerHTML = data.byAffiliate.map(function(a) {
+    return '<tr>' +
+      '<td><strong>' + a.affiliate + '</strong></td>' +
+      '<td>' + a.orders + '</td>' +
+      '<td>' + Math.round(a.avgFinance) + '</td>' +
+      '<td><span class="pct-badge ' + (a.financeSLAPct >= 80 ? 'pct-good' : a.financeSLAPct >= 60 ? 'pct-warn' : 'pct-bad') + '">' + a.financeSLAPct + '%</span></td>' +
+      '<td>' + Math.round(a.avgLA) + '</td>' +
+      '<td><span class="pct-badge ' + (a.laSLAPct >= 80 ? 'pct-good' : a.laSLAPct >= 60 ? 'pct-warn' : 'pct-bad') + '">' + a.laSLAPct + '%</span></td>' +
+      '<td><span class="pct-badge ' + (a.onTimePct >= 80 ? 'pct-good' : a.onTimePct >= 60 ? 'pct-warn' : 'pct-bad') + '">' + a.onTimePct + '%</span></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function showSLALoading(on) {
+  var loader = document.getElementById('slaLoader');
+  if (loader) loader.style.display = on ? 'flex' : 'none';
+}
+
+function showSLAError(msg) {
+  var err = document.getElementById('slaError');
+  if (err) { err.textContent = msg || 'Failed to load SLA data'; err.style.display = 'block'; }
+}
 </script>
 </body>
 </html>
