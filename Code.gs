@@ -40,14 +40,16 @@ function serveLoginPage(errorMessage) {
 
 function serveStaffDashboard(session, token) {
   var tmpl = HtmlService.createTemplateFromFile('Staffdashboard');
+  var scriptUrl = ScriptApp.getService().getUrl();
   tmpl.SESSION = JSON.stringify({
     userId:   session.userId,
     userType: 'STAFF',
     role:     session.role,
     token:    token,
-    name:     ''
+    name:     '',
+    scriptUrl: scriptUrl
   });
-  tmpl.scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.scriptUrl = scriptUrl;
   return tmpl.evaluate()
     .setTitle('Hass Petroleum — Staff Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -74,6 +76,7 @@ function serveCustomerPortal(session, token) {
     }
   } catch(e) { Logger.log('serveCustomerPortal enrich: ' + e.message); }
 
+  var scriptUrl2 = ScriptApp.getService().getUrl();
   var tmpl = HtmlService.createTemplateFromFile('Customerportal');
   tmpl.SESSION = JSON.stringify({
     contactId:  session.userId,
@@ -81,9 +84,10 @@ function serveCustomerPortal(session, token) {
     userType:   'CUSTOMER',
     role:       'CUSTOMER',
     token:      token,
-    name:       ''
+    name:       '',
+    scriptUrl:  scriptUrl2
   });
-  tmpl.scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.scriptUrl = scriptUrl2;
   return tmpl.evaluate()
     .setTitle('Hass Petroleum — Customer Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
