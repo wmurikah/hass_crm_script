@@ -1,7 +1,7 @@
 /**
  * HASS PETROLEUM CMS - MAIN ENTRY POINT
  * Version: 2.0.0
- * Database: Google Cloud Firestore (hass-internal-audit-12345)
+ * Database: Google Sheets (SPREADSHEET_ID in Script Properties)
  */
 
 function doGet(e) {
