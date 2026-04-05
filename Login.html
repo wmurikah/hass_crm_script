@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hass Petroleum - Customer Portal</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy-900: #0D1442;
+  --navy-800: #1A237E;
+  --navy-700: #283593;
+  --orange-500: #FF6F00;
+  --orange-600: #E65100;
+  --white: #ffffff;
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-400: #94a3b8;
+  --slate-600: #64748b;
+  --slate-800: #1e293b;
+  --error: #dc2626;
+  --success: #16a34a;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--navy-900);
+}
+
+/* ── Background ── */
+.auth-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  position: relative;
+  background: url('https://images.unsplash.com/photo-1578321272176-b7bbc0679853?w=1920&q=80') center/cover no-repeat fixed;
+}
+
+.auth-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 20, 66, 0.58);
+  z-index: 0;
+}
+
+.auth-wrapper > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Card ── */
+.auth-card {
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: 0 12px 48px rgba(13, 20, 66, 0.18);
+  padding: 44px 40px;
+  width: 100%;
+  max-width: 440px;
+  animation: cardEntrance 0.45s ease-out both;
+}
+
+@keyframes cardEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Shake ── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* ── Logo ── */
+.auth-logo {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.auth-logo img {
+  width: 160px;
+  height: auto;
+}
+.auth-logo-fallback {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+
+/* ── Headings ── */
+.auth-heading {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy-900);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.auth-subheading {
+  font-size: 13px;
+  color: var(--slate-600);
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+/* ── Labels ── */
+.auth-label {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--slate-800);
+  margin-bottom: 6px;
+}
+
+/* ── Inputs ── */
+.auth-input,
+.auth-select {
+  display: block;
+  width: 100%;
+  border: 1.5px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--slate-800);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.auth-input::placeholder {
+  color: var(--slate-400);
+}
+.auth-input:focus,
+.auth-select:focus {
+  border-color: var(--navy-800);
+  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.12);
+}
+.auth-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+.input-error {
+  border-color: var(--error) !important;
+}
+
+/* ── Field group ── */
+.field-group {
+  margin-bottom: 18px;
+}
+.field-error {
+  display: none;
+  color: var(--error);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ── Password wrapper ── */
+.input-icon-wrap {
+  position: relative;
+}
+.input-icon-wrap .auth-input {
+  padding-right: 46px;
+}
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--slate-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+.password-toggle:hover {
+  color: var(--slate-600);
+}
+
+/* ── Remember / Forgot row ── */
+.remember-forgot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  font-size: 13px;
+}
+.remember-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--slate-600);
+  cursor: pointer;
+  font-weight: 400;
+  margin: 0;
+}
+.remember-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--navy-800);
+  cursor: pointer;
+}
+.forgot-link {
+  color: var(--navy-800);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.forgot-link:hover {
+  color: var(--orange-500);
+  text-decoration: underline;
+}
+
+/* ── Auth error box ── */
+.auth-error {
+  display: none;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--error);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ── Primary button ── */
+.btn-auth-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  background: var(--orange-500);
+  color: var(--white);
+  border: none;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 13px 24px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-auth-primary:hover {
+  background: var(--orange-600);
+}
+.btn-auth-primary:active {
+  transform: scale(0.98);
+}
+.btn-auth-primary:disabled {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Switch prompt ── */
+.switch-prompt {
+  text-align: center;
+  font-size: 13px;
+  color: var(--slate-600);
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+.switch-prompt a {
+  color: var(--navy-800);
+  font-weight: 600;
+  text-decoration: none;
+}
+.switch-prompt a:hover {
+  color: var(--orange-500);
+  text-decoration: underline;
+}
+
+/* ── Divider ── */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--slate-200);
+}
+.divider span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-400);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── SSO buttons ── */
+.btn-sso {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  width: 100%;
+  background: var(--white);
+  border: 1.5px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--slate-800);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.btn-sso:hover {
+  border-color: var(--navy-800);
+  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.08);
+}
+.btn-sso + .btn-sso {
+  margin-top: 10px;
+}
+.btn-sso svg {
+  flex-shrink: 0;
+}
+
+/* ── Quick links ── */
+.quick-links {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.quick-links a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.quick-links a:hover {
+  text-decoration: underline;
+  color: #fff;
+}
+.quick-links span {
+  user-select: none;
+}
+
+/* ── View containers ── */
+.auth-view {
+  display: none;
+}
+.auth-view.active {
+  display: block;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 32px 24px;
+    border-radius: 16px;
+  }
+  .auth-wrapper {
+    padding: 24px 16px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="auth-wrapper">
+  <div class="auth-card" id="authCard">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <img id="logo" src="" alt="Hass Petroleum Group" width="160" style="display:none;">
+      <div id="logoFallback" class="auth-logo-fallback">Hass Petroleum Group</div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- LOGIN VIEW -->
+    <!-- ============================================ -->
+    <div class="auth-view active" id="login-view">
+
+      <h1 class="auth-heading">Hass Petroleum Group</h1>
+      <p class="auth-subheading">Customer and Dealer Portal</p>
+
+      <form id="loginForm" autocomplete="on" novalidate>
+
+        <!-- Account Type -->
+        <div class="field-group">
+          <label class="auth-label" for="accountType">Account Type <span style="color:var(--error)">*</span></label>
+          <select class="auth-select" id="accountType" required>
+            <option value="">Select account type</option>
+            <option value="Card Holder">Card Holder</option>
+            <option value="Dealer">Dealer</option>
+            <option value="Top-Up Account">Top-Up Account</option>
+            <option value="Corporate Account">Corporate Account</option>
+          </select>
+          <div class="field-error" id="accountTypeError"></div>
+        </div>
+
+        <!-- Email / Account Number -->
+        <div class="field-group">
+          <label class="auth-label" for="loginEmail">Email or Account Number <span style="color:var(--error)">*</span></label>
+          <input class="auth-input" type="text" id="loginEmail" required
+                 placeholder="Enter your email or account number"
+                 autocomplete="username">
+          <div class="field-error" id="loginEmailError"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="field-group">
+          <label class="auth-label" for="loginPassword">Password <span style="color:var(--error)">*</span></label>
+          <div class="input-icon-wrap">
+            <input class="auth-input" type="password" id="loginPassword" required
+                   placeholder="Enter your password"
+                   autocomplete="current-password">
+            <button type="button" class="password-toggle" aria-label="Toggle password visibility" onclick="togglePasswordVisibility('loginPassword', this)">
+              <svg class="eye-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="eye-off-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+          <div class="field-error" id="loginPasswordError"></div>
+        </div>
+
+        <!-- Corporate Company Name (hidden by default) -->
+        <div class="field-group" id="corporateNameField" style="display:none">
+          <label class="auth-label" for="loginCorpName">Company Name <span style="color:var(--error)">*</span></label>
+          <input class="auth-input" type="text" id="loginCorpName"
+                 placeholder="Your registered company name">
+          <div class="field-error" id="loginCorpNameError"></div>
+        </div>
+
+        <!-- Remember me / Forgot -->
+        <div class="remember-forgot">
+          <label class="remember-label">
+            <input type="checkbox" id="rememberMe"> Remember me
+          </label>
+          <a href="#" class="forgot-link" id="forgotLink" onclick="showView('forgot'); return false;">Forgot password?</a>
+        </div>
+
+        <!-- Error display -->
+        <div class="auth-error" id="loginError"></div>
+
+        <!-- Sign In button -->
+        <button type="submit" class="btn-auth-primary" id="loginBtn">Sign In</button>
+
+      </form>
+
+      <!-- Switch to Sign Up -->
+      <p class="switch-prompt">Don't have an account? <a href="#" onclick="showView('signup'); return false;">Sign Up</a></p>
+
+      <!-- SSO divider -->
+      <div class="divider"><span>OR</span></div>
+
+      <!-- Google SSO -->
+      <button type="button" class="btn-sso" id="googleSsoBtn" onclick="handleSso('google')">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
+        Continue with Google
+      </button>
+
+      <!-- Microsoft SSO -->
+      <button type="button" class="btn-sso" id="microsoftSsoBtn" onclick="handleSso('microsoft')">
+        <svg width="18" height="18" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+        Continue with Microsoft
+      </button>
+
+    </div>
+    <!-- END LOGIN VIEW -->
+
+    <!-- ============================================ -->
+    <!-- SIGNUP VIEW: inserted by Part 1B -->
+    <!-- ============================================ -->
+    <div class="auth-view" id="signup-view">
+      <!-- Part 1B will populate this -->
+    </div>
+
+    <!-- ============================================ -->
+    <!-- FORGOT VIEW: inserted by Part 1B -->
+    <!-- ============================================ -->
+    <div class="auth-view" id="forgot-view">
+      <!-- Part 1B will populate this -->
+    </div>
+
+  </div>
+  <!-- END auth-card -->
+
+  <!-- Quick links -->
+  <div class="quick-links">
+    <a href="#">Get a Hass Card</a>
+    <span>|</span>
+    <a href="#">Activate Your Card</a>
+    <span>|</span>
+    <a href="#">Contact Us</a>
+  </div>
+
+</div>
+<!-- END auth-wrapper -->
+
+<script>
+(function() {
+  'use strict';
+
+  /* ── Logo loading ── */
+  document.addEventListener('DOMContentLoaded', function() {
+    try {
+      google.script.run
+        .withSuccessHandler(function(url) {
+          if (url) {
+            var img = document.getElementById('logo');
+            img.src = url;
+            img.style.display = 'inline';
+            document.getElementById('logoFallback').style.display = 'none';
+          }
+        })
+        .withFailureHandler(function() {
+          /* Fallback text already visible */
+        })
+        .getLogoUrl();
+    } catch (e) {
+      /* Running outside GAS - fallback text stays visible */
+    }
+  });
+
+  /* ── Toggle password visibility ── */
+  window.togglePasswordVisibility = function(inputId, btn) {
+    var input = document.getElementById(inputId);
+    var eyeIcon = btn.querySelector('.eye-icon');
+    var eyeOffIcon = btn.querySelector('.eye-off-icon');
+
+    if (input.type === 'password') {
+      input.type = 'text';
+      eyeIcon.style.display = 'none';
+      eyeOffIcon.style.display = 'block';
+    } else {
+      input.type = 'password';
+      eyeIcon.style.display = 'block';
+      eyeOffIcon.style.display = 'none';
+    }
+  };
+
+  /* ── Field error helpers ── */
+  window.showFieldError = function(id, msg) {
+    var el = document.getElementById(id + 'Error');
+    if (el) {
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    var input = document.getElementById(id);
+    if (input) input.classList.add('input-error');
+  };
+
+  window.clearFieldError = function(id) {
+    var el = document.getElementById(id + 'Error');
+    if (el) {
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+    var input = document.getElementById(id);
+    if (input) input.classList.remove('input-error');
+  };
+
+  function clearAllLoginErrors() {
+    ['accountType', 'loginEmail', 'loginPassword', 'loginCorpName'].forEach(function(id) {
+      clearFieldError(id);
+    });
+    hideLoginError();
+  }
+
+  /* ── Login error box ── */
+  function showLoginError(msg) {
+    var el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideLoginError() {
+    var el = document.getElementById('loginError');
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+
+  /* ── Shake card ── */
+  function shakeCard() {
+    var card = document.getElementById('authCard');
+    card.classList.add('shake');
+    setTimeout(function() {
+      card.classList.remove('shake');
+    }, 500);
+  }
+
+  /* ── Account Type toggle for Corporate field ── */
+  document.getElementById('accountType').addEventListener('change', function() {
+    var corpField = document.getElementById('corporateNameField');
+    if (this.value === 'Corporate Account') {
+      corpField.style.display = 'block';
+    } else {
+      corpField.style.display = 'none';
+      document.getElementById('loginCorpName').value = '';
+      clearFieldError('loginCorpName');
+    }
+  });
+
+  /* ── Login button state ── */
+  function setLoginLoading(loading) {
+    var btn = document.getElementById('loginBtn');
+    if (loading) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Signing in...';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  }
+
+  /* ── Validate login form ── */
+  function validateLoginForm() {
+    var valid = true;
+    clearAllLoginErrors();
+
+    var accountType = document.getElementById('accountType').value;
+    var email = document.getElementById('loginEmail').value.trim();
+    var password = document.getElementById('loginPassword').value;
+
+    if (!accountType) {
+      showFieldError('accountType', 'Please select an account type');
+      valid = false;
+    }
+    if (!email) {
+      showFieldError('loginEmail', 'Please enter your email or account number');
+      valid = false;
+    }
+    if (!password) {
+      showFieldError('loginPassword', 'Please enter your password');
+      valid = false;
+    }
+
+    if (accountType === 'Corporate Account') {
+      var corpName = document.getElementById('loginCorpName').value.trim();
+      if (!corpName) {
+        showFieldError('loginCorpName', 'Please enter your company name');
+        valid = false;
+      }
+    }
+
+    return valid;
+  }
+
+  /* ── Login form submission ── */
+  document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (!validateLoginForm()) {
+      shakeCard();
+      return;
+    }
+
+    var accountType = document.getElementById('accountType').value;
+    var emailVal = document.getElementById('loginEmail').value.trim();
+    var passwordVal = document.getElementById('loginPassword').value;
+    var rememberMe = document.getElementById('rememberMe').checked;
+
+    var payload = {
+      service: 'auth',
+      action: 'login',
+      email: emailVal,
+      password: passwordVal,
+      accountType: accountType,
+      rememberMe: rememberMe
+    };
+
+    if (accountType === 'Corporate Account') {
+      payload.corporateName = document.getElementById('loginCorpName').value.trim();
+    }
+
+    setLoginLoading(true);
+    hideLoginError();
+
+    try {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          setLoginLoading(false);
+          if (result && result.success) {
+            window.location.href = result.redirectUrl;
+          } else {
+            var errorMsg = (result && result.error) ? result.error : 'Login failed. Please check your credentials.';
+            showLoginError(errorMsg);
+            shakeCard();
+          }
+        })
+        .withFailureHandler(function(err) {
+          setLoginLoading(false);
+          showLoginError('Connection error. Please try again.');
+          shakeCard();
+        })
+        .handleAuthRequest(payload);
+    } catch (e) {
+      setLoginLoading(false);
+      showLoginError('Unable to connect to the server. Please try again later.');
+      shakeCard();
+    }
+  });
+
+  /* ── SSO handler ── */
+  window.handleSso = function(provider) {
+    try {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result && result.redirectUrl) {
+            window.location.href = result.redirectUrl;
+          } else if (result && result.error) {
+            showLoginError(result.error);
+          }
+        })
+        .withFailureHandler(function() {
+          showLoginError('SSO is not available at this time. Please sign in with your credentials.');
+        })
+        .handleAuthRequest({ service: 'auth', action: 'ssoRedirect', provider: provider });
+    } catch (e) {
+      showLoginError('SSO is not available at this time.');
+    }
+  };
+
+  /* ── Clear field errors on input ── */
+  ['accountType', 'loginEmail', 'loginPassword', 'loginCorpName'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', function() { clearFieldError(id); });
+      el.addEventListener('change', function() { clearFieldError(id); });
+    }
+  });
+
+  // VIEW SWITCHING -- implemented in Part 1B
+  window.showView = function(name) { /* Part 1B */ };
+
+  // SIGNUP LOGIC: Part 1B
+
+  // FORGOT LOGIC: Part 1B
+
+  // VIEW TRANSITION LOGIC: Part 1B
+
+})();
+</script>
+
+</body>
+</html>
