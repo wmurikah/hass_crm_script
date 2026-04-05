@@ -27,6 +27,7 @@ function handleAuthRequest(params) {
       case 'requestPasswordReset': return requestPasswordReset(params);
       case 'verifyOtp':            return verifyOtp(params);
       case 'setNewPassword':       return setNewPassword(params);
+      case 'getStaffInfo':         return getStaffInfo(params.userId);
       default:
         return { success: false, error: 'Unknown auth action: ' + params.action };
     }
@@ -354,6 +355,23 @@ function setNewPassword(params) {
     }
   }
   return { success: false, error: 'Account not found.' };
+}
+
+function getStaffInfo(userId) {
+  try {
+    var ss = getSpreadsheet();
+    var sheet = ss.getSheetByName('Users');
+    var rows = sheetToObjects(sheet);
+    var user = rows.find(function(r){ return r.user_id === userId; });
+    if (!user) return { name: userId, role: 'CS_AGENT' };
+    return {
+      name: (user.first_name||'') + ' ' + (user.last_name||''),
+      role: user.role,
+      email: user.email,
+      country: user.country_code,
+      team: user.team_id
+    };
+  } catch(e) { return { name: userId, role: 'CS_AGENT' }; }
 }
 
 function getLogoUrl() {
