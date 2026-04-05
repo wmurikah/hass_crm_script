@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hass Petroleum | Staff Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ========================================
+       DESIGN TOKENS - Hass Petroleum Brand
+       Staff Portal - Darker Industrial Theme
+    ======================================== */
+    :root {
+      /* Brand Colors */
+      --navy-900: #0D1442;
+      --navy-800: #1A237E;
+      --navy-700: #283593;
+      --navy-600: #3949AB;
+      --orange-600: #E65100;
+      --orange-500: #FF6F00;
+      --orange-400: #FF8F00;
+      --orange-300: #FFA726;
+      
+      /* Neutrals */
+      --slate-950: #0f172a;
+      --slate-900: #1e293b;
+      --slate-800: #334155;
+      --slate-700: #475569;
+      --slate-600: #64748b;
+      --slate-500: #94a3b8;
+      --slate-400: #cbd5e1;
+      --slate-300: #e2e8f0;
+      --slate-200: #f1f5f9;
+      --slate-100: #f8fafc;
+      --white: #ffffff;
+      
+      /* Semantic */
+      --success-600: #16a34a;
+      --success-500: #22c55e;
+      --success-100: #dcfce7;
+      --warning-600: #d97706;
+      --warning-500: #f59e0b;
+      --warning-100: #fef3c7;
+      --error-600: #dc2626;
+      --error-500: #ef4444;
+      --error-100: #fee2e2;
+      --info-600: #0284c7;
+      --info-500: #0ea5e9;
+      --info-100: #e0f2fe;
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+      --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+      
+      /* Layout */
+      --sidebar-width: 260px;
+      --header-height: 64px;
+      --radius-sm: 6px;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      
+      /* Transitions */
+      --transition-fast: 150ms ease;
+      --transition-base: 200ms ease;
+      --transition-slow: 300ms ease;
+    }
+
+    /* ========================================
+       RESET & BASE
+    ======================================== */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--slate-100);
+      color: var(--slate-900);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select, textarea { font-family: inherit; }
+
+    /* ========================================
+       LAYOUT STRUCTURE
+    ======================================== */
+    .app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ========================================
+       SIDEBAR NAVIGATION - Staff (Darker)
+    ======================================== */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: linear-gradient(180deg, var(--slate-950) 0%, var(--navy-900) 100%);
+      color: var(--white);
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+      transition: transform var(--transition-slow);
+    }
+
+    .sidebar::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 1px;
+      background: linear-gradient(180deg, transparent 0%, rgba(255,111,0,0.3) 50%, transparent 100%);
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-mark {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--orange-500) 0%, var(--orange-600) 100%);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      font-size: 20px;
+      color: var(--white);
+      box-shadow: 0 4px 12px rgba(255, 111, 0, 0.4);
+    }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-brand {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .logo-brand span {
+      color: var(--orange-400);
+    }
+
+    .logo-sub {
+      font-size: 10px;
+      color: var(--orange-400);
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 0;
+    }
+
+    .nav-section {
+      margin-bottom: 8px;
+    }
+
+    .nav-section-title {
+      padding: 12px 24px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--slate-500);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 24px;
+      margin: 2px 12px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.65);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--white);
+    }
+
+    .nav-item.active {
+      background: var(--orange-500);
+      color: var(--white);
+      box-shadow: 0 2px 8px rgba(255, 111, 0, 0.4);
+    }
+
+    .nav-item svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      opacity: 0.8;
+    }
+
+    .nav-item.active svg {
+      opacity: 1;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: var(--error-500);
+      color: var(--white);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .nav-badge.warning {
+      background: var(--warning-500);
+    }
+
+    .nav-badge.info {
+      background: var(--info-500);
+    }
+
+    /* ========================================
+       MAIN CONTENT AREA
+    ======================================== */
+    .main {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ========================================
+       TOP HEADER
+    ======================================== */
+    .header {
+      height: var(--header-height);
+      background: var(--white);
+      border-bottom: 1px solid var(--slate-200);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      padding: 8px;
+      color: var(--slate-600);
+      border-radius: var(--radius);
+    }
+
+    .menu-toggle:hover {
+      background: var(--slate-100);
+    }
+
+    .page-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .country-select {
+      padding: 8px 12px;
+      border: 1px solid var(--slate-300);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--white);
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .country-select:focus {
+      outline: none;
+      border-color: var(--navy-800);
+    }
+
+    .header-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--slate-600);
+      border-radius: var(--radius);
+      position: relative;
+      transition: all var(--transition-fast);
+    }
+
+    .header-btn:hover {
+      background: var(--slate-100);
+      color: var(--slate-900);
+    }
+
+    .header-btn svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .notification-dot {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 9px;
+      height: 9px;
+      background: var(--error-500);
+      border: 2px solid var(--white);
+      border-radius: 50%;
+    }
+
+    .user-menu {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 12px 6px 6px;
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+    }
+
+    .user-menu:hover {
+      background: var(--slate-100);
+    }
+
+    .user-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--orange-500) 0%, var(--orange-600) 100%);
+      color: var(--white);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .user-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .user-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate-900);
+      line-height: 1.3;
+    }
+
+    .user-role {
+      font-size: 12px;
+      color: var(--slate-500);
+      line-height: 1.3;
+    }
+
+    /* ========================================
+       PAGE CONTENT
+    ======================================== */
+    .content {
+      flex: 1;
+      padding: 24px;
+    }
+
+    .page {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ========================================
+       CARDS
+    ======================================== */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    .card-body {
+      padding: 24px;
+    }
+
+    /* ========================================
+       STATS GRID - Staff Metrics
+    ======================================== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--white);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .stat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .stat-icon.navy { background: rgba(26, 35, 126, 0.1); color: var(--navy-800); }
+    .stat-icon.orange { background: rgba(255, 111, 0, 0.1); color: var(--orange-500); }
+    .stat-icon.success { background: var(--success-100); color: var(--success-600); }
+    .stat-icon.warning { background: var(--warning-100); color: var(--warning-600); }
+    .stat-icon.error { background: var(--error-100); color: var(--error-600); }
+    .stat-icon.info { background: var(--info-100); color: var(--info-600); }
+
+    .stat-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .stat-change {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .stat-change.up {
+      background: var(--success-100);
+      color: var(--success-600);
+    }
+
+    .stat-change.down {
+      background: var(--error-100);
+      color: var(--error-600);
+    }
+
+    .stat-value {
+      font-family: 'Space Mono', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--slate-900);
+      line-height: 1.2;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--slate-600);
+      margin-top: 4px;
+    }
+
+    /* ========================================
+       GRIDS
+    ======================================== */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    /* ========================================
+       DATA TABLES
+    ======================================== */
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--slate-50);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--slate-600);
+      border-bottom: 1px solid var(--slate-200);
+    }
+
+    td {
+      font-size: 14px;
+      color: var(--slate-700);
+      border-bottom: 1px solid var(--slate-100);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr {
+      transition: background var(--transition-fast);
+    }
+
+    tbody tr:hover {
+      background: var(--slate-50);
+    }
+
+    tbody tr.clickable {
+      cursor: pointer;
+    }
+
+    td strong {
+      color: var(--slate-900);
+      font-weight: 600;
+    }
+
+    /* ========================================
+       CUSTOMER INFO CELL
+    ======================================== */
+    .customer-cell {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .customer-avatar {
+      width: 36px;
+      height: 36px;
+      background: var(--slate-200);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--slate-600);
+      flex-shrink: 0;
+    }
+
+    .customer-name {
+      font-weight: 600;
+      color: var(--slate-900);
+      line-height: 1.3;
+    }
+
+    .customer-segment {
+      font-size: 12px;
+      color: var(--slate-500);
+    }
+
+    /* ========================================
+       SLA PROGRESS BAR
+    ======================================== */
+    .sla-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 140px;
+    }
+
+    .sla-bar {
+      flex: 1;
+      height: 6px;
+      background: var(--slate-200);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .sla-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .sla-fill.ok { background: var(--success-500); }
+    .sla-fill.warning { background: var(--warning-500); }
+    .sla-fill.danger { background: var(--error-500); }
+
+    .sla-time {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--slate-600);
+    }
+
+    .sla-time.danger {
+      color: var(--error-600);
+    }
+
+    /* ========================================
+       STATUS BADGES
+    ======================================== */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge-new { background: var(--info-100); color: var(--info-600); }
+    .badge-open { background: var(--warning-100); color: var(--warning-600); }
+    .badge-progress { background: rgba(26, 35, 126, 0.1); color: var(--navy-800); }
+    .badge-resolved { background: var(--success-100); color: var(--success-600); }
+    .badge-closed { background: var(--slate-200); color: var(--slate-600); }
+    .badge-escalated { background: var(--error-100); color: var(--error-600); }
+    
+    .badge-critical { background: var(--error-100); color: var(--error-600); }
+    .badge-high { background: var(--warning-100); color: var(--warning-600); }
+    .badge-medium { background: var(--info-100); color: var(--info-600); }
+    .badge-low { background: var(--slate-200); color: var(--slate-600); }
+
+    .badge-strategic { background: rgba(156, 39, 176, 0.1); color: #7b1fa2; }
+    .badge-enterprise { background: rgba(26, 35, 126, 0.1); color: var(--navy-800); }
+    .badge-sme { background: rgba(255, 111, 0, 0.1); color: var(--orange-600); }
+    .badge-retail { background: var(--success-100); color: var(--success-600); }
+
+    /* ========================================
+       BUTTONS
+    ======================================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+
+    .btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-primary {
+      background: var(--orange-500);
+      color: var(--white);
+    }
+
+    .btn-primary:hover {
+      background: var(--orange-600);
+      box-shadow: 0 4px 12px rgba(255, 111, 0, 0.3);
+    }
+
+    .btn-secondary {
+      background: var(--navy-800);
+      color: var(--white);
+    }
+
+    .btn-secondary:hover {
+      background: var(--navy-900);
+    }
+
+    .btn-success {
+      background: var(--success-600);
+      color: var(--white);
+    }
+
+    .btn-success:hover {
+      background: #15803d;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--slate-300);
+      color: var(--slate-700);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--navy-800);
+      color: var(--navy-800);
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 13px;
+    }
+
+    .btn-lg {
+      padding: 14px 24px;
+      font-size: 15px;
+    }
+
+    /* ========================================
+       FILTER BAR
+    ======================================== */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+      max-width: 320px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 14px 10px 42px;
+      border: 2px solid var(--slate-300);
+      border-radius: var(--radius);
+      font-size: 14px;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--navy-800);
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      color: var(--slate-400);
+    }
+
+    .filter-select {
+      padding: 10px 14px;
+      border: 2px solid var(--slate-300);
+      border-radius: var(--radius);
+      font-size: 14px;
+      background: var(--white);
+      min-width: 140px;
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--navy-800);
+    }
+
+    /* ========================================
+       TABS
+    ======================================== */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid var(--slate-200);
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate-600);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all var(--transition-fast);
+    }
+
+    .tab:hover {
+      color: var(--navy-800);
+    }
+
+    .tab.active {
+      color: var(--navy-800);
+      border-bottom-color: var(--navy-800);
+    }
+
+    /* ========================================
+       ACTIVITY FEED
+    ======================================== */
+    .activity-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--slate-100);
+      transition: background var(--transition-fast);
+    }
+
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+
+    .activity-item:hover {
+      background: var(--slate-50);
+    }
+
+    .activity-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .activity-icon.success { background: var(--success-100); color: var(--success-600); }
+    .activity-icon.info { background: var(--info-100); color: var(--info-600); }
+    .activity-icon.warning { background: var(--warning-100); color: var(--warning-600); }
+    .activity-icon.navy { background: rgba(26, 35, 126, 0.1); color: var(--navy-800); }
+
+    .activity-content {
+      flex: 1;
+    }
+
+    .activity-title {
+      font-weight: 600;
+      color: var(--slate-900);
+      margin-bottom: 2px;
+    }
+
+    .activity-desc {
+      font-size: 13px;
+      color: var(--slate-500);
+    }
+
+    .activity-time {
+      font-size: 13px;
+      color: var(--slate-500);
+      white-space: nowrap;
+    }
+
+    /* ========================================
+       FORMS
+    ======================================== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate-700);
+      margin-bottom: 8px;
+    }
+
+    .form-label.required::after {
+      content: ' *';
+      color: var(--error-600);
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      width: 100%;
+      padding: 11px 14px;
+      border: 2px solid var(--slate-300);
+      border-radius: var(--radius);
+      font-size: 14px;
+      color: var(--slate-900);
+      background: var(--white);
+      transition: all var(--transition-fast);
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      outline: none;
+      border-color: var(--navy-800);
+      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
+    }
+
+    .form-textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    /* ========================================
+       MODAL
+    ======================================== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all var(--transition-base);
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: var(--white);
+      border-radius: var(--radius-xl);
+      width: 100%;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.95) translateY(10px);
+      transition: transform var(--transition-base);
+    }
+
+    .modal-overlay.active .modal {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--slate-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      color: var(--slate-500);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+
+    .modal-close:hover {
+      background: var(--slate-100);
+      color: var(--slate-900);
+    }
+
+    .modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--slate-200);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* ========================================
+       TICKET DETAIL GRID
+    ======================================== */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .detail-item {
+      padding: 14px 16px;
+      background: var(--slate-50);
+      border-radius: var(--radius);
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: var(--slate-500);
+      margin-bottom: 4px;
+    }
+
+    .detail-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    /* ========================================
+       TICKET THREAD
+    ======================================== */
+    .thread {
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 20px;
+      background: var(--slate-50);
+      border-radius: var(--radius-lg);
+      margin-bottom: 20px;
+    }
+
+    .thread-message {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .thread-message:last-child {
+      margin-bottom: 0;
+    }
+
+    .thread-message.internal {
+      background: rgba(255, 111, 0, 0.05);
+      margin: 0 -12px 16px;
+      padding: 12px;
+      border-radius: var(--radius);
+      border-left: 3px solid var(--orange-500);
+    }
+
+    .thread-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .thread-message.customer .thread-avatar {
+      background: var(--slate-300);
+      color: var(--slate-700);
+    }
+
+    .thread-message.agent .thread-avatar {
+      background: var(--orange-500);
+      color: var(--white);
+    }
+
+    .thread-message.internal .thread-avatar {
+      background: var(--warning-100);
+      color: var(--warning-600);
+    }
+
+    .thread-content {
+      flex: 1;
+    }
+
+    .thread-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .thread-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--slate-900);
+    }
+
+    .thread-time {
+      font-size: 12px;
+      color: var(--slate-500);
+    }
+
+    .thread-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: var(--warning-100);
+      color: var(--warning-600);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .thread-text {
+      font-size: 14px;
+      color: var(--slate-700);
+      line-height: 1.5;
+    }
+
+    /* ========================================
+       REPORT CARDS
+    ======================================== */
+    .report-card {
+      background: var(--white);
+      border: 1px solid var(--slate-200);
+      border-radius: var(--radius-lg);
+      padding: 28px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+
+    .report-card:hover {
+      border-color: var(--navy-800);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .report-icon {
+      font-size: 40px;
+      margin-bottom: 14px;
+    }
+
+    .report-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--slate-900);
+      margin-bottom: 6px;
+    }
+
+    .report-desc {
+      font-size: 13px;
+      color: var(--slate-500);
+    }
+
+    /* ========================================
+       KB ARTICLES
+    ======================================== */
+    .kb-article {
+      display: block;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--slate-100);
+      transition: background var(--transition-fast);
+    }
+
+    .kb-article:last-child {
+      border-bottom: none;
+    }
+
+    .kb-article:hover {
+      background: var(--slate-50);
+    }
+
+    .kb-article-title {
+      font-weight: 600;
+      color: var(--navy-800);
+      margin-bottom: 2px;
+    }
+
+    .kb-article-meta {
+      font-size: 12px;
+      color: var(--slate-500);
+    }
+
+    /* ========================================
+       TOAST NOTIFICATIONS
+    ======================================== */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .toast {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      background: var(--slate-900);
+      color: var(--white);
+      border-radius: var(--radius);
+      min-width: 300px;
+      box-shadow: var(--shadow-xl);
+      animation: toastIn 0.3s ease;
+    }
+
+    .toast.success { background: var(--success-600); }
+    .toast.error { background: var(--error-600); }
+    .toast.warning { background: var(--warning-600); }
+
+    .toast svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    @keyframes toastIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* ========================================
+       RESPONSIVE DESIGN
+    ======================================== */
+    @media (max-width: 1400px) {
+      .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 1200px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.active {
+        transform: translateX(0);
+      }
+
+      .sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 99;
+        opacity: 0;
+        visibility: hidden;
+        transition: all var(--transition-base);
+      }
+
+      .sidebar-backdrop.active {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .main {
+        margin-left: 0;
+      }
+
+      .menu-toggle {
+        display: flex;
+      }
+
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .search-box {
+        max-width: none;
+      }
+
+      .content {
+        padding: 16px;
+      }
+
+      .user-info {
+        display: none;
+      }
+
+      .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Mobile Sidebar Backdrop -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+
+  <div class="app">
+    <!-- ========================================
+         SIDEBAR NAVIGATION
+    ======================================== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="#" class="logo">
+          <div class="logo-mark">H</div>
+          <div class="logo-text">
+            <div class="logo-brand">Hass <span>Petroleum</span></div>
+            <div class="logo-sub">Staff Portal</div>
+          </div>
+        </a>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Overview</div>
+          <a class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Dashboard
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Tickets</div>
+          <a class="nav-item" data-page="my-queue" onclick="showPage('my-queue')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            My Queue
+            <span class="nav-badge">8</span>
+          </a>
+          <a class="nav-item" data-page="all-tickets" onclick="showPage('all-tickets')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            All Tickets
+          </a>
+          <a class="nav-item" data-page="escalated" onclick="showPage('escalated')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Escalated
+            <span class="nav-badge">3</span>
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Orders</div>
+          <a class="nav-item" data-page="orders" onclick="showPage('orders')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            Orders
+            <span class="nav-badge warning">5</span>
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Customers</div>
+          <a class="nav-item" data-page="customers" onclick="showPage('customers')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Customers
+          </a>
+          <a class="nav-item" data-page="documents" onclick="showPage('documents')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            Document Review
+            <span class="nav-badge warning">4</span>
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Reports</div>
+          <a class="nav-item" data-page="reports" onclick="showPage('reports')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Reports
+          </a>
+        </div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Admin</div>
+          <a class="nav-item" data-page="knowledge" onclick="showPage('knowledge')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Knowledge Base
+          </a>
+          <a class="nav-item" data-page="settings" onclick="showPage('settings')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Settings
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ========================================
+         MAIN CONTENT
+    ======================================== -->
+    <main class="main">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <button class="menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        </div>
+        <div class="header-right">
+          <select class="country-select" id="countryFilter">
+            <option value="KE">🇰🇪 Kenya</option>
+            <option value="UG">🇺🇬 Uganda</option>
+            <option value="TZ">🇹🇿 Tanzania</option>
+            <option value="RW">🇷🇼 Rwanda</option>
+            <option value="SS">🇸🇸 South Sudan</option>
+            <option value="SO">🇸🇴 Somalia</option>
+            <option value="CD">🇨🇩 DRC</option>
+            <option value="BI">🇧🇮 Burundi</option>
+            <option value="ZM">🇿🇲 Zambia</option>
+            <option value="ALL">🌍 All Countries</option>
+          </select>
+          <button class="header-btn" onclick="showToast('Notifications coming soon', 'info')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="notification-dot"></span>
+          </button>
+          <div class="user-menu">
+            <div class="user-avatar">SK</div>
+            <div class="user-info">
+              <div class="user-name">Sarah Kamau</div>
+              <div class="user-role">CS Agent</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Content -->
+      <div class="content">
+        <!-- ========================================
+             DASHBOARD PAGE
+        ======================================== -->
+        <section class="page active" id="page-dashboard">
+          <!-- Stats Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon navy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <span class="stat-change up">+12%</span>
+              </div>
+              <div class="stat-value">156</div>
+              <div class="stat-label">Tickets Today</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon orange">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <span class="stat-change down">-5%</span>
+              </div>
+              <div class="stat-value">28</div>
+              <div class="stat-label">Pending Response</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon error">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                </div>
+              </div>
+              <div class="stat-value">3</div>
+              <div class="stat-label">SLA Breaches</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon success">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </div>
+                <span class="stat-change up">+8%</span>
+              </div>
+              <div class="stat-value">94%</div>
+              <div class="stat-label">Resolution Rate</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon warning">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
+                </div>
+              </div>
+              <div class="stat-value">12</div>
+              <div class="stat-label">Orders Pending</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <div class="stat-icon info">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                </div>
+              </div>
+              <div class="stat-value">4.2</div>
+              <div class="stat-label">Avg Satisfaction</div>
+            </div>
+          </div>
+
+          <!-- Two Column Layout -->
+          <div class="grid-2">
+            <!-- My Queue Preview -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">My Queue</span>
+                <button class="btn btn-sm btn-outline" onclick="showPage('my-queue')">View All</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ticket</th>
+                      <th>Customer</th>
+                      <th>Subject</th>
+                      <th>SLA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="clickable" onclick="openTicketModal()">
+                      <td><strong>TKT-KE-2025-000092</strong></td>
+                      <td>
+                        <div class="customer-cell">
+                          <div class="customer-avatar">SP</div>
+                          <span class="customer-name">Safari Parks</span>
+                        </div>
+                      </td>
+                      <td>Quality complaint</td>
+                      <td>
+                        <div class="sla-cell">
+                          <div class="sla-bar"><div class="sla-fill danger" style="width: 100%"></div></div>
+                          <span class="sla-time danger">BREACH</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="clickable" onclick="openTicketModal()">
+                      <td><strong>TKT-KE-2025-000089</strong></td>
+                      <td>
+                        <div class="customer-cell">
+                          <div class="customer-avatar">AC</div>
+                          <span class="customer-name">Acme Industries</span>
+                        </div>
+                      </td>
+                      <td>Delivery delay</td>
+                      <td>
+                        <div class="sla-cell">
+                          <div class="sla-bar"><div class="sla-fill warning" style="width: 75%"></div></div>
+                          <span class="sla-time">45m</span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr class="clickable" onclick="openTicketModal()">
+                      <td><strong>TKT-KE-2025-000091</strong></td>
+                      <td>
+                        <div class="customer-cell">
+                          <div class="customer-avatar">BM</div>
+                          <span class="customer-name">Blue Moon Ltd</span>
+                        </div>
+                      </td>
+                      <td>Invoice query</td>
+                      <td>
+                        <div class="sla-cell">
+                          <div class="sla-bar"><div class="sla-fill ok" style="width: 30%"></div></div>
+                          <span class="sla-time">2h 15m</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Pending Orders -->
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Pending Orders</span>
+                <button class="btn btn-sm btn-outline" onclick="showPage('orders')">View All</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Order</th>
+                      <th>Customer</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>ORD-KE-2025-000312</strong></td>
+                      <td>Acme Industries</td>
+                      <td>KES 485,000</td>
+                      <td><span class="badge badge-open">Pending Approval</span></td>
+                    </tr>
+                    <tr>
+                      <td><strong>ORD-KE-2025-000311</strong></td>
+                      <td>Safari Parks</td>
+                      <td>KES 1,250,000</td>
+                      <td><span class="badge badge-progress">Loading</span></td>
+                    </tr>
+                    <tr>
+                      <td><strong>ORD-KE-2025-000310</strong></td>
+                      <td>Blue Moon Ltd</td>
+                      <td>KES 320,000</td>
+                      <td><span class="badge badge-progress">In Transit</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Feed -->
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <span class="card-title">Recent Activity</span>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon success">✓</div>
+              <div class="activity-content">
+                <div class="activity-title">Ticket Resolved</div>
+                <div class="activity-desc">TKT-KE-2025-000087 - Customer confirmed resolution</div>
+              </div>
+              <div class="activity-time">5 min ago</div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon info">→</div>
+              <div class="activity-content">
+                <div class="activity-title">New Ticket Assigned</div>
+                <div class="activity-desc">TKT-KE-2025-000093 - Billing query from Metro Foods</div>
+              </div>
+              <div class="activity-time">12 min ago</div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon warning">!</div>
+              <div class="activity-content">
+                <div class="activity-title">SLA Warning</div>
+                <div class="activity-desc">TKT-KE-2025-000089 - Response due in 45 minutes</div>
+              </div>
+              <div class="activity-time">20 min ago</div>
+            </div>
+            <div class="activity-item">
+              <div class="activity-icon navy">📦</div>
+              <div class="activity-content">
+                <div class="activity-title">Order Delivered</div>
+                <div class="activity-desc">ORD-KE-2025-000305 - Confirmed by customer</div>
+              </div>
+              <div class="activity-time">35 min ago</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             MY QUEUE PAGE
+        ======================================== -->
+        <section class="page" id="page-my-queue">
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search tickets...">
+            </div>
+            <select class="filter-select">
+              <option value="">All Status</option>
+              <option value="NEW">New</option>
+              <option value="OPEN">Open</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="PENDING">Pending Customer</option>
+            </select>
+            <select class="filter-select">
+              <option value="">All Priority</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+            <select class="filter-select">
+              <option value="">All Categories</option>
+              <option value="DELIVERY">Delivery</option>
+              <option value="QUALITY">Quality</option>
+              <option value="BILLING">Billing</option>
+              <option value="PRICING">Pricing</option>
+              <option value="ACCOUNT">Account</option>
+            </select>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ticket #</th>
+                    <th>Customer</th>
+                    <th>Subject</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>SLA</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000092</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">SP</div>
+                        <div>
+                          <div class="customer-name">Safari Parks Ltd</div>
+                          <div class="customer-segment">Strategic</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>Quality complaint - diesel contamination</td>
+                    <td>Quality</td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td><span class="badge badge-escalated">Escalated</span></td>
+                    <td>
+                      <div class="sla-cell">
+                        <div class="sla-bar"><div class="sla-fill danger" style="width: 100%"></div></div>
+                        <span class="sla-time danger">BREACH</span>
+                      </div>
+                    </td>
+                    <td>5m ago</td>
+                  </tr>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000091</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">BM</div>
+                        <div>
+                          <div class="customer-name">Blue Moon Ltd</div>
+                          <div class="customer-segment">Enterprise</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>Invoice discrepancy for December</td>
+                    <td>Billing</td>
+                    <td><span class="badge badge-high">High</span></td>
+                    <td><span class="badge badge-progress">In Progress</span></td>
+                    <td>
+                      <div class="sla-cell">
+                        <div class="sla-bar"><div class="sla-fill ok" style="width: 30%"></div></div>
+                        <span class="sla-time">2h 15m</span>
+                      </div>
+                    </td>
+                    <td>25m ago</td>
+                  </tr>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000089</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">AC</div>
+                        <div>
+                          <div class="customer-name">Acme Industries</div>
+                          <div class="customer-segment">SME</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>Delivery delay inquiry</td>
+                    <td>Delivery</td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td><span class="badge badge-open">Awaiting Reply</span></td>
+                    <td>
+                      <div class="sla-cell">
+                        <div class="sla-bar"><div class="sla-fill warning" style="width: 75%"></div></div>
+                        <span class="sla-time">45m</span>
+                      </div>
+                    </td>
+                    <td>1h ago</td>
+                  </tr>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000088</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">MF</div>
+                        <div>
+                          <div class="customer-name">Metro Foods</div>
+                          <div class="customer-segment">SME</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>New account setup assistance</td>
+                    <td>Account</td>
+                    <td><span class="badge badge-low">Low</span></td>
+                    <td><span class="badge badge-new">New</span></td>
+                    <td>
+                      <div class="sla-cell">
+                        <div class="sla-bar"><div class="sla-fill ok" style="width: 10%"></div></div>
+                        <span class="sla-time">7h 30m</span>
+                      </div>
+                    </td>
+                    <td>2h ago</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <!-- ========================================
+             ALL TICKETS PAGE
+        ======================================== -->
+        <section class="page" id="page-all-tickets">
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search all tickets...">
+            </div>
+            <select class="filter-select">
+              <option value="">All Agents</option>
+              <option value="me">My Tickets</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+            <select class="filter-select">
+              <option value="">All Status</option>
+              <option value="NEW">New</option>
+              <option value="OPEN">Open</option>
+              <option value="IN_PROGRESS">In Progress</option>
+            </select>
+            <select class="filter-select">
+              <option value="">All Priority</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+            </select>
+            <button class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              New Ticket
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="card-body" style="text-align: center; padding: 60px 24px;">
+              <div style="font-size: 56px; margin-bottom: 16px;">📋</div>
+              <div style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">All Tickets View</div>
+              <div style="color: var(--slate-500); margin-bottom: 24px;">156 total tickets across all agents</div>
+              <button class="btn btn-outline">Load Tickets</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             ESCALATED TICKETS PAGE
+        ======================================== -->
+        <section class="page" id="page-escalated">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Escalated Tickets</span>
+              <span class="badge badge-critical">3 Tickets</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ticket #</th>
+                    <th>Customer</th>
+                    <th>Subject</th>
+                    <th>Escalated To</th>
+                    <th>Reason</th>
+                    <th>Time in Escalation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000092</strong></td>
+                    <td>Safari Parks Ltd</td>
+                    <td>Quality complaint - diesel contamination</td>
+                    <td>CS Manager</td>
+                    <td>SLA Breach + Strategic Customer</td>
+                    <td style="color: var(--error-600); font-weight: 600;">2h 45m</td>
+                  </tr>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000078</strong></td>
+                    <td>Kenya Airways</td>
+                    <td>Jet fuel delivery urgent</td>
+                    <td>Operations Manager</td>
+                    <td>High Value Order Delay</td>
+                    <td style="color: var(--warning-600); font-weight: 600;">4h 20m</td>
+                  </tr>
+                  <tr class="clickable" onclick="openTicketModal()">
+                    <td><strong>TKT-KE-2025-000065</strong></td>
+                    <td>National Bank</td>
+                    <td>Credit limit dispute</td>
+                    <td>Finance Manager</td>
+                    <td>Credit Decision Required</td>
+                    <td>8h 15m</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             ORDERS PAGE
+        ======================================== -->
+        <section class="page" id="page-orders">
+          <div class="tabs">
+            <div class="tab active">Pending Approval (5)</div>
+            <div class="tab">In Progress (8)</div>
+            <div class="tab">Completed Today (23)</div>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Order #</th>
+                    <th>Customer</th>
+                    <th>Products</th>
+                    <th>Amount</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>ORD-KE-2025-000312</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">AC</div>
+                        <span class="customer-name">Acme Industries</span>
+                      </div>
+                    </td>
+                    <td>AGO 3,000L</td>
+                    <td>KES 485,000</td>
+                    <td><span class="badge badge-progress">Credit</span></td>
+                    <td><span class="badge badge-open">Pending Approval</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-success">Approve</button>
+                      <button class="btn btn-sm btn-outline" style="margin-left: 6px;">Review</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>ORD-KE-2025-000311</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">SP</div>
+                        <span class="customer-name">Safari Parks</span>
+                      </div>
+                    </td>
+                    <td>AGO 8,000L, PMS 2,000L</td>
+                    <td>KES 1,250,000</td>
+                    <td><span class="badge badge-resolved">Prepaid</span></td>
+                    <td><span class="badge badge-progress">Loading</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-outline">Track</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>ORD-KE-2025-000310</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">BM</div>
+                        <span class="customer-name">Blue Moon Ltd</span>
+                      </div>
+                    </td>
+                    <td>PMS 2,000L</td>
+                    <td>KES 320,000</td>
+                    <td><span class="badge badge-progress">Credit</span></td>
+                    <td><span class="badge badge-progress">In Transit</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-outline">Track</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><strong>ORD-KE-2025-000309</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">KA</div>
+                        <span class="customer-name">Kenya Airways</span>
+                      </div>
+                    </td>
+                    <td>JET-A1 50,000L</td>
+                    <td>KES 8,500,000</td>
+                    <td><span class="badge badge-progress">Credit</span></td>
+                    <td><span class="badge badge-open">Pending Approval</span></td>
+                    <td>
+                      <button class="btn btn-sm btn-success">Approve</button>
+                      <button class="btn btn-sm btn-outline" style="margin-left: 6px;">Review</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             CUSTOMERS PAGE
+        ======================================== -->
+        <section class="page" id="page-customers">
+          <div class="filter-bar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search customers...">
+            </div>
+            <select class="filter-select">
+              <option value="">All Segments</option>
+              <option value="STRATEGIC">Strategic</option>
+              <option value="ENTERPRISE">Enterprise</option>
+              <option value="SME">SME</option>
+              <option value="RETAIL">Retail</option>
+            </select>
+            <select class="filter-select">
+              <option value="">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="PENDING">Pending KYC</option>
+            </select>
+            <button class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              Add Customer
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Company</th>
+                    <th>Segment</th>
+                    <th>Credit Available</th>
+                    <th>Status</th>
+                    <th>Last Order</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>HASS-KE-000156</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">SP</div>
+                        <div>
+                          <div class="customer-name">Safari Parks Ltd</div>
+                          <div class="customer-segment">procurement@safari.ke</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-strategic">Strategic</span></td>
+                    <td>KES 15,200,000</td>
+                    <td><span class="badge badge-resolved">Active</span></td>
+                    <td>Jan 9, 2025</td>
+                    <td><button class="btn btn-sm btn-outline">View</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>HASS-KE-000089</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">BM</div>
+                        <div>
+                          <div class="customer-name">Blue Moon Ltd</div>
+                          <div class="customer-segment">orders@bluemoon.co.ke</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-enterprise">Enterprise</span></td>
+                    <td>KES 4,800,000</td>
+                    <td><span class="badge badge-resolved">Active</span></td>
+                    <td>Jan 7, 2025</td>
+                    <td><button class="btn btn-sm btn-outline">View</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>HASS-KE-000234</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">AC</div>
+                        <div>
+                          <div class="customer-name">Acme Industries</div>
+                          <div class="customer-segment">john@acme.co.ke</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-sme">SME</span></td>
+                    <td>KES 2,450,000</td>
+                    <td><span class="badge badge-resolved">Active</span></td>
+                    <td>Jan 8, 2025</td>
+                    <td><button class="btn btn-sm btn-outline">View</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>HASS-KE-000312</strong></td>
+                    <td>
+                      <div class="customer-cell">
+                        <div class="customer-avatar">MF</div>
+                        <div>
+                          <div class="customer-name">Metro Foods</div>
+                          <div class="customer-segment">admin@metro.co.ke</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-sme">SME</span></td>
+                    <td>KES 850,000</td>
+                    <td><span class="badge badge-open">Pending KYC</span></td>
+                    <td>Never</td>
+                    <td><button class="btn btn-sm btn-outline">Review</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+        <!-- ========================================
+             REPORTS PAGE
+        ======================================== -->
+        <section class="page" id="page-reports">
+          <div class="grid-3">
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">📊</div>
+              <div class="report-title">Ticket Analytics</div>
+              <div class="report-desc">Volume, SLA, resolution times</div>
+            </div>
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">📦</div>
+              <div class="report-title">Order Reports</div>
+              <div class="report-desc">Sales, delivery performance</div>
+            </div>
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">👥</div>
+              <div class="report-title">Customer Insights</div>
+              <div class="report-desc">Churn risk, lifetime value</div>
+            </div>
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">⏱️</div>
+              <div class="report-title">SLA Performance</div>
+              <div class="report-desc">Breaches, compliance rates</div>
+            </div>
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">👤</div>
+              <div class="report-title">Agent Performance</div>
+              <div class="report-desc">Individual metrics, rankings</div>
+            </div>
+            <div class="report-card" onclick="showToast('Report feature coming soon', 'info')">
+              <div class="report-icon">⭐</div>
+              <div class="report-title">Satisfaction Scores</div>
+              <div class="report-desc">CSAT trends, feedback</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             KNOWLEDGE BASE PAGE
+        ======================================== -->
+        <section class="page" id="page-knowledge">
+          <div class="filter-bar">
+            <div class="search-box" style="flex: 1; max-width: none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search knowledge base...">
+            </div>
+            <button class="btn btn-primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              New Article
+            </button>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">📚 Getting Started</span>
+                <span style="font-size: 13px; color: var(--slate-500);">8 articles</span>
+              </div>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">How to set up a new customer account</div>
+                <div class="kb-article-meta">Updated 2 days ago • 156 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Understanding customer segments</div>
+                <div class="kb-article-meta">Updated 1 week ago • 89 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Processing credit applications</div>
+                <div class="kb-article-meta">Updated 3 days ago • 234 views</div>
+              </a>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">🎫 Ticket Handling</span>
+                <span style="font-size: 13px; color: var(--slate-500);">12 articles</span>
+              </div>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">SLA guidelines and escalation procedures</div>
+                <div class="kb-article-meta">Updated 1 day ago • 312 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Handling quality complaints</div>
+                <div class="kb-article-meta">Updated 5 days ago • 178 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Delivery issue resolution steps</div>
+                <div class="kb-article-meta">Updated 1 week ago • 256 views</div>
+              </a>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">💳 Billing & Credit</span>
+                <span style="font-size: 13px; color: var(--slate-500);">9 articles</span>
+              </div>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Invoice dispute resolution process</div>
+                <div class="kb-article-meta">Updated 4 days ago • 145 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Credit limit adjustment procedures</div>
+                <div class="kb-article-meta">Updated 2 weeks ago • 98 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Payment terms and conditions</div>
+                <div class="kb-article-meta">Updated 1 month ago • 187 views</div>
+              </a>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">🔧 Products & Operations</span>
+                <span style="font-size: 13px; color: var(--slate-500);">7 articles</span>
+              </div>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Fuel product specifications</div>
+                <div class="kb-article-meta">Updated 3 days ago • 267 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Quality testing procedures</div>
+                <div class="kb-article-meta">Updated 1 week ago • 134 views</div>
+              </a>
+              <a href="#" class="kb-article">
+                <div class="kb-article-title">Delivery scheduling guidelines</div>
+                <div class="kb-article-meta">Updated 5 days ago • 201 views</div>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================
+             SETTINGS PAGE
+        ======================================== -->
+        <section class="page" id="page-settings">
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Profile Settings</span>
+              </div>
+              <div class="card-body">
+                <form id="profileForm" onsubmit="saveProfile(event)">
+                  <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-input" value="Sarah Kamau">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" class="form-input" value="sarah.kamau@hasspetroleum.com">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Phone</label>
+                    <input type="tel" class="form-input" value="+254 722 456789">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <input type="text" class="form-input" value="Customer Service Agent" disabled style="background: var(--slate-100);">
+                  </div>
+                  <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Notification Preferences</span>
+              </div>
+              <div class="card-body" style="padding-top: 8px; padding-bottom: 8px;">
+                <div style="display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--slate-100);">
+                  <input type="checkbox" id="notifAssigned" checked style="width: 20px; height: 20px; accent-color: var(--navy-800); margin-top: 2px;">
+                  <label for="notifAssigned" style="flex: 1; cursor: pointer;">
+                    <div style="font-weight: 600; color: var(--slate-900);">New Ticket Assigned</div>
+                    <div style="font-size: 13px; color: var(--slate-500);">When a ticket is assigned to you</div>
+                  </label>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--slate-100);">
+                  <input type="checkbox" id="notifSLA" checked style="width: 20px; height: 20px; accent-color: var(--navy-800); margin-top: 2px;">
+                  <label for="notifSLA" style="flex: 1; cursor: pointer;">
+                    <div style="font-weight: 600; color: var(--slate-900);">SLA Warnings</div>
+                    <div style="font-size: 13px; color: var(--slate-500);">Before SLA breach occurs</div>
+                  </label>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--slate-100);">
+                  <input type="checkbox" id="notifReply" checked style="width: 20px; height: 20px; accent-color: var(--navy-800); margin-top: 2px;">
+                  <label for="notifReply" style="flex: 1; cursor: pointer;">
+                    <div style="font-weight: 600; color: var(--slate-900);">Customer Replies</div>
+                    <div style="font-size: 13px; color: var(--slate-500);">When customer responds to your tickets</div>
+                  </label>
+                </div>
+                <div style="display: flex; align-items: flex-start; gap: 12px; padding: 16px 0;">
+                  <input type="checkbox" id="notifEscalation" checked style="width: 20px; height: 20px; accent-color: var(--navy-800); margin-top: 2px;">
+                  <label for="notifEscalation" style="flex: 1; cursor: pointer;">
+                    <div style="font-weight: 600; color: var(--slate-900);">Escalation Alerts</div>
+                    <div style="font-size: 13px; color: var(--slate-500);">When tickets are escalated</div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ========================================
+       TICKET DETAIL MODAL
+  ======================================== -->
+  <div class="modal-overlay" id="ticketModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">TKT-KE-2025-000089</span>
+        <button class="modal-close" onclick="closeModal('ticketModal')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Detail Grid -->
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Customer</div>
+            <div class="detail-value">Acme Industries</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Contact</div>
+            <div class="detail-value">John Doe</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Phone</div>
+            <div class="detail-value">+254 722 123456</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Category</div>
+            <div class="detail-value">Delivery</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Priority</div>
+            <div class="detail-value"><span class="badge badge-medium">Medium</span></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Status</div>
+            <div class="detail-value"><span class="badge badge-open">Awaiting Reply</span></div>
+          </div>
+        </div>
+
+        <!-- Subject -->
+        <div style="margin-bottom: 20px;">
+          <div style="font-weight: 600; margin-bottom: 6px; color: var(--slate-700);">Subject</div>
+          <div>Delivery delay inquiry for order ORD-KE-2025-000245</div>
+        </div>
+
+        <!-- Thread -->
+        <div class="thread">
+          <div class="thread-message customer">
+            <div class="thread-avatar">JD</div>
+            <div class="thread-content">
+              <div class="thread-header">
+                <span class="thread-name">John Doe (Customer)</span>
+                <span class="thread-time">Jan 9, 2025 10:30 AM</span>
+              </div>
+              <div class="thread-text">Hi, I placed order ORD-KE-2025-000245 on January 8th and was told delivery would be on January 9th. It's now past the expected time. Can you please provide an update?</div>
+            </div>
+          </div>
+          <div class="thread-message agent">
+            <div class="thread-avatar">SK</div>
+            <div class="thread-content">
+              <div class="thread-header">
+                <span class="thread-name">Sarah Kamau</span>
+                <span class="thread-time">Jan 9, 2025 11:15 AM</span>
+              </div>
+              <div class="thread-text">Good morning. Thank you for reaching out. I'm checking with our logistics team regarding your delivery status. I'll update you shortly.</div>
+            </div>
+          </div>
+          <div class="thread-message internal">
+            <div class="thread-avatar">SK</div>
+            <div class="thread-content">
+              <div class="thread-header">
+                <span class="thread-name">Sarah Kamau</span>
+                <span class="thread-time">Jan 9, 2025 11:20 AM</span>
+                <span class="thread-tag">Internal Note</span>
+              </div>
+              <div class="thread-text">Called logistics - tanker was delayed due to traffic on Mombasa Road. ETA 30 minutes.</div>
+            </div>
+          </div>
+          <div class="thread-message agent">
+            <div class="thread-avatar">SK</div>
+            <div class="thread-content">
+              <div class="thread-header">
+                <span class="thread-name">Sarah Kamau</span>
+                <span class="thread-time">Jan 9, 2025 11:45 AM</span>
+              </div>
+              <div class="thread-text">Update: Your delivery is currently in transit. There was a slight delay due to traffic conditions on Mombasa Road. The tanker is approximately 30 minutes away. Our driver will contact you upon arrival.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Form -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Update Status</label>
+            <select class="form-select">
+              <option value="OPEN">Awaiting Reply</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="PENDING">Pending Customer</option>
+              <option value="RESOLVED">Resolved</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Assign To</label>
+            <select class="form-select">
+              <option value="">Sarah Kamau (Me)</option>
+              <option value="agent2">James Ochieng</option>
+              <option value="agent3">Mary Wanjiku</option>
+              <option value="agent4">Peter Otieno</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Add Reply</label>
+          <textarea class="form-textarea" placeholder="Type your response..."></textarea>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--slate-600);">
+              <input type="checkbox" style="width: 16px; height: 16px;"> Internal note (not visible to customer)
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal('ticketModal')">Cancel</button>
+        <button class="btn btn-secondary">Save Draft</button>
+        <button class="btn btn-primary">Send Reply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================
+       TOAST CONTAINER
+  ======================================== -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ========================================
+       JAVASCRIPT
+  ======================================== -->
+  <script>
+    // ========================================
+    // CONFIGURATION
+    // ========================================
+    const CONFIG = {
+      API_URL: 'https://script.google.com/macros/s/AKfycbwmt3FlKQpMd8Mv3e8pq6KcvunIlrCDOQFsSrsWBcn3xLhC4xz6URugDbYweqWwNZR2/exec'
+    };
+
+    // ========================================
+    // PAGE NAVIGATION
+    // ========================================
+    function showPage(pageId) {
+      // Hide all pages
+      document.querySelectorAll('.page').forEach(page => {
+        page.classList.remove('active');
+      });
+      
+      // Show target page
+      const targetPage = document.getElementById('page-' + pageId);
+      if (targetPage) {
+        targetPage.classList.add('active');
+      }
+      
+      // Update nav active state
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.page === pageId) {
+          item.classList.add('active');
+        }
+      });
+      
+      // Update page title
+      const pageTitles = {
+        'dashboard': 'Dashboard',
+        'my-queue': 'My Queue',
+        'all-tickets': 'All Tickets',
+        'escalated': 'Escalated Tickets',
+        'orders': 'Orders',
+        'customers': 'Customers',
+        'documents': 'Document Review',
+        'reports': 'Reports',
+        'knowledge': 'Knowledge Base',
+        'settings': 'Settings'
+      };
+      
+      document.getElementById('pageTitle').textContent = pageTitles[pageId] || 'Dashboard';
+      
+      // Close mobile sidebar
+      if (window.innerWidth <= 1024) {
+        closeSidebar();
+      }
+      
+      // Scroll to top
+      window.scrollTo(0, 0);
+    }
+
+    // ========================================
+    // SIDEBAR TOGGLE (Mobile)
+    // ========================================
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      
+      sidebar.classList.toggle('active');
+      backdrop.classList.toggle('active');
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      
+      sidebar.classList.remove('active');
+      backdrop.classList.remove('active');
+    }
+
+    // ========================================
+    // MODAL FUNCTIONS
+    // ========================================
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    function openTicketModal() {
+      openModal('ticketModal');
+    }
+
+    // Close modal on backdrop click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+          document.body.style.overflow = '';
+        }
+      });
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.active').forEach(modal => {
+          modal.classList.remove('active');
+        });
+        document.body.style.overflow = '';
+      }
+    });
+
+    // ========================================
+    // TAB SWITCHING
+    // ========================================
+    document.querySelectorAll('.tabs').forEach(tabGroup => {
+      tabGroup.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+          tabGroup.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+        });
+      });
+    });
+
+    // ========================================
+    // SETTINGS FORM
+    // ========================================
+    function saveProfile(e) {
+      e.preventDefault();
+      showToast('Profile updated successfully!', 'success');
+    }
+
+    // ========================================
+    // TOAST NOTIFICATIONS
+    // ========================================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      
+      let icon = '';
+      if (type === 'success') {
+        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+      } else if (type === 'error') {
+        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+      } else if (type === 'warning') {
+        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+      } else {
+        icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+      }
+      
+      toast.innerHTML = icon + '<span>' + message + '</span>';
+      container.appendChild(toast);
+      
+      // Auto-remove after 5 seconds
+      setTimeout(() => {
+        toast.style.animation = 'toastIn 0.3s ease reverse';
+        setTimeout(() => toast.remove(), 300);
+      }, 5000);
+    }
+
+    // ========================================
+    // API HELPER (for future backend integration)
+    // ========================================
+    async function apiCall(service, action, data = {}) {
+      try {
+        const response = await fetch(CONFIG.API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            service: service,
+            action: action,
+            ...data
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'An error occurred');
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('API Error:', error);
+        showToast(error.message || 'Network error. Please try again.', 'error');
+        throw error;
+      }
+    }
+
+    // ========================================
+    // COUNTRY FILTER
+    // ========================================
+    document.getElementById('countryFilter').addEventListener('change', function() {
+      showToast('Switched to ' + this.options[this.selectedIndex].text, 'info');
+      // In production, this would reload data for the selected country
+    });
+  </script>
+</body>
+</html>
