@@ -84,6 +84,26 @@ function getSLAAnalytics(filters, affiliateFilter) {
   var orders  = sheetToObjects(ss.getSheetByName('Orders'));
   var f       = parseFilters(filters, affiliateFilter);
 
+  // Merge uploaded Oracle SLAData — these have direct finance/LA variance from Oracle
+  var slaDataSheet = ss.getSheetByName('SLAData');
+  var oracleVarMap = {}; // document_number -> { finance_variance_min, la_variance_min }
+  if (slaDataSheet) {
+    var slaRows = sheetToObjects(slaDataSheet);
+    slaRows.forEach(function(sr) {
+      if (sr.source_type === 'SALES' && sr.document_number) {
+        oracleVarMap[String(sr.document_number).trim()] = {
+          finance_variance_min: parseFloat(sr.finance_variance_min) || 0,
+          la_variance_min: parseFloat(sr.la_variance_min) || 0,
+          oracle_approver: sr.oracle_approver || '',
+          affiliate: sr.affiliate || '',
+          created_at: sr.created_at || '',
+          approved_at: sr.approved_at || '',
+          dispatched_at: sr.dispatched_at || ''
+        };
+      }
+    });
+  }
+
   // Filter delivered orders in date range
   var filtered = orders.filter(function(o){
     if (!['DELIVERED','IN_TRANSIT'].includes(o.status)) return false;
@@ -119,8 +139,16 @@ function getSLAAnalytics(filters, affiliateFilter) {
     var g = groups[aff];
     g.orders++;
 
-    // Finance variance: submitted_at to approved_at in minutes
-    if (o.submitted_at && o.approved_at) {
+    // Check if Oracle SLAData has direct variance values for this order
+    var oracleKey = String(o.oracle_order_id || '').trim();
+    var oracleVar = oracleKey ? oracleVarMap[oracleKey] : null;
+
+    // Finance variance: use Oracle data if available, otherwise compute from timestamps
+    if (oracleVar && oracleVar.finance_variance_min > 0) {
+      var fMin = oracleVar.finance_variance_min;
+      g.totalFinance += fMin;
+      if (fMin <= 60) g.financeOk++;
+    } else if (o.submitted_at && o.approved_at) {
       var fMin = (new Date(o.approved_at) - new Date(o.submitted_at)) / 60000;
       if (!isNaN(fMin) && fMin > 0) {
         g.totalFinance += fMin;
@@ -128,8 +156,12 @@ function getSLAAnalytics(filters, affiliateFilter) {
       }
     }
 
-    // LA variance: approved_at to dispatched_at in minutes
-    if (o.approved_at && o.dispatched_at) {
+    // LA variance: use Oracle data if available, otherwise compute from timestamps
+    if (oracleVar && oracleVar.la_variance_min > 0) {
+      var lMin = oracleVar.la_variance_min;
+      g.totalLA += lMin;
+      if (lMin <= 120) g.laOk++;
+    } else if (o.approved_at && o.dispatched_at) {
       var lMin = (new Date(o.dispatched_at) - new Date(o.approved_at)) / 60000;
       if (!isNaN(lMin) && lMin > 0) {
         g.totalLA += lMin;
