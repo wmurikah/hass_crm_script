@@ -1,16 +1,16 @@
 /**
  * HASS PETROLEUM CMS - DATABASE SERVICE
  * Version: 2.0.0
- * Database: Google Cloud Firestore
+ * Database: Google Sheets (SPREADSHEET_ID in Script Properties)
  *
  * Advanced CRUD operations with:
  * - CacheService integration (5-minute TTL)
  * - Batch operations
  * - Query helpers (findWhere, search, pagination)
  * - Transaction-like operations with LockService
- * - DB object (read-only Firestore helpers)
+ * - DB object (read-only helpers)
  *
- * Core Firestore functions are in DatabaseSetup.gs
+ * Core Sheet functions are in DatabaseSetup.gs
  */
 
 // ============================================================================
@@ -27,72 +27,61 @@ const DB_SERVICE_CONFIG = {
 };
 
 // ============================================================================
-// DB OBJECT (read-only Firestore helpers)
+// DB OBJECT (read-only helpers)
 // ============================================================================
 
 const DB = {
-  getById: function(collection, id) {
-    return firestoreGet(collection, id);
+  getById: function(sheetName, id) {
+    var idField = getIdField(sheetName);
+    if (!idField) return null;
+    return findRow(sheetName, idField, id);
   },
 
-  getByIds: function(collection, ids) {
+  getByIds: function(sheetName, ids) {
     if (!ids || ids.length === 0) return [];
-    var results = [];
-    for (var i = 0; i < ids.length; i++) {
-      var doc = firestoreGet(collection, ids[i]);
-      if (doc) results.push(doc);
-    }
-    return results;
+    var idField = getIdField(sheetName);
+    if (!idField) return [];
+    var data = getSheetData(sheetName);
+    var idSet = {};
+    for (var i = 0; i < ids.length; i++) idSet[ids[i]] = true;
+    return data.filter(function(row) { return idSet[row[idField]]; });
   },
 
-  getAll: function(collection) {
-    return firestoreList(collection);
+  getAll: function(sheetName) {
+    return getSheetData(sheetName);
   },
 
-  getFiltered: function(collection, filters, orderBy, limit) {
-    var where = null;
+  getFiltered: function(sheetName, filters, orderBy, limit) {
+    var data = getSheetData(sheetName);
     var filterKeys = Object.keys(filters || {});
 
-    if (filterKeys.length === 1) {
-      var key = filterKeys[0];
-      where = {
-        fieldFilter: {
-          field: { fieldPath: key },
-          op: 'EQUAL',
-          value: toFirestoreValue(filters[key]),
-        },
-      };
-    } else if (filterKeys.length > 1) {
-      var compositeFilters = [];
+    var filtered = data.filter(function(row) {
       for (var i = 0; i < filterKeys.length; i++) {
-        compositeFilters.push({
-          fieldFilter: {
-            field: { fieldPath: filterKeys[i] },
-            op: 'EQUAL',
-            value: toFirestoreValue(filters[filterKeys[i]]),
-          },
-        });
+        if (String(row[filterKeys[i]]) !== String(filters[filterKeys[i]])) return false;
       }
-      where = {
-        compositeFilter: {
-          op: 'AND',
-          filters: compositeFilters,
-        },
-      };
-    }
+      return true;
+    });
 
-    var query = {};
-    if (where) query.where = where;
     if (orderBy) {
-      query.orderBy = [{ field: { fieldPath: orderBy }, direction: 'ASCENDING' }];
+      filtered.sort(function(a, b) {
+        var aVal = a[orderBy];
+        var bVal = b[orderBy];
+        if (typeof aVal === 'string' && typeof bVal === 'string') return aVal.localeCompare(bVal);
+        if (aVal < bVal) return -1;
+        if (aVal > bVal) return 1;
+        return 0;
+      });
     }
-    if (limit) query.limit = limit;
 
-    return firestoreQuery(collection, query);
+    if (limit) {
+      filtered = filtered.slice(0, limit);
+    }
+
+    return filtered;
   },
 
-  count: function(collection, filters) {
-    var results = DB.getFiltered(collection, filters);
+  count: function(sheetName, filters) {
+    var results = DB.getFiltered(sheetName, filters);
     return results.length;
   },
 };
@@ -204,8 +193,7 @@ function softDeleteRecord(sheetName, id, context) {
 }
 
 function hardDeleteRecord(sheetName, id, context) {
-  // Per spec: hard deletes are manual-only via Cloud Console
-  // Log the intent and soft-delete instead
+  // Log the intent and perform the delete
   var lock = LockService.getScriptLock();
   try {
     if (!lock.tryLock(DB_SERVICE_CONFIG.LOCK_TIMEOUT_MS)) {
@@ -340,10 +328,6 @@ function getById(sheetName, id) {
     var data = getCachedSheetData(sheetName);
     return data.find(function(row) { return row[idField] === id; }) || null;
   }
-  var collection = getCollectionName(sheetName);
-  var doc = firestoreGet(collection, id);
-  if (doc) return doc;
-  // Fallback: query by ID field
   return findRow(sheetName, idField, id);
 }
 
