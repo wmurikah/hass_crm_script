@@ -509,10 +509,39 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .dash-card-title { font-size:14px; font-weight:700; color:#0D1442; margin-bottom:14px; }
 .dash-card-body { font-size:13px; color:#64748b; }
 @media(max-width:900px){.dash-stat-row{grid-template-columns:repeat(2,1fr);}}
+
+/* ── Data Upload Tab ── */
+.upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+@media(max-width:900px){.upload-grid{grid-template-columns:1fr;}}
+.upload-section h3 { font-size:15px; font-weight:700; color:#0D1442; margin-bottom:4px; }
+.upload-section .upload-desc { font-size:12px; color:#64748b; margin-bottom:14px; line-height:1.5; }
+.upload-schema { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin-bottom:16px; font-size:12px; }
+.schema-header { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:10px; }
+.schema-table { width:100%; border-collapse:collapse; }
+.schema-table th { background:#f1f5f9; padding:7px 10px; text-align:left; font-size:11px; font-weight:700; color:#64748b; border-bottom:1px solid #e2e8f0; }
+.schema-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#374151; }
+.col-required { color:#dc2626 !important; font-weight:700 !important; font-family:'Space Mono',monospace; }
+.col-optional { color:#2563eb !important; font-weight:500 !important; font-family:'Space Mono',monospace; }
+.col-optional-row { opacity:0.75; }
+.schema-legend { margin-top:10px; font-size:11px; color:#64748b; }
+.upload-drop-zone { border:2px dashed #e2e8f0; border-radius:12px; padding:28px; text-align:center; cursor:pointer; transition:all 0.2s; background:#fff; }
+.upload-drop-zone:hover, .upload-drop-zone.drag-over { border-color:#1A237E; background:#f0f4ff; }
+.upload-drop-zone p { color:#64748b; font-size:13px; margin:8px 0; }
+.btn-upload-choose { padding:7px 16px; border:1.5px solid #1A237E; border-radius:8px; background:#fff; color:#1A237E; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.upload-file-name { margin-top:10px; font-size:12px; font-weight:600; color:#16a34a; }
+.btn-process-upload { width:100%; margin-top:12px; padding:11px; background:#1A237E; color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit; transition:background 0.15s; }
+.btn-process-upload:hover:not(:disabled) { background:#283593; }
+.btn-process-upload:disabled { background:#e2e8f0; color:#94a3b8; cursor:not-allowed; }
+.upload-log { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-top:20px; }
+.upload-log-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.upload-log-header h4 { margin:0; font-size:14px; font-weight:700; color:#0D1442; }
+.upload-log-body { font-family:'Space Mono',monospace; font-size:11px; color:#374151; max-height:280px; overflow-y:auto; background:#f8fafc; border-radius:8px; padding:12px; line-height:1.8; white-space:pre-wrap; }
+.upload-summary { margin-top:12px; padding:12px; background:#dcfce7; border-radius:8px; font-size:13px; font-weight:600; color:#15803d; display:none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -1137,7 +1166,11 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     <div class="page-section" id="page-settings">
 
       <div class="settings-tabs" id="settingsTabs">
-        <button class="settings-tab active" data-tab="tab-erp" onclick="switchSettingsTab('tab-erp',this)">
+        <button class="settings-tab active" data-tab="tab-upload" id="tabBtnUpload" onclick="switchSettingsTab('tab-upload',this)" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+          Data Upload
+        </button>
+        <button class="settings-tab" data-tab="tab-erp" onclick="switchSettingsTab('tab-erp',this)">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
           Oracle EBS
         </button>
@@ -1163,8 +1196,106 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </button>
       </div>
 
+      <!-- Data Upload Tab (SUPER_ADMIN / GROUP_HEAD only) -->
+      <div class="settings-panel" id="tab-upload" style="display:none">
+        <div class="settings-card">
+          <div class="settings-help">Upload Oracle EBS SALES and PUR export files (.xls, .xlsx, .csv) to import order approval data directly into the portal. Data is parsed client-side and sent to the server in batches.</div>
+          <div class="upload-grid">
+
+            <!-- SALES Upload -->
+            <div class="upload-section">
+              <h3>SALES File Upload</h3>
+              <p class="upload-desc">Oracle EBS order approval data. Export from Oracle using the SALES report for any affiliate and any period.</p>
+              <div class="upload-schema">
+                <div class="schema-header">Required columns in your SALES file:</div>
+                <table class="schema-table">
+                  <thead><tr><th>Column Name</th><th>Description</th><th>Example</th></tr></thead>
+                  <tbody>
+                    <tr><td class="col-required">AFFILIATE</td><td>Full affiliate name</td><td>Hass Petroleum Tanzania</td></tr>
+                    <tr><td class="col-required">DOCUMENT_NUMBER</td><td>Oracle order/document number</td><td>246004369</td></tr>
+                    <tr><td class="col-required">CUSTOMER_CODE</td><td>Oracle customer code</td><td>376380</td></tr>
+                    <tr><td class="col-required">CUSTOMER_NAME</td><td>Customer company name</td><td>SANGO ENERGY GROUP LIMITED</td></tr>
+                    <tr><td class="col-required">CREATE_DATE_TIME</td><td>Order creation datetime</td><td>2025-10-01 12:06:27</td></tr>
+                    <tr><td class="col-required">APPROVAL_DATE_TIME</td><td>Finance approval datetime</td><td>2025-10-01 14:49:50</td></tr>
+                    <tr><td class="col-required">FINANCE_VARIANCE</td><td>Minutes from creation to finance approval</td><td>163.38</td></tr>
+                    <tr><td class="col-required">APPROVER</td><td>Staff username who approved</td><td>HILLARY.KARIUKI</td></tr>
+                    <tr><td class="col-required">APPROVAL_STATUS</td><td>APPROVE or REJECT</td><td>APPROVE</td></tr>
+                    <tr><td class="col-required">ORDERED_ITEM</td><td>Product code (AGO, PMS, etc)</td><td>AGO</td></tr>
+                    <tr><td class="col-required">LOADING_AUTHORITY_DATE</td><td>LA issued datetime</td><td>2025-10-01 17:02:18</td></tr>
+                    <tr><td class="col-required">LOADING_AUTHORITY_VARIANCE</td><td>Minutes from approval to LA</td><td>295.85</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">USER_NAME</td><td>Staff who raised the order</td><td>JUDITH.MWEU</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">POSTING_DATE</td><td>Oracle posting date</td><td>2025-10-01 12:06:27</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">INVOICE_VARIANCE</td><td>Minutes to invoice creation</td><td>324.72</td></tr>
+                  </tbody>
+                </table>
+                <div class="schema-legend"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional, used if present</div>
+              </div>
+              <div class="upload-drop-zone" id="salesDropZone">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+                <p>Drag and drop SALES .xls/.xlsx/.csv here</p>
+                <p style="font-size:11px;color:#94a3b8;">or</p>
+                <button class="btn-upload-choose" onclick="document.getElementById('salesFileInput').click()">Choose File</button>
+                <input type="file" id="salesFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handleSalesFile(this)">
+                <div class="upload-file-name" id="salesFileName"></div>
+              </div>
+              <button class="btn-process-upload" id="btnProcessSales" onclick="processSalesUpload()" disabled>Process SALES File</button>
+            </div>
+
+            <!-- PUR Upload -->
+            <div class="upload-section">
+              <h3>PUR File Upload (Purchase Orders)</h3>
+              <p class="upload-desc">Oracle EBS purchase order approval data. Export from Oracle using the PUR report. Supports multi-sheet files (Product, LPG, Lubes, Local, Export).</p>
+              <div class="upload-schema">
+                <div class="schema-header">Required columns in your PUR file:</div>
+                <table class="schema-table">
+                  <thead><tr><th>Column Name</th><th>Description</th><th>Example</th></tr></thead>
+                  <tbody>
+                    <tr><td class="col-required">purchase Number</td><td>Oracle PO number</td><td>250</td></tr>
+                    <tr><td class="col-required">Req Description</td><td>Purchase description</td><td>MT BLUE INTEGRITY-PMS KG 17-2025</td></tr>
+                    <tr><td class="col-required">NATURE</td><td>Product type (PRODUCT, LPG, LUBES)</td><td>PRODUCT</td></tr>
+                    <tr><td class="col-required">ORIGINAL_CREATION_DATE</td><td>PO creation datetime</td><td>2025-10-13 12:08:01</td></tr>
+                    <tr><td class="col-required">SUBMISSION_FOR_APPROVAL_DATE</td><td>Submitted for approval datetime</td><td>2025-10-13 12:10:49</td></tr>
+                    <tr><td class="col-required">TIME_DIFF_RAISEPO_TOAPROVALSUBMIT</td><td>Minutes from creation to submission</td><td>2.8</td></tr>
+                    <tr><td class="col-required">PURCHASE_ORDER_CREATED_BY</td><td>Staff username</td><td>ADAN.ABDILLAHI</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVAL_DATE</td><td>First approver datetime</td><td>2025-10-13 14:10:50</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVER</td><td>First approver full name</td><td>Mr. Otieno Bernard Michael</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVALS_VARIANCE</td><td>Minutes for first approval</td><td>120.02</td></tr>
+                    <tr><td class="col-required">AUTHORIZATION_STATUS</td><td>APPROVED or REJECTED</td><td>APPROVED</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVAL_DATE</td><td>Second approver datetime</td><td>2025-10-13 14:42:26</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVER</td><td>Second approver name</td><td>Mr. Musembi Gabriel Musyoka</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVALS_VARIANCE</td><td>Minutes for second approval</td><td>151.62</td></tr>
+                    <tr class="col-optional-row"><td class="col-optional">THIRD through SEVENTH</td><td>Additional approver chain columns</td><td>(same pattern)</td></tr>
+                  </tbody>
+                </table>
+                <div class="schema-legend"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
+              </div>
+              <div class="upload-drop-zone" id="purDropZone">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
+                <p>Drag and drop PUR .xls/.xlsx/.csv here</p>
+                <p style="font-size:11px;color:#94a3b8;">or</p>
+                <button class="btn-upload-choose" onclick="document.getElementById('purFileInput').click()">Choose File</button>
+                <input type="file" id="purFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handlePurFile(this)">
+                <div class="upload-file-name" id="purFileName"></div>
+              </div>
+              <button class="btn-process-upload" id="btnProcessPur" onclick="processPurUpload()" disabled>Process PUR File</button>
+            </div>
+
+          </div>
+
+          <!-- Processing Log -->
+          <div class="upload-log" id="uploadLog" style="display:none">
+            <div class="upload-log-header">
+              <h4>Processing Log</h4>
+              <button onclick="document.getElementById('uploadLog').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;">&#x2715;</button>
+            </div>
+            <div class="upload-log-body" id="uploadLogBody"></div>
+            <div class="upload-summary" id="uploadSummary"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Oracle EBS Tab -->
-      <div class="settings-panel" id="tab-erp">
+      <div class="settings-panel" id="tab-erp" style="display:none">
         <div class="settings-card">
           <div class="settings-help">Used to sync Orders, Approvals, and Customer data from Oracle EBS. The portal calls Oracle REST APIs for FINANCE_VARIANCE and LOADING_AUTHORITY_VARIANCE data.</div>
           <div class="form-group"><label>EBS Host URL</label><input data-setting-key="ORACLE_HOST" type="url" class="form-input" placeholder="https://erp.hasspetroleum.com:8080"></div>
@@ -1376,6 +1507,21 @@ function applyRoleVisibility() {
   if (usersNav)    usersNav.style.display    = adminRoles.includes(role)  ? 'flex' : 'none';
   if (reportsNav)  reportsNav.style.display  = reportRoles.includes(role) ? 'flex' : 'none';
   if (settingsNav) settingsNav.style.display = role === 'SUPER_ADMIN'     ? 'flex' : 'none';
+
+  // Data Upload tab: visible to SUPER_ADMIN and GROUP_HEAD only
+  var uploadTabBtn = document.getElementById('tabBtnUpload');
+  if (uploadTabBtn) {
+    var canUpload = ['SUPER_ADMIN','GROUP_HEAD'].includes(role);
+    uploadTabBtn.style.display = canUpload ? 'flex' : 'none';
+    if (canUpload) {
+      // Make Data Upload the default active tab
+      switchSettingsTab('tab-upload', uploadTabBtn);
+    } else {
+      // Fall back to Oracle EBS as default
+      var erpBtn = document.querySelector('[data-tab="tab-erp"]');
+      if (erpBtn) switchSettingsTab('tab-erp', erpBtn);
+    }
+  }
 }
 
 /* ── Affiliate Filter ── */
@@ -2271,6 +2417,194 @@ function showSettingsToast(msg, isSuccess) {
   toast.className = 'settings-toast ' + (isSuccess ? 'success' : 'error');
   toast.style.display = 'block';
   setTimeout(function() { toast.style.display = 'none'; }, 3000);
+}
+
+/* ══════════ Data Upload (SALES / PUR) ══════════ */
+(function() {
+  // Drag-and-drop setup
+  function setupDropZone(zoneId, fileInputId) {
+    var zone = document.getElementById(zoneId);
+    if (!zone) return;
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', function(e) {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      var input = document.getElementById(fileInputId);
+      if (e.dataTransfer.files.length > 0) { input.files = e.dataTransfer.files; input.dispatchEvent(new Event('change')); }
+    });
+  }
+  // Init drop zones after DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setupDropZone('salesDropZone','salesFileInput'); setupDropZone('purDropZone','purFileInput'); });
+  } else {
+    setupDropZone('salesDropZone','salesFileInput'); setupDropZone('purDropZone','purFileInput');
+  }
+})();
+
+// SALES file handling
+function handleSalesFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  document.getElementById('salesFileName').textContent = file.name;
+  document.getElementById('btnProcessSales').disabled = false;
+  window._salesFile = file;
+}
+
+function processSalesUpload() {
+  if (!window._salesFile) return;
+  var btn = document.getElementById('btnProcessSales');
+  btn.disabled = true;
+  btn.textContent = 'Parsing file...';
+  showUploadLog();
+  logUpload('Reading file: ' + window._salesFile.name);
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var allRows = [];
+      wb.SheetNames.forEach(function(name) {
+        var ws = wb.Sheets[name];
+        var json = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
+        logUpload('Sheet \'' + name + '\': ' + json.length + ' rows');
+        json.forEach(function(r) { r._sheet = name; });
+        allRows = allRows.concat(json);
+      });
+
+      logUpload('Total rows parsed: ' + allRows.length);
+      logUpload('Validating required columns...');
+
+      var required = ['DOCUMENT_NUMBER','CUSTOMER_NAME','CREATE_DATE_TIME','APPROVAL_DATE_TIME','FINANCE_VARIANCE','LOADING_AUTHORITY_VARIANCE'];
+      var firstRow = allRows[0] || {};
+      var missing = required.filter(function(c) { return !(c in firstRow); });
+      if (missing.length > 0) {
+        logUpload('ERROR: Missing required columns: ' + missing.join(', '));
+        btn.disabled = false; btn.textContent = 'Process SALES File';
+        return;
+      }
+      logUpload('Validation passed. Sending to server...');
+
+      var BATCH = 50;
+      var batches = [];
+      for (var i = 0; i < allRows.length; i += BATCH) batches.push(allRows.slice(i, i + BATCH));
+
+      var processed = 0;
+      function sendBatch(idx) {
+        if (idx >= batches.length) {
+          logUpload('All batches processed. Total: ' + processed + ' rows imported.');
+          var summary = document.getElementById('uploadSummary');
+          summary.textContent = 'Import complete: ' + processed + ' SALES records processed.';
+          summary.style.display = 'block';
+          btn.textContent = 'Process SALES File'; btn.disabled = false;
+          return;
+        }
+        btn.textContent = 'Processing batch ' + (idx + 1) + '/' + batches.length + '...';
+        google.script.run
+          .withSuccessHandler(function(r) {
+            if (r.success) { processed += r.imported; logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' imported, ' + r.skipped + ' skipped'); }
+            else { logUpload('Batch ' + (idx+1) + ' ERROR: ' + r.error); }
+            sendBatch(idx + 1);
+          })
+          .withFailureHandler(function(e) { logUpload('Server error: ' + e.message); sendBatch(idx + 1); })
+          .handleDataUploadRequest({ action: 'importSalesRows', rows: batches[idx] });
+      }
+      sendBatch(0);
+
+    } catch(ex) {
+      logUpload('Parse error: ' + ex.message);
+      btn.disabled = false; btn.textContent = 'Process SALES File';
+    }
+  };
+  reader.readAsBinaryString(window._salesFile);
+}
+
+// PUR file handling
+function handlePurFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  document.getElementById('purFileName').textContent = file.name;
+  document.getElementById('btnProcessPur').disabled = false;
+  window._purFile = file;
+}
+
+function processPurUpload() {
+  if (!window._purFile) return;
+  var btn = document.getElementById('btnProcessPur');
+  btn.disabled = true;
+  btn.textContent = 'Parsing file...';
+  showUploadLog();
+  logUpload('Reading file: ' + window._purFile.name);
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var allRows = [];
+      wb.SheetNames.forEach(function(name) {
+        var ws = wb.Sheets[name];
+        var json = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
+        logUpload('Sheet \'' + name + '\': ' + json.length + ' rows');
+        json.forEach(function(r) { r._sheet = name; });
+        allRows = allRows.concat(json);
+      });
+
+      logUpload('Total rows parsed: ' + allRows.length);
+      logUpload('Validating required columns...');
+
+      var required = ['purchase Number','ORIGINAL_CREATION_DATE','SUBMISSION_FOR_APPROVAL_DATE','TIME_DIFF_RAISEPO_TOAPROVALSUBMIT','FIRST_APPROVAL_DATE','FIRST_APPROVER','AUTHORIZATION_STATUS'];
+      var firstRow = allRows[0] || {};
+      var missing = required.filter(function(c) { return !(c in firstRow); });
+      if (missing.length > 0) {
+        logUpload('ERROR: Missing required columns: ' + missing.join(', '));
+        btn.disabled = false; btn.textContent = 'Process PUR File';
+        return;
+      }
+      logUpload('Validation passed. Sending to server...');
+
+      var BATCH = 50;
+      var batches = [];
+      for (var i = 0; i < allRows.length; i += BATCH) batches.push(allRows.slice(i, i + BATCH));
+
+      var processed = 0;
+      function sendBatch(idx) {
+        if (idx >= batches.length) {
+          logUpload('All batches processed. Total: ' + processed + ' rows imported.');
+          var summary = document.getElementById('uploadSummary');
+          summary.textContent = 'Import complete: ' + processed + ' PUR records processed.';
+          summary.style.display = 'block';
+          btn.textContent = 'Process PUR File'; btn.disabled = false;
+          return;
+        }
+        btn.textContent = 'Processing batch ' + (idx + 1) + '/' + batches.length + '...';
+        google.script.run
+          .withSuccessHandler(function(r) {
+            if (r.success) { processed += r.imported; logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' imported, ' + r.skipped + ' skipped'); }
+            else { logUpload('Batch ' + (idx+1) + ' ERROR: ' + r.error); }
+            sendBatch(idx + 1);
+          })
+          .withFailureHandler(function(e) { logUpload('Server error: ' + e.message); sendBatch(idx + 1); })
+          .handleDataUploadRequest({ action: 'importPurRows', rows: batches[idx] });
+      }
+      sendBatch(0);
+
+    } catch(ex) {
+      logUpload('Parse error: ' + ex.message);
+      btn.disabled = false; btn.textContent = 'Process PUR File';
+    }
+  };
+  reader.readAsBinaryString(window._purFile);
+}
+
+// Upload log helpers
+function showUploadLog() {
+  document.getElementById('uploadLog').style.display = 'block';
+  document.getElementById('uploadSummary').style.display = 'none';
+}
+function logUpload(msg) {
+  var body = document.getElementById('uploadLogBody');
+  var ts = new Date().toLocaleTimeString();
+  body.innerHTML += '[' + ts + '] ' + msg + '\n';
+  body.scrollTop = body.scrollHeight;
 }
 
 
