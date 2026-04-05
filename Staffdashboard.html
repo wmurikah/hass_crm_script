@@ -476,6 +476,15 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .settings-toast.success { background:#16a34a; }
 .settings-toast.error { background:#dc2626; }
 @keyframes slideUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+.dash-welcome { margin-bottom:24px; } .dash-welcome h2 { font-size:22px; font-weight:700; color:#0D1442; }
+.dash-stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+.dash-stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px 18px; text-align:center; }
+.dash-stat-val { font-family:'Space Mono',monospace; font-size:32px; font-weight:700; color:#0D1442; }
+.dash-stat-label { font-size:12px; color:#64748b; margin-top:6px; font-weight:500; }
+.dash-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px 20px; }
+.dash-card-title { font-size:14px; font-weight:700; color:#0D1442; margin-bottom:14px; }
+.dash-card-body { font-size:13px; color:#64748b; }
+@media(max-width:900px){.dash-stat-row{grid-template-columns:repeat(2,1fr);}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -573,6 +582,14 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <span class="topbar-badge" id="notifCount" style="display:none">0</span>
     </button>
 
+    <button onclick="logoutUser()" class="topbar-icon-btn" title="Sign out" style="color:#64748b;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+        <polyline points="16 17 21 12 16 7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
+
     <div class="topbar-user" onclick="toggleUserMenu()">
       <div class="topbar-avatar" id="topbarAvatar">JO</div>
       <div>
@@ -587,7 +604,22 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   <main id="mainContent">
 
     <div class="page-section" id="page-dashboard">
-      <div class="page-placeholder">Dashboard — loaded by SD-2 prompt</div>
+      <div class="dash-welcome">
+        <h2 id="dashWelcomeHeading">Good morning</h2>
+        <p style="color:#64748b;font-size:14px;margin-top:4px;">Here is what is happening across the Hass Petroleum Group today.</p>
+      </div>
+
+      <div class="dash-stat-row" id="dashStatRow">
+        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatOpenTickets">--</div><div class="dash-stat-label">Open Tickets</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatPendingOrders">--</div><div class="dash-stat-label">Pending Orders</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatInTransit">--</div><div class="dash-stat-label">In Transit</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatUnreadChat">--</div><div class="dash-stat-label">Unread Messages</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
+        <div class="dash-card" id="dashRecentTickets"><div class="dash-card-title">Recent Tickets</div><div class="dash-card-body" id="dashTicketList">Loading...</div></div>
+        <div class="dash-card" id="dashRecentOrders"><div class="dash-card-title">Recent Orders</div><div class="dash-card-body" id="dashOrderList">Loading...</div></div>
+      </div>
     </div>
 
     <div class="page-section" id="page-sla">
@@ -1089,18 +1121,28 @@ function showPage(name) {
 
   currentPage = name;
 
-  // Lazy-load SLA data on first visit
-  if (name === 'sla' && !slaLoaded) { slaLoaded = true; loadSLAData('month'); }
-
-  // Lazy-load Users data
-  if (name === 'users') loadUsersData();
-
-  // Lazy-load Chat
-  if (name === 'chat') initChat();
-  else stopChatPoll();
-
-  // Lazy-load Settings
-  if (name === 'settings') loadSettingsData();
+  // Lazy-load page data
+  switch(name) {
+    case 'dashboard':
+      if (typeof loadDashboardHome === 'function') loadDashboardHome();
+      break;
+    case 'sla':
+      if (typeof loadSLAData === 'function' && !window.slaLoaded) { window.slaLoaded=true; loadSLAData('month'); }
+      break;
+    case 'chat':
+      if (typeof selectRoom === 'function' && !window.chatLoaded) { window.chatLoaded=true; selectRoom('ROOM_GENERAL'); }
+      if (typeof initChat === 'function') initChat();
+      break;
+    case 'users':
+      if (typeof loadUsersPage === 'function' && !window.usersLoaded) { window.usersLoaded=true; loadUsersPage(); }
+      if (typeof loadUsersData === 'function') loadUsersData();
+      break;
+    case 'settings':
+      if (typeof loadSettings === 'function' && !window.settingsLoaded) { window.settingsLoaded=true; loadSettings(); }
+      if (typeof loadSettingsData === 'function') loadSettingsData();
+      break;
+  }
+  if (name !== 'chat' && typeof stopChatPoll === 'function') stopChatPoll();
 
   // Hide affiliate filter on admin pages
   var afFilter = document.getElementById('affiliateFilter');
@@ -1154,35 +1196,54 @@ function formatRole(role) {
 
 /* ── Logout ── */
 function logoutUser() {
-  var token = SESSION.token || '';
-  if (token) google.script.run.handleAuthRequest({ action:'logout', token:token });
+  var token = (typeof SESSION !== 'undefined' && SESSION.token) ? SESSION.token : (sessionStorage.getItem('hass_token') || '');
+  if (token && typeof google !== 'undefined' && google.script) {
+    google.script.run.handleAuthRequest({ action: 'logout', token: token });
+  }
   sessionStorage.clear();
-  window.location.href = window.location.href.split('?')[0];
+  // Redirect to login — strip all query params
+  var base = window.location.href.split('?')[0];
+  window.location.href = base;
 }
 
 /* ── Init ── */
 function initDashboard() {
-  google.script.run.withSuccessHandler(function(info) {
-    var name = info.name || SESSION.userId;
-    var role = info.role || SESSION.role;
-    var initials = name.split(' ').map(function(w){ return w[0]; }).join('').substring(0,2).toUpperCase();
+  google.script.run
+    .withSuccessHandler(function(info) {
+      var name     = (info.name || SESSION.userId).trim();
+      var role     = info.role || SESSION.role;
+      var initials = name.split(' ').map(function(w){return w[0]||'';}).join('').substring(0,2).toUpperCase();
 
-    document.getElementById('sidebarName').textContent  = name;
-    document.getElementById('sidebarRole').textContent  = formatRole(role);
-    document.getElementById('sidebarAvatar').textContent= initials;
-    document.getElementById('topbarName').textContent   = name;
-    document.getElementById('topbarRole').textContent   = formatRole(role);
-    document.getElementById('topbarAvatar').textContent = initials;
+      ['sidebarName','topbarName'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.textContent = name;
+      });
+      ['sidebarRole','topbarRole'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.textContent = formatRole(role);
+      });
+      ['sidebarAvatar','topbarAvatar'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.textContent = initials;
+      });
 
-    // Load logo
-    google.script.run.withSuccessHandler(function(url){
-      if (url) document.getElementById('sidebarLogo').src = url;
-    }).getLogoUrl();
+      SESSION.role = role;
+      SESSION.name = name;
 
-    applyRoleVisibility();
-    showPage('dashboard');
+      google.script.run.withSuccessHandler(function(url){
+        if (url) {
+          var logoEls = document.querySelectorAll('.sidebar-logo, #sidebarLogo');
+          logoEls.forEach(function(el){ el.src = url; });
+        }
+      }).getLogoUrl();
 
-  }).handleAuthRequest({ action:'getStaffInfo', userId: SESSION.userId, token: SESSION.token });
+      if (typeof applyRoleVisibility === 'function') applyRoleVisibility();
+      if (typeof showPage === 'function') showPage('dashboard');
+    })
+    .withFailureHandler(function() {
+      if (typeof showPage === 'function') showPage('dashboard');
+    })
+    .handleAuthRequest({ action:'getStaffInfo', userId: SESSION.userId, token: SESSION.token });
 }
 
 /* ── SLA Analytics ── */
@@ -1793,6 +1854,41 @@ function showSettingsToast(msg, isSuccess) {
   setTimeout(function() { toast.style.display = 'none'; }, 3000);
 }
 
+
+/* ══════════ Dashboard Home ══════════ */
+function loadDashboardHome() {
+  var hour = new Date().getHours();
+  var greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  var hEl = document.getElementById('dashWelcomeHeading');
+  if (hEl) hEl.textContent = greeting + (SESSION.name ? ', ' + SESSION.name.split(' ')[0] : '') + '.';
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (!data.success) return;
+      var set = function(id, val){ var el=document.getElementById(id); if(el) el.textContent=val; };
+      set('dStatOpenTickets',   data.openTickets);
+      set('dStatPendingOrders', data.pendingOrders);
+      set('dStatInTransit',     data.inTransit);
+      set('dStatUnreadChat',    data.unreadMessages);
+
+      var tl = document.getElementById('dashTicketList');
+      if (tl && data.recentTickets.length > 0) {
+        tl.innerHTML = data.recentTickets.map(function(t){
+          var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
+          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+'</div><div style="font-size:12px;color:#64748b;">'+t.subject.substring(0,45)+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+t.priority+'</span></div>';
+        }).join('');
+      }
+
+      var ol = document.getElementById('dashOrderList');
+      if (ol && data.recentOrders.length > 0) {
+        ol.innerHTML = data.recentOrders.map(function(o){
+          var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
+          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+o.country_code+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+o.status.replace('_',' ')+'</span></div>';
+        }).join('');
+      }
+    })
+    .handleDashboardRequest({ action:'getDashboardSummary', affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL' });
+}
 
 /* ══════════ INIT ══════════ */
 document.addEventListener('DOMContentLoaded', function(){

@@ -687,7 +687,7 @@ body {
   width: 0%;
   background: linear-gradient(90deg, #FF6F00, #FFB300);
   border-radius: 2px;
-  transition: width 1.1s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 1.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .lt-status {
@@ -1994,29 +1994,20 @@ body {
     // Show the overlay
     overlay.style.display = 'flex';
 
-    // Animate the progress bar after wave settles
-    setTimeout(function() {
-      bar.style.width = '75%';
-      statusEl.textContent = 'Loading your workspace...';
-    }, 600);
+    // Animate progress bar — 5 second linger while data loads
+    setTimeout(function() { bar.style.width='35%';  statusEl.textContent='Signing you in...'; },        800);
+    setTimeout(function() { bar.style.width='60%';  statusEl.textContent='Loading your workspace...'; },1800);
+    setTimeout(function() { bar.style.width='82%';  statusEl.textContent='Fetching your data...'; },    3000);
+    setTimeout(function() { bar.style.width='95%';  statusEl.textContent='Almost ready...'; },           4200);
+    setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome aboard.'; },           4800);
 
-    setTimeout(function() {
-      bar.style.width = '95%';
-      statusEl.textContent = 'Almost ready...';
-    }, 1100);
-
-    // Exit and redirect
-    setTimeout(function() {
-      bar.style.width = '100%';
-      statusEl.textContent = 'Done';
-    }, 1450);
-
+    // Exit wave and redirect
     setTimeout(function() {
       overlay.classList.add('lt-exit');
       setTimeout(function() {
         window.location.href = result.redirectUrl;
       }, 480);
-    }, 1600);
+    }, 5000);
   };
 
 })();

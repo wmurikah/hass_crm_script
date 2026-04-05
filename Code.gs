@@ -57,26 +57,29 @@ function serveStaffDashboard(session, token) {
 }
 
 function serveCustomerPortal(session, token) {
-  // Enrich with customerId from Contacts
   var customerId = '';
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getSpreadsheet();
     var sheet = ss.getSheetByName('Contacts');
     if (sheet) {
       var data = sheet.getDataRange().getValues();
       var h = data[0].map(function(x){ return String(x||'').toLowerCase().trim(); });
       var cidCol  = h.indexOf('contact_id');
       var custCol = h.indexOf('customer_id');
+      var nameCol = h.indexOf('first_name');
+      var lastCol = h.indexOf('last_name');
+      var name = '';
       for (var r = 1; r < data.length; r++) {
         if (String(data[r][cidCol]||'').trim() === session.userId) {
           customerId = String(data[r][custCol]||'').trim();
+          name = String(data[r][nameCol]||'').trim() + ' ' + String(data[r][lastCol]||'').trim();
           break;
         }
       }
+      session.name = name.trim();
     }
-  } catch(e) { Logger.log('serveCustomerPortal enrich: ' + e.message); }
+  } catch(e) { Logger.log('serveCustomerPortal: ' + e.message); }
 
-  var scriptUrl2 = ScriptApp.getService().getUrl();
   var tmpl = HtmlService.createTemplateFromFile('Customerportal');
   tmpl.SESSION = JSON.stringify({
     contactId:  session.userId,
@@ -84,10 +87,9 @@ function serveCustomerPortal(session, token) {
     userType:   'CUSTOMER',
     role:       'CUSTOMER',
     token:      token,
-    name:       '',
-    scriptUrl:  scriptUrl2
+    name:       session.name || ''
   });
-  tmpl.scriptUrl = scriptUrl2;
+  tmpl.scriptUrl = ScriptApp.getService().getUrl();
   return tmpl.evaluate()
     .setTitle('Hass Petroleum — Customer Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
