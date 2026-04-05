@@ -1,6 +1,7 @@
 /**
  * HASS PETROLEUM CMS - NOTIFICATION SERVICE
- * Version: 1.0.0
+ * Version: 2.0.0
+ * Email: Microsoft Graph API (hassaudit@outlook.com) with MailApp fallback
  * 
  * Handles:
  * - Multi-channel notifications (Email, SMS, WhatsApp, Push, In-App)
@@ -197,7 +198,8 @@ function createBulkNotification(notificationData, recipients) {
 // ============================================================================
 
 /**
- * Sends an email notification using Gmail service.
+ * Sends an email notification using Microsoft Graph API.
+ * Falls back to MailApp if Graph API fails.
  * @param {string} to - Recipient email
  * @param {string} subject - Email subject
  * @param {string} body - Email body
@@ -206,41 +208,102 @@ function createBulkNotification(notificationData, recipients) {
  */
 function sendEmailNotification(to, subject, body, options = {}) {
   try {
-    // Build HTML body if plain text provided
     const htmlBody = options.htmlBody || buildEmailHTML(subject, body, options);
-    
-    const emailOptions = {
+
+    // Try Microsoft Graph API first
+    const graphResult = sendViaGraphAPI_(to, subject, htmlBody, options);
+    if (graphResult.success) {
+      logIntegration('EMAIL', 'OUTBOUND', 'graph-api', { to, subject }, { success: true }, 200);
+      return { success: true };
+    }
+
+    // Fallback to MailApp
+    Logger.log('[NotificationService] Graph API failed, falling back to MailApp: ' + graphResult.error);
+    MailApp.sendEmail({
       to: to,
       subject: subject,
       htmlBody: htmlBody,
-      name: options.senderName || NOTIFICATION_CONFIG.DEFAULT_SENDER_NAME,
-    };
-    
-    // Add CC/BCC if specified
-    if (options.cc) {
-      emailOptions.cc = options.cc;
-    }
-    
-    if (options.bcc) {
-      emailOptions.bcc = options.bcc;
-    }
-    
-    // Add attachments if any
-    if (options.attachments && options.attachments.length > 0) {
-      emailOptions.attachments = options.attachments;
-    }
-    
-    // Send via Gmail
-    GmailApp.sendEmail(to, subject, body, emailOptions);
-    
-    // Log
-    logIntegration('EMAIL', 'OUTBOUND', 'send', { to, subject }, { success: true }, 200);
-    
+      name: 'Hass Petroleum CMS',
+      replyTo: 'hassaudit@outlook.com',
+      cc: options.cc || '',
+      bcc: options.bcc || '',
+    });
+
+    logIntegration('EMAIL', 'OUTBOUND', 'mailapp-fallback', { to, subject }, { success: true, fallback: true }, 200);
     return { success: true };
-    
+
   } catch (e) {
-    Logger.log('sendEmailNotification error: ' + e.message);
+    Logger.log('[NotificationService] sendEmailNotification error: ' + e.message);
     logIntegration('EMAIL', 'OUTBOUND', 'send', { to, subject }, { error: e.message }, 500);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Sends email via Microsoft Graph API.
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} htmlBody - HTML body
+ * @param {Object} options - Additional options
+ * @returns {Object} Result
+ */
+function sendViaGraphAPI_(to, subject, htmlBody, options) {
+  try {
+    const GRAPH_ENDPOINT = 'https://graph.microsoft.com/v1.0/users/hassaudit@outlook.com/sendMail';
+    const token = PropertiesService.getScriptProperties().getProperty('GRAPH_API_TOKEN');
+
+    if (!token) {
+      return { success: false, error: 'GRAPH_API_TOKEN not configured' };
+    }
+
+    const toRecipients = [{ emailAddress: { address: to } }];
+    if (options.cc) {
+      var ccList = options.cc.split(',').map(function(e) { return { emailAddress: { address: e.trim() } }; });
+    }
+    if (options.bcc) {
+      var bccList = options.bcc.split(',').map(function(e) { return { emailAddress: { address: e.trim() } }; });
+    }
+
+    const payload = {
+      message: {
+        subject: subject,
+        body: {
+          contentType: 'HTML',
+          content: htmlBody,
+        },
+        toRecipients: toRecipients,
+        replyTo: [{ emailAddress: { address: 'hassaudit@outlook.com' } }],
+        from: {
+          emailAddress: {
+            address: 'hassaudit@outlook.com',
+            name: 'Hass Petroleum CMS',
+          },
+        },
+      },
+      saveToSentItems: false,
+    };
+
+    if (ccList) payload.message.ccRecipients = ccList;
+    if (bccList) payload.message.bccRecipients = bccList;
+
+    const response = UrlFetchApp.fetch(GRAPH_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+
+    const code = response.getResponseCode();
+    if (code >= 200 && code < 300) {
+      return { success: true };
+    }
+
+    return { success: false, error: 'Graph API HTTP ' + code + ': ' + response.getContentText() };
+
+  } catch (e) {
     return { success: false, error: e.message };
   }
 }
