@@ -68,6 +68,61 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
 .sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
 .order-line-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+/* Consumption Analytics Styles */
+.consumption-header { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+.period-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+.period-tab { padding:7px 14px; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; color:#64748b; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+.period-tab:hover { border-color:#1A237E; color:#1A237E; }
+.period-tab.active { background:#1A237E; border-color:#1A237E; color:#fff; }
+.month-input { border:1.5px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:13px; color:#1e293b; font-family:inherit; }
+.btn-apply-range { padding:6px 14px; background:#FF6F00; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+.btn-export { display:flex; align-items:center; gap:6px; padding:8px 16px; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; color:#1e293b; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; }
+.btn-export:hover { border-color:#FF6F00; color:#FF6F00; }
+.consumption-body { display:grid; grid-template-columns:260px 1fr; gap:20px; align-items:start; }
+@media(max-width:900px){ .consumption-body { grid-template-columns:1fr; } }
+.consumption-left { min-width:0; }
+.consumption-main { min-width:0; }
+.skeleton-card { height:80px; background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:10px; margin-bottom:12px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:16px 18px; margin-bottom:12px; transition:box-shadow 0.2s; }
+.kpi-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08); }
+.kpi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.kpi-icon { opacity:0.8; }
+.kpi-value-consumption { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; color:#1e293b; line-height:1.2; margin-bottom:4px; letter-spacing:-0.5px; }
+.kpi-label-consumption { font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; }
+.kpi-unit { font-weight:400; text-transform:none; color:#94a3b8; }
+.kpi-change { font-size:12px; font-weight:600; padding:2px 6px; border-radius:4px; }
+.kpi-change.up { color:#16a34a; background:#dcfce7; }
+.kpi-change.down { color:#dc2626; background:#fee2e2; }
+.kpi-change.neutral { color:#64748b; background:#f1f5f9; }
+.panel-section-heading { font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; margin:20px 0 12px; }
+.donut-legend { display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+.donut-legend-item { display:flex; align-items:center; justify-content:space-between; font-size:12px; }
+.donut-legend-dot { width:10px; height:10px; border-radius:50%; margin-right:6px; flex-shrink:0; }
+.donut-legend-label { display:flex; align-items:center; color:#1e293b; }
+.donut-legend-value { color:#64748b; font-family:'Space Mono',monospace; font-size:11px; }
+.chart-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; position:relative; }
+.chart-card-heading { font-size:13px; font-weight:600; color:#1e293b; margin-bottom:4px; }
+.chart-card-sub { font-size:11px; color:#94a3b8; margin-bottom:16px; }
+.bottom-charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+@media(max-width:700px){ .bottom-charts-row { grid-template-columns:1fr; } }
+.location-table-section { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; margin-top:16px; }
+.location-table-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.collapse-btn { background:none; border:none; font-size:12px; color:#64748b; cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; border-radius:6px; }
+.collapse-btn:hover { background:#f1f5f9; }
+.loc-table { width:100%; border-collapse:collapse; font-size:13px; }
+.loc-table th { text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; color:#64748b; padding:8px 12px; border-bottom:2px solid #e2e8f0; letter-spacing:0.5px; }
+.loc-table th.num { text-align:right; }
+.loc-table td { padding:10px 12px; border-bottom:1px solid #f1f5f9; color:#1e293b; vertical-align:middle; }
+.loc-table td.num { text-align:right; font-family:'Space Mono',monospace; font-size:12px; }
+.loc-table tr:hover td { background:#f8fafc; }
+.loc-table tr:last-child td { border-bottom:none; }
+.consumption-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; gap:16px; color:#64748b; font-size:14px; }
+.loader-spinner { width:36px; height:36px; border:3px solid #e2e8f0; border-top-color:#1A237E; border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+.consumption-error { text-align:center; padding:40px; color:#dc2626; }
+.consumption-error button { margin-top:12px; padding:8px 20px; background:#1A237E; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+.custom-range-error { color:#dc2626; font-size:12px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -79,6 +134,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <a class="hp-nav-item" onclick="showPage('orders')" data-page="orders">&#128230; Orders</a>
     <a class="hp-nav-item" onclick="showPage('tickets')" data-page="tickets">&#127915; Tickets</a>
     <a class="hp-nav-item" onclick="showPage('documents')" data-page="documents">&#128196; Documents</a>
+    <a class="hp-nav-item" onclick="showPage('consumption')" data-page="consumption"><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='12' width='4' height='8'/><rect x='9' y='8' width='4' height='12'/><rect x='15' y='4' width='4' height='16'/><path d='M3 3l18 0'/></svg> <span>My Consumption</span></a>
     <a class="hp-nav-item" onclick="showPage('account')" data-page="account">&#9881; Account</a>
   </nav>
   <div class="sidebar-footer"><a class="hp-nav-item" onclick="doLogout()">&#10140; Logout</a></div>
@@ -202,6 +258,128 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
         </div></div></div>
       </div>
     </div>
+
+    <!-- Consumption Analytics -->
+    <div class="hp-page" id="page-consumption">
+      <div class="consumption-header">
+        <div>
+          <div class="period-tabs" id="periodTabs">
+            <button class="period-tab active" data-period="month" onclick="selectPeriod('month',this)">This Month</button>
+            <button class="period-tab" data-period="quarter" onclick="selectPeriod('quarter',this)">This Quarter</button>
+            <button class="period-tab" data-period="year" onclick="selectPeriod('year',this)">This Year</button>
+            <button class="period-tab" data-period="ytm" onclick="selectPeriod('ytm',this)">Year to Month</button>
+            <button class="period-tab" data-period="custom" onclick="selectPeriod('custom',this)">Custom</button>
+          </div>
+          <div class="custom-range" id="customRange" style="display:none; align-items:center; gap:8px; margin-top:10px;">
+            <label style="font-size:12px;color:#64748b;">From</label>
+            <input type="month" id="customFrom" class="month-input">
+            <label style="font-size:12px;color:#64748b;">To</label>
+            <input type="month" id="customTo" class="month-input">
+            <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
+            <div id="customRangeError" class="custom-range-error" style="display:none"></div>
+          </div>
+        </div>
+        <button class="btn-export" onclick="exportConsumption()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export CSV
+        </button>
+      </div>
+
+      <div class="consumption-loader" id="consumptionLoader" style="display:none">
+        <div class="loader-spinner"></div>
+        <p>Loading your consumption data...</p>
+      </div>
+
+      <div class="consumption-error" id="consumptionError" style="display:none">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <p id="consumptionErrorMsg">Failed to load data.</p>
+        <button onclick="retryConsumption()">Retry</button>
+      </div>
+
+      <div id="consumptionContent" style="display:none">
+        <div class="consumption-body">
+          <!-- Left Panel -->
+          <div class="consumption-left" id="consumptionLeftPanel">
+            <div class="panel-loading" id="kpiLoading">
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+              <div class="skeleton-card"></div>
+            </div>
+            <div id="kpiCards" style="display:none">
+              <div class="kpi-card" id="kpiVolume" style="border-left-color:#1A237E">
+                <div class="kpi-top">
+                  <span class="kpi-icon" style="color:#1A237E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></span>
+                  <span class="kpi-change neutral" id="kpiVolumeChange">--</span>
+                </div>
+                <div class="kpi-value-consumption" id="kpiVolumeVal">--</div>
+                <div class="kpi-label-consumption">Total Volume <span class="kpi-unit">(Litres)</span></div>
+              </div>
+              <div class="kpi-card" id="kpiSpend" style="border-left-color:#FF6F00">
+                <div class="kpi-top">
+                  <span class="kpi-icon" style="color:#FF6F00"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+                  <span class="kpi-change neutral" id="kpiSpendChange">--</span>
+                </div>
+                <div class="kpi-value-consumption" id="kpiSpendVal">--</div>
+                <div class="kpi-label-consumption">Total Spend <span class="kpi-unit">(KES)</span></div>
+              </div>
+              <div class="kpi-card" id="kpiAvgOrder" style="border-left-color:#0d9488">
+                <div class="kpi-top">
+                  <span class="kpi-icon" style="color:#0d9488"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                  <span class="kpi-change neutral" id="kpiAvgChange">--</span>
+                </div>
+                <div class="kpi-value-consumption" id="kpiAvgVal">--</div>
+                <div class="kpi-label-consumption">Avg Order Size <span class="kpi-unit">(Litres)</span></div>
+              </div>
+              <div class="kpi-card" id="kpiOrdersCard" style="border-left-color:#7c3aed">
+                <div class="kpi-top">
+                  <span class="kpi-icon" style="color:#7c3aed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg></span>
+                  <span class="kpi-change neutral" id="kpiOrdersChange">--</span>
+                </div>
+                <div class="kpi-value-consumption" id="kpiOrdersVal">--</div>
+                <div class="kpi-label-consumption">Orders Placed <span class="kpi-unit">(Orders)</span></div>
+              </div>
+            </div>
+            <h4 class="panel-section-heading">Product Split</h4>
+            <canvas id="productDonutChart" height="200"></canvas>
+            <div id="donutLegend" class="donut-legend"></div>
+          </div>
+
+          <!-- Main Chart Area -->
+          <div class="consumption-main" id="consumptionMain">
+            <div class="chart-card">
+              <div class="chart-card-heading">Volume and Spend Trend <span id="trendPeriodLabel" style="font-size:12px;color:#94a3b8;margin-left:8px;"></span></div>
+              <div style="position:relative;height:280px;"><canvas id="trendChart"></canvas></div>
+            </div>
+            <div class="bottom-charts-row">
+              <div class="chart-card" id="spendProductCard">
+                <div class="chart-card-heading">Spend by Product</div>
+                <div style="position:relative;height:200px;"><canvas id="spendProductChart"></canvas></div>
+              </div>
+              <div class="chart-card" id="delivPerfCard">
+                <div class="chart-card-heading">Delivery Performance</div>
+                <div class="chart-card-sub">Hours from order to delivery</div>
+                <div style="position:relative;height:200px;"><canvas id="delivPerfChart"></canvas></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Table -->
+        <div class="location-table-section" id="locationTableSection">
+          <div class="location-table-header">
+            <h4 class="chart-card-heading">Consumption by Delivery Location</h4>
+            <button class="collapse-btn" id="collapseLocBtn" onclick="toggleLocationTable()">Collapse <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+          </div>
+          <div id="locationTableBody">
+            <table class="loc-table">
+              <thead><tr><th>Location</th><th class="num">Orders</th><th class="num">Volume (L)</th><th class="num">Spend</th><th>Last Order</th></tr></thead>
+              <tbody id="locTableRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -244,6 +422,8 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1100"><div class="toast hp-toast" id="appToast" role="alert"><div class="toast-body" id="toastBody"></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
 const AFFILIATE_MAP={KE:{code:'HPK',name:'Kenya'},UG:{code:'HPU',name:'Uganda'},TZ:{code:'HPT',name:'Tanzania'},RW:{code:'HPR',name:'Rwanda'},SS:{code:'HSS',name:'South Sudan'},ZM:{code:'HPZ',name:'Zambia'},DRC:{code:'HPC',name:'DR Congo'},HTW:{code:'HTW',name:'Terminal'}};
 let currentCustomer=null, currentContact=null;
@@ -253,8 +433,9 @@ function showPage(id){
   document.querySelectorAll('.hp-nav-item').forEach(n=>n.classList.remove('active'));
   var pg=document.getElementById('page-'+id); if(pg) pg.classList.add('active');
   var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
-  var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',account:'My Account'};
+  var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account'};
   document.getElementById('pageTitle').textContent=t[id]||id;
+  if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('month'); }
 }
 
 function showToast(msg,type){
@@ -349,6 +530,334 @@ function changePassword(){
 function doLogout(){google.script.run.withSuccessHandler(function(){google.script.host.close();}).processRequest({service:'auth',action:'logout'});}
 
 document.addEventListener('DOMContentLoaded',function(){showPage('dashboard');});
+
+/* ===== Consumption Analytics ===== */
+let currentPeriod = 'month';
+let currentConsumptionData = null;
+let trendChartInstance = null;
+let donutChartInstance = null;
+let spendChartInstance = null;
+let delivPerfChartInstance = null;
+
+function selectPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-tab').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  var customRange = document.getElementById('customRange');
+  var errEl = document.getElementById('customRangeError');
+  if (errEl) { errEl.style.display = 'none'; }
+  if (period === 'custom') {
+    customRange.style.display = 'flex';
+    return;
+  }
+  customRange.style.display = 'none';
+  loadConsumptionData(period);
+}
+
+function applyCustomRange() {
+  var from = document.getElementById('customFrom').value;
+  var to = document.getElementById('customTo').value;
+  var errEl = document.getElementById('customRangeError');
+  if (!from || !to || from > to) {
+    errEl.textContent = 'Please select a valid date range';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  loadConsumptionData({ from: from, to: to });
+}
+
+function loadConsumptionData(period) {
+  document.getElementById('consumptionLoader').style.display = 'flex';
+  document.getElementById('consumptionError').style.display = 'none';
+  document.getElementById('consumptionContent').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(onConsumptionLoaded)
+    .withFailureHandler(onConsumptionError)
+    .handleOrderRequest({
+      service: 'orders',
+      action: 'customerConsumption',
+      customerId: currentCustomer ? currentCustomer.customer_id : null,
+      period: period
+    });
+}
+
+function onConsumptionLoaded(data) {
+  document.getElementById('consumptionLoader').style.display = 'none';
+  if (!data || !data.success) {
+    onConsumptionError({ message: (data && data.error) || 'Failed to load consumption data' });
+    return;
+  }
+  currentConsumptionData = data;
+  document.getElementById('consumptionContent').style.display = 'block';
+  document.getElementById('kpiLoading').style.display = 'none';
+  document.getElementById('kpiCards').style.display = 'block';
+  renderKPICards(data.kpis);
+  renderDonutChart(data.byProduct);
+  renderTrendChart(data.monthlyTrend);
+  renderSpendByProductChart(data.byProduct);
+  renderDeliveryPerfChart(data.deliveryPerformance);
+  renderLocationTable(data.byLocation);
+  var periodLabel = '';
+  if (typeof currentPeriod === 'string') {
+    var labels = { month: 'This Month', quarter: 'This Quarter', year: 'This Year', ytm: 'Year to Month' };
+    periodLabel = labels[currentPeriod] || currentPeriod;
+  } else if (currentPeriod && currentPeriod.from) {
+    periodLabel = currentPeriod.from + ' to ' + currentPeriod.to;
+  }
+  document.getElementById('trendPeriodLabel').textContent = periodLabel;
+}
+
+function onConsumptionError(err) {
+  document.getElementById('consumptionLoader').style.display = 'none';
+  document.getElementById('consumptionContent').style.display = 'none';
+  document.getElementById('consumptionError').style.display = 'block';
+  document.getElementById('consumptionErrorMsg').textContent = (err && err.message) || 'Failed to load consumption data';
+}
+
+function retryConsumption() {
+  loadConsumptionData(currentPeriod);
+}
+
+function formatMoney(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+  return Number(n).toLocaleString();
+}
+
+function renderChange(elId, pct) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (pct === null || pct === undefined) {
+    el.textContent = '--';
+    el.className = 'kpi-change neutral';
+    return;
+  }
+  var up = pct >= 0;
+  el.textContent = (up ? '\u2191' : '\u2193') + Math.abs(pct).toFixed(1) + '%';
+  el.className = 'kpi-change ' + (up ? 'up' : 'down');
+}
+
+function renderKPICards(kpis) {
+  if (!kpis) return;
+  document.getElementById('kpiVolumeVal').textContent = Number(kpis.totalVolume || 0).toLocaleString();
+  document.getElementById('kpiSpendVal').textContent = 'KES ' + formatMoney(kpis.totalSpend || 0);
+  document.getElementById('kpiAvgVal').textContent = Number(kpis.avgOrderSize || 0).toLocaleString() + ' L';
+  document.getElementById('kpiOrdersVal').textContent = kpis.orderCount || 0;
+  var vs = kpis.vsLastPeriod || {};
+  renderChange('kpiVolumeChange', vs.volumePct);
+  renderChange('kpiSpendChange', vs.spendPct);
+  renderChange('kpiAvgChange', vs.avgPct);
+  renderChange('kpiOrdersChange', vs.ordersPct);
+}
+
+function renderDonutChart(byProduct) {
+  if (donutChartInstance) { donutChartInstance.destroy(); donutChartInstance = null; }
+  if (!byProduct || !byProduct.length) return;
+  var filtered = byProduct.filter(function(p){ return p.volume > 0; });
+  if (!filtered.length) return;
+  var labels = filtered.map(function(p){ return p.product; });
+  var dataVals = filtered.map(function(p){ return p.volume; });
+  var colors = ['#1A237E','#FF6F00','#0d9488','#94a3b8'];
+  var ctx = document.getElementById('productDonutChart').getContext('2d');
+  donutChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: labels, datasets: [{ data: dataVals, backgroundColor: colors.slice(0, filtered.length), borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false } } }
+  });
+  var legendEl = document.getElementById('donutLegend');
+  legendEl.innerHTML = '';
+  filtered.forEach(function(p, i) {
+    legendEl.innerHTML += '<div class="donut-legend-item"><span class="donut-legend-label"><span class="donut-legend-dot" style="background:' + colors[i] + '"></span>' + p.product + '</span><span class="donut-legend-value">' + Number(p.volume).toLocaleString() + ' L</span></div>';
+  });
+}
+
+function formatMonthLabel(ym) {
+  var parts = ym.split('-');
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(parts[1]) - 1] + ' ' + parts[0].slice(2);
+}
+
+function renderTrendChart(monthlyTrend) {
+  if (trendChartInstance) { trendChartInstance.destroy(); trendChartInstance = null; }
+  if (!monthlyTrend || !monthlyTrend.length) return;
+  var labels = monthlyTrend.map(function(m){ return formatMonthLabel(m.month); });
+  var ctx = document.getElementById('trendChart').getContext('2d');
+  trendChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'AGO Volume (L)', data: monthlyTrend.map(function(m){ return m.agoVol; }), backgroundColor: 'rgba(26,35,126,0.82)', borderRadius: 4, yAxisID: 'y' },
+        { label: 'PMS Volume (L)', data: monthlyTrend.map(function(m){ return m.pmsVol; }), backgroundColor: 'rgba(255,111,0,0.82)', borderRadius: 4, yAxisID: 'y' },
+        { label: 'Kerosene (L)', data: monthlyTrend.map(function(m){ return m.keroVol; }), backgroundColor: 'rgba(13,148,136,0.82)', borderRadius: 4, yAxisID: 'y' },
+        { label: 'Spend (KES)', data: monthlyTrend.map(function(m){ return m.spend; }), type: 'line', borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#22c55e', yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { family: 'DM Sans', size: 12 }, usePointStyle: true, padding: 16 } },
+        tooltip: { backgroundColor: '#1e293b', padding: 12, cornerRadius: 8, titleFont: { family: 'DM Sans' }, bodyFont: { family: 'DM Sans' } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 11 } } },
+        y: { position: 'left', title: { display: true, text: 'Volume (Litres)', font: { family: 'DM Sans', size: 11 } }, grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { font: { family: 'DM Sans', size: 11 } } },
+        y1: { position: 'right', title: { display: true, text: 'Spend (KES)', font: { family: 'DM Sans', size: 11 } }, grid: { drawOnChartArea: false }, ticks: { font: { family: 'DM Sans', size: 11 }, callback: function(v){ return v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v; } } }
+      }
+    }
+  });
+}
+
+function renderSpendByProductChart(byProduct) {
+  if (spendChartInstance) { spendChartInstance.destroy(); spendChartInstance = null; }
+  if (!byProduct || !byProduct.length) return;
+  var labels = byProduct.map(function(p){ return p.product; });
+  var dataVals = byProduct.map(function(p){ return p.spend; });
+  var colors = ['#1A237E','#FF6F00','#0d9488','#94a3b8'];
+  var ctx = document.getElementById('spendProductChart').getContext('2d');
+  spendChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ label: 'Spend (KES)', data: dataVals, backgroundColor: colors.slice(0, byProduct.length), borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(ctx){ return 'KES ' + ctx.parsed.x.toLocaleString(); } } }
+      },
+      scales: {
+        x: { ticks: { font: { family: 'DM Sans', size: 11 }, callback: function(v){ return v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v; } }, grid: { color: 'rgba(226,232,240,0.6)' } },
+        y: { ticks: { font: { family: 'DM Sans', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderDeliveryPerfChart(deliveryPerformance) {
+  if (delivPerfChartInstance) { delivPerfChartInstance.destroy(); delivPerfChartInstance = null; }
+  var canvas = document.getElementById('delivPerfChart');
+  if (!deliveryPerformance || !deliveryPerformance.length) {
+    var parent = canvas.parentElement;
+    parent.innerHTML = '<p style="text-align:center;color:#94a3b8;padding:40px 0;font-size:13px;">No delivery data for this period</p>';
+    return;
+  }
+  var onTime = [], slightDelay = [], delayed = [];
+  deliveryPerformance.forEach(function(d) {
+    var pt = { x: new Date(d.orderDate).getTime(), y: d.hoursToDeliver, label: d.orderNumber };
+    if (d.hoursToDeliver <= 24) onTime.push(pt);
+    else if (d.hoursToDeliver <= 48) slightDelay.push(pt);
+    else delayed.push(pt);
+  });
+  var ctx = canvas.getContext('2d');
+  delivPerfChartInstance = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'On Time (within 24h)', data: onTime, backgroundColor: 'rgba(22,163,74,0.75)', pointRadius: 6 },
+        { label: 'Slight Delay (24-48h)', data: slightDelay, backgroundColor: 'rgba(217,119,6,0.75)', pointRadius: 6 },
+        { label: 'Delayed (48h+)', data: delayed, backgroundColor: 'rgba(220,38,38,0.75)', pointRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { family: 'DM Sans', size: 11 }, usePointStyle: true, padding: 12 } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              var pt = ctx.raw;
+              return (pt.label || 'Order') + ': ' + pt.y.toFixed(1) + ' hrs';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { type: 'time', time: { unit: 'day' }, title: { display: true, text: 'Order Date', font: { family: 'DM Sans', size: 11 } }, ticks: { font: { family: 'DM Sans', size: 11 } } },
+        y: { title: { display: true, text: 'Hours to Deliver', font: { family: 'DM Sans', size: 11 } }, min: 0, ticks: { font: { family: 'DM Sans', size: 11 } }, grid: { color: 'rgba(226,232,240,0.6)' } }
+      }
+    }
+  });
+}
+
+function renderLocationTable(byLocation) {
+  var tbody = document.getElementById('locTableRows');
+  if (!byLocation || !byLocation.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px;">No delivery locations for this period</td></tr>';
+    return;
+  }
+  byLocation.sort(function(a, b){ return (b.volume || 0) - (a.volume || 0); });
+  var html = '';
+  byLocation.forEach(function(loc) {
+    html += '<tr>';
+    html += '<td>' + (loc.locationName || '-') + '</td>';
+    html += '<td class="num">' + (loc.orders || 0) + '</td>';
+    html += '<td class="num">' + Number(loc.volume || 0).toLocaleString() + ' L</td>';
+    html += '<td class="num">KES ' + formatMoney(loc.spend || 0) + '</td>';
+    html += '<td>' + formatDate(loc.lastOrder) + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function toggleLocationTable() {
+  var body = document.getElementById('locationTableBody');
+  var btn = document.getElementById('collapseLocBtn');
+  var isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  btn.innerHTML = isOpen
+    ? 'Expand <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>'
+    : 'Collapse <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>';
+}
+
+function buildConsumptionCSV(data) {
+  var rows = [];
+  rows.push(['Hass Petroleum Group - Consumption Report']);
+  rows.push(['Period', typeof currentPeriod === 'string' ? currentPeriod : currentPeriod.from + ' to ' + currentPeriod.to]);
+  rows.push([]);
+  rows.push(['KPI', 'Value']);
+  rows.push(['Total Volume (L)', data.kpis.totalVolume]);
+  rows.push(['Total Spend (KES)', data.kpis.totalSpend]);
+  rows.push(['Orders', data.kpis.orderCount]);
+  rows.push(['Avg Order Size (L)', data.kpis.avgOrderSize]);
+  rows.push([]);
+  rows.push(['Month', 'AGO Vol', 'PMS Vol', 'Kero Vol', 'Spend']);
+  if (data.monthlyTrend) {
+    data.monthlyTrend.forEach(function(m){ rows.push([m.month, m.agoVol, m.pmsVol, m.keroVol, m.spend]); });
+  }
+  rows.push([]);
+  rows.push(['Product', 'Volume', 'Spend']);
+  if (data.byProduct) {
+    data.byProduct.forEach(function(p){ rows.push([p.product, p.volume, p.spend]); });
+  }
+  rows.push([]);
+  rows.push(['Location', 'Orders', 'Volume', 'Spend', 'Last Order']);
+  if (data.byLocation) {
+    data.byLocation.forEach(function(l){ rows.push([l.locationName, l.orders, l.volume, l.spend, l.lastOrder]); });
+  }
+  rows.push([]);
+  rows.push(['Delivery Performance']);
+  rows.push(['Order Number', 'Order Date', 'Hours to Deliver']);
+  if (data.deliveryPerformance) {
+    data.deliveryPerformance.forEach(function(d){ rows.push([d.orderNumber, d.orderDate, d.hoursToDeliver]); });
+  }
+  return rows.map(function(r){ return r.map(function(c){ return '"' + String(c === undefined || c === null ? '' : c).replace(/"/g, '""') + '"'; }).join(','); }).join('\n');
+}
+
+function exportConsumption() {
+  if (!currentConsumptionData) { alert('No data to export. Load a period first.'); return; }
+  var csv = buildConsumptionCSV(currentConsumptionData);
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var periodStr = typeof currentPeriod === 'string' ? currentPeriod : 'custom';
+  a.href = url;
+  a.download = 'hass-consumption-' + periodStr + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>
