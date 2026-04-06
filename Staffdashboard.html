@@ -2024,38 +2024,90 @@ function renderExternalSLA(data) {
     );
   }
 
-  // ── FULFILMENT SCATTER ───────────────────────────────────
+  // ── ORDER FULFILMENT: Monthly bar chart (replaces scatter) ──────────
   if (data.fulfilment && data.fulfilment.length > 0) {
-    var onTime  = data.fulfilment.filter(function(d){ return d.status === 'ON_TIME'; });
-    var slight  = data.fulfilment.filter(function(d){ return d.status === 'SLIGHT'; });
-    var delayed = data.fulfilment.filter(function(d){ return d.status === 'DELAYED'; });
-    function toXY(arr) {
-      return arr.map(function(d){
-        return { x: new Date(d.orderDate).getTime(), y: d.hrs || 0, label: d.orderNumber };
-      });
-    }
+
+    // Group by month
+    var fMonthMap = {};
+    data.fulfilment.forEach(function(d) {
+      var raw = d.orderDate ? new Date(d.orderDate) : null;
+      if (!raw || isNaN(raw)) return;
+      var label = raw.toLocaleDateString('en-GB', { month:'short', year:'2-digit' });
+      if (!fMonthMap[label]) fMonthMap[label] = { total:0, count:0, onTime:0, sortKey: raw.getFullYear()*100 + raw.getMonth() };
+      fMonthMap[label].total  += (d.hrs || 0);
+      fMonthMap[label].count  += 1;
+      if (d.status === 'ON_TIME') fMonthMap[label].onTime += 1;
+    });
+
+    // Sort months chronologically
+    var fLabels = Object.keys(fMonthMap).sort(function(a,b){
+      return fMonthMap[a].sortKey - fMonthMap[b].sortKey;
+    });
+
+    var fAvgHrs   = fLabels.map(function(m){ return Math.round(fMonthMap[m].total / fMonthMap[m].count * 10) / 10; });
+    var fSlaRates = fLabels.map(function(m){ return Math.round(fMonthMap[m].onTime / fMonthMap[m].count * 100); });
+    var fBarColors= fAvgHrs.map(function(h){ return h<=24 ? 'rgba(22,163,74,0.75)' : h<=48 ? 'rgba(217,119,6,0.75)' : 'rgba(220,38,38,0.75)'; });
+
     window.chartExtFulfilment = buildChart(
       window.chartExtFulfilment,
       'chartExtFulfilment',
       {
-        type: 'scatter',
+        type: 'bar',
         data: {
+          labels: fLabels,
           datasets: [
-            { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.65)',  pointRadius:5, data: toXY(onTime)  },
-            { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.65)',  pointRadius:5, data: toXY(slight)  },
-            { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.65)', pointRadius:5, data: toXY(delayed) }
+            {
+              label: 'Avg Delivery Time (hrs)',
+              data: fAvgHrs,
+              backgroundColor: fBarColors,
+              borderRadius: 6,
+              yAxisID: 'y'
+            },
+            {
+              label: '% Delivered within 48hrs',
+              data: fSlaRates,
+              type: 'line',
+              borderColor: '#1A237E',
+              backgroundColor: 'transparent',
+              pointRadius: 4,
+              pointBackgroundColor: '#1A237E',
+              tension: 0.3,
+              yAxisID: 'y1'
+            }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           scales: {
-            x: { type: 'linear', title: { display: true, text: 'Order Date (timestamp)' } },
-            y: { beginAtZero: true, title: { display: true, text: 'Hours to Deliver' } }
+            x:  { grid: { display: false } },
+            y:  {
+              beginAtZero: true,
+              position: 'left',
+              title: { display: true, text: 'Avg Hours' },
+              ticks: { callback: function(v){ return v + 'h'; } }
+            },
+            y1: {
+              beginAtZero: true,
+              max: 100,
+              position: 'right',
+              title: { display: true, text: '% On Time' },
+              ticks: { callback: function(v){ return v + '%'; } },
+              grid: { drawOnChartArea: false }
+            }
           },
           plugins: {
             legend: { position: 'top' },
-            tooltip: { callbacks: { label: function(ctx){ return (ctx.raw.label||'') + ': ' + ctx.raw.y + 'h'; } } }
+            tooltip: {
+              callbacks: {
+                afterBody: function(items) {
+                  var m = items[0] && items[0].label;
+                  if (m && fMonthMap[m]) return 'Orders: ' + fMonthMap[m].count;
+                  return '';
+                }
+              }
+            }
           }
         }
       }
