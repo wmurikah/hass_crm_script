@@ -73,13 +73,20 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   flex-shrink: 0;
 }
 
-.sidebar-logo-img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  border-radius: 50%;
+.sidebar-portal-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255,111,0,0.2);
+  border: 1.5px solid rgba(255,111,0,0.4);
+  color: #FF6F00;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  display: block;
 }
 
 .sidebar-brand {
@@ -561,9 +568,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   <!-- ── Sidebar ── -->
   <nav id="sidebar">
     <div class="sidebar-header">
-      <img id="sidebarLogo" src="" alt="Hass Petroleum Group" class="sidebar-logo-img" style="width:48px;height:48px;object-fit:contain;border-radius:50%;flex-shrink:0;">
-      <div id="sidebarLogoFallback" style="display:none;width:48px;height:48px;border-radius:50%;background:#FF6F00;color:#fff;font-size:15px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0;">HP</div>
-      <span class="sidebar-brand">Hass Portal</span>
+      <div class="sidebar-portal-badge">STAFF</div>
+      <span class="sidebar-brand">Staff Portal</span>
     </div>
 
     <div class="sidebar-nav">
@@ -1599,21 +1605,7 @@ function initDashboard() {
       SESSION.role = role;
       SESSION.name = name;
 
-      google.script.run.withSuccessHandler(function(url){
-        var el = document.getElementById('sidebarLogo');
-        if (url && url.trim()) {
-          if (el) {
-            el.src = url;
-            el.onerror = function() {
-              el.style.display = 'none';
-              document.getElementById('sidebarLogoFallback').style.display = 'flex';
-            };
-          }
-        } else {
-          if (el) el.style.display = 'none';
-          document.getElementById('sidebarLogoFallback').style.display = 'flex';
-        }
-      }).getLogoUrl();
+      // Logo replaced with text badge — no Drive fetch needed
 
       if (typeof applyRoleVisibility === 'function') applyRoleVisibility();
       if (typeof showPage === 'function') showPage('dashboard');

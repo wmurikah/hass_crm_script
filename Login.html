@@ -643,23 +643,25 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.lt-logo-wrap {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 8px 24px rgba(0,0,0,0.3);
+.lt-brand-text {
+  text-align: center;
 }
 
-.lt-logo {
-  width: 60px;
-  height: 60px;
-  object-fit: contain;
-  border-radius: 50%;
+.lt-brand-name {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.3px;
+  margin-bottom: 6px;
+}
+
+.lt-brand-sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  min-height: 16px;
 }
 
 .lt-welcome {
@@ -693,7 +695,7 @@ body {
   width: 0%;
   background: linear-gradient(90deg, #FF6F00, #FFB300);
   border-radius: 2px;
-  transition: width 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .lt-status {
@@ -1973,11 +1975,6 @@ body {
     var roleEl   = document.getElementById('ltRole');
     var bar      = document.getElementById('ltBar');
     var statusEl = document.getElementById('ltStatus');
-    var ltLogo   = document.getElementById('ltLogo');
-
-    // Copy the logo src from the main page logo
-    var mainLogo = document.getElementById('logo');
-    if (mainLogo && mainLogo.src) ltLogo.src = mainLogo.src;
 
     // Personalise the message
     var name = (result.name || '').trim();
@@ -1997,23 +1994,27 @@ body {
     };
     roleEl.textContent = roleMap[result.role] || result.role || '';
 
+    // Hide the login card immediately so it never flashes after animation
+    var card = document.getElementById('authCard');
+    if (card) card.style.display = 'none';
+
     // Show the overlay
     overlay.style.display = 'flex';
 
-    // Animate progress bar — 5 second linger while data loads
-    setTimeout(function() { bar.style.width='35%';  statusEl.textContent='Signing you in...'; },        800);
-    setTimeout(function() { bar.style.width='60%';  statusEl.textContent='Loading your workspace...'; },1800);
-    setTimeout(function() { bar.style.width='82%';  statusEl.textContent='Fetching your data...'; },    3000);
-    setTimeout(function() { bar.style.width='95%';  statusEl.textContent='Almost ready...'; },           4200);
-    setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome aboard.'; },           4800);
+    // Animate progress bar — 8 second linger while data loads
+    setTimeout(function() { bar.style.width='25%';  statusEl.textContent='Signing you in...'; },        800);
+    setTimeout(function() { bar.style.width='50%';  statusEl.textContent='Loading your workspace...'; },2500);
+    setTimeout(function() { bar.style.width='72%';  statusEl.textContent='Fetching your data...'; },    4500);
+    setTimeout(function() { bar.style.width='88%';  statusEl.textContent='Almost ready...'; },           6500);
+    setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  7500);
 
-    // Exit wave and redirect
+    // Exit wave and redirect at 8 seconds
     setTimeout(function() {
       overlay.classList.add('lt-exit');
       setTimeout(function() {
         window.location.href = result.redirectUrl;
-      }, 480);
-    }, 5000);
+      }, 500);
+    }, 8000);
   };
 
 })();
@@ -2159,11 +2160,11 @@ function sendBotMessageText(text) {
 <div id='loginTransition' aria-live='polite' aria-label='Signing in' style='display:none'>
   <div class='lt-wave'></div>
   <div class='lt-content'>
-    <div class='lt-logo-wrap'>
-      <img id='ltLogo' src='' alt='Hass Petroleum Group' class='lt-logo'>
+    <div class='lt-brand-text'>
+      <div class='lt-brand-name'>Hass Petroleum Group</div>
+      <div class='lt-brand-sub' id='ltRole'></div>
     </div>
     <div class='lt-welcome' id='ltWelcome'>Welcome back</div>
-    <div class='lt-role' id='ltRole'></div>
     <div class='lt-bar-wrap'>
       <div class='lt-bar' id='ltBar'></div>
     </div>

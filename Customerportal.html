@@ -65,6 +65,8 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sidebar-brand span { font-weight: 600; font-size: 15px; }
+.portal-badge { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #1A237E, #283593); color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.portal-brand-name { font-size: 15px; font-weight: 700; color: #fff; }
 .portal-logo-img { width: 48px; height: 48px; object-fit: contain; border-radius: 50%; flex-shrink: 0; display: block; }
 .sidebar-nav { flex: 1; padding: 12px 0; overflow-y: auto; }
 .sidebar-footer { padding: 16px; border-top: 1px solid rgba(255,255,255,0.1); }
@@ -198,7 +200,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 <body>
 <!-- Sidebar -->
 <aside class="hp-sidebar">
-  <div class="sidebar-brand"><img id="portalLogo" src="" alt="Hass Petroleum Group" class="portal-logo-img" style="width:48px;height:48px;object-fit:contain;border-radius:50%;flex-shrink:0;"><div id="portalLogoFallback" style="display:none;width:48px;height:48px;border-radius:50%;background:#FF6F00;color:#fff;font-size:15px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0;">HP</div><span>Customer Portal</span></div>
+  <div class="sidebar-brand"><div class="portal-badge">C</div><span class="portal-brand-name">Customer Portal</span></div>
   <nav class="sidebar-nav">
     <a class="hp-nav-item active" onclick="showPage('dashboard')" data-page="dashboard">&#9776; Dashboard</a>
     <a class="hp-nav-item" onclick="showPage('orders')" data-page="orders">&#128230; Orders</a>
@@ -347,9 +349,9 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
       <div class="consumption-header">
         <div>
           <div class="period-tabs" id="periodTabs">
-            <button class="period-tab active" data-period="month" onclick="selectPeriod('month',this)">This Month</button>
+            <button class="period-tab" data-period="month" onclick="selectPeriod('month',this)">This Month</button>
             <button class="period-tab" data-period="quarter" onclick="selectPeriod('quarter',this)">This Quarter</button>
-            <button class="period-tab" data-period="year" onclick="selectPeriod('year',this)">This Year</button>
+            <button class="period-tab active" data-period="year" onclick="selectPeriod('year',this)">This Year</button>
             <button class="period-tab" data-period="ytm" onclick="selectPeriod('ytm',this)">Year to Month</button>
             <button class="period-tab" data-period="custom" onclick="selectPeriod('custom',this)">Custom</button>
           </div>
@@ -529,7 +531,7 @@ function showPage(id){
   var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
   var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account'};
   document.getElementById('pageTitle').textContent=t[id]||id;
-  if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('month'); }
+  if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('year'); }
   stopChatPolling();
 }
 
@@ -651,30 +653,11 @@ document.addEventListener('DOMContentLoaded',function(){
   var greetEl = document.getElementById('customerGreeting');
   if (greetEl && SESSION.name) greetEl.textContent = 'Welcome, ' + SESSION.name.split(' ')[0];
 
-  // Load portal logo from Drive
-  google.script.run
-    .withSuccessHandler(function(url) {
-      var el = document.getElementById('portalLogo');
-      if (url && url.trim()) {
-        if (el) {
-          el.src = url;
-          el.onerror = function() {
-            el.style.display = 'none';
-            var fb = document.getElementById('portalLogoFallback');
-            if (fb) fb.style.display = 'flex';
-          };
-        }
-      } else {
-        if (el) el.style.display = 'none';
-        var fb = document.getElementById('portalLogoFallback');
-        if (fb) fb.style.display = 'flex';
-      }
-    })
-    .getLogoUrl();
+  // Logo replaced with text badge — no Drive fetch needed
 });
 
 /* ===== Consumption Analytics ===== */
-let currentPeriod = 'month';
+let currentPeriod = 'year';
 let currentConsumptionData = null;
 let trendChartInstance = null;
 let donutChartInstance = null;
