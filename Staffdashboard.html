@@ -713,7 +713,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           <label class='filter-label'>Year</label>
           <select id='filterYear' class='filter-select' onchange='applySLAFilters()'>
             <option value='2026'>2026</option>
-            <option value='2025'>2025</option>
+            <option value='2025' selected>2025</option>
             <option value='2024'>2024</option>
           </select>
         </div>
@@ -1630,7 +1630,7 @@ var currentSLADimension = 'internal';
 var slaChartFinance, slaChartLA, slaChartTrend;
 
 /* ── SLA Advanced Filters ── */
-var slaFilters = { year:'2026', period:'all', month:null, customFrom:null, customTo:null, staff:'ALL', department:'ALL' };
+var slaFilters = { year:'2025', period:'all', month:null, customFrom:null, customTo:null, staff:'ALL', department:'ALL' };
 
 function onSLAPeriodFilterChange() {
   var val = document.getElementById('filterPeriod').value;
@@ -1735,20 +1735,27 @@ function onSLAPeriodChange(period, btn) {
 function loadSLAData(period) {
   showSLALoading(true);
   google.script.run
-    .withSuccessHandler(function(data){
+    .withSuccessHandler(function(data) {
       showSLALoading(false);
-      if (data.success) renderSLAData(data);
-      else showSLAError(data.error);
+      if (data && data.success) renderSLAData(data);
+      else showSLAError(data ? data.error : 'No data returned');
     })
-    .withFailureHandler(function(e){ showSLALoading(false); showSLAError(e.message); })
+    .withFailureHandler(function(e) {
+      showSLALoading(false);
+      showSLAError('Server error: ' + e.message);
+    })
     .handleSLARequest({
-      action:     'getSLAAnalytics',
-      filters:    slaFilters,
-      affiliate:  currentAffiliate
+      action:    'getSLAAnalytics',
+      filters:   typeof slaFilters !== 'undefined' ? slaFilters : { year: '2025', period: 'all' },
+      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'
     });
 }
 
 function renderSLAData(data) {
+  if (!data || !data.success) {
+    showSLAError('No data available for the selected filters. Try selecting Year 2025.');
+    return;
+  }
   // KPIs
   document.getElementById('kpiAvgFinance').textContent  = Math.round(data.kpis.avgFinance);
   document.getElementById('kpiAvgLA').textContent       = Math.round(data.kpis.avgLA);
@@ -1856,18 +1863,25 @@ function loadExternalSLAData(period) {
   google.script.run
     .withSuccessHandler(function(data) {
       showSLALoading(false);
-      if (data.success) renderExternalSLA(data);
-      else showSLAError(data.error);
+      if (data && data.success) renderExternalSLA(data);
+      else showSLAError(data ? data.error : 'No data returned');
     })
-    .withFailureHandler(function(e) { showSLALoading(false); showSLAError(e.message); })
+    .withFailureHandler(function(e) {
+      showSLALoading(false);
+      showSLAError('Server error: ' + e.message);
+    })
     .handleSLARequest({
       action:    'getExternalSLAAnalytics',
-      filters:   slaFilters,
-      affiliate: currentAffiliate
+      filters:   typeof slaFilters !== 'undefined' ? slaFilters : { year: '2025', period: 'all' },
+      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'
     });
 }
 
 function renderExternalSLA(data) {
+  if (!data || !data.success) {
+    showSLAError('No data available for the selected filters. Try selecting Year 2025.');
+    return;
+  }
   var set = function(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; };
   set('extKpiFirstResponse', Math.round(data.kpis.avgFirstResponseMin));
   set('extKpiResolution',    Math.round(data.kpis.avgResolutionHrs * 10) / 10);

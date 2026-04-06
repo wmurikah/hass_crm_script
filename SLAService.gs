@@ -11,8 +11,8 @@
 function handleSLARequest(params) {
   try {
     switch(params.action) {
-      case 'getSLAAnalytics': return getSLAAnalytics(params.filters, params.affiliate);
-      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters, params.affiliate);
+      case 'getSLAAnalytics': return getSLAAnalytics(params.filters || params.period, params.affiliate);
+      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters || params.period, params.affiliate);
       case 'getStaffList': return getStaffList();
       default: return { success:false, error:'Unknown SLA action' };
     }
@@ -20,6 +20,22 @@ function handleSLARequest(params) {
     Logger.log('handleSLARequest: ' + e.message);
     return { success:false, error:e.message };
   }
+}
+
+function parsePeriod(periodOrFilters) {
+  // Backward compatible: accepts either a plain string or a filters object
+  if (typeof periodOrFilters === 'object' && periodOrFilters !== null) {
+    return parseFilters(periodOrFilters);
+  }
+  // Legacy string mode — default to full current year
+  var year = new Date().getFullYear();
+  return {
+    startDate:  new Date(year, 0, 1),
+    endDate:    new Date(year, 11, 31, 23, 59, 59),
+    staffId:    'ALL',
+    department: 'ALL',
+    affiliate:  'ALL'
+  };
 }
 
 function parseFilters(filters, affiliate) {
@@ -421,4 +437,23 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
   }).sort(function(a,b){ return b.withinSLAPct-a.withinSLAPct; });
 
   return { success:true, kpis:kpis, monthlyTrend:monthlyTrend, byCategory:byCategory, byAffiliate:byAffiliate, fulfilment:fulfilment, agentPerformance:agentPerformance };
+}
+
+/* ── Temporary Debug Helper (remove after confirming data loads) ── */
+function debugExternalSLA() {
+  var result = getExternalSLAAnalytics(
+    { year: '2025', period: 'all', staff: 'ALL', department: 'ALL' },
+    'ALL'
+  );
+  Logger.log('success: ' + result.success);
+  Logger.log('total tickets processed: ' + (result.kpis ? 'kpis present' : 'NO KPIS'));
+  if (result.kpis) {
+    Logger.log('avgFirstResponseMin: ' + result.kpis.avgFirstResponseMin);
+    Logger.log('avgResolutionHrs: '    + result.kpis.avgResolutionHrs);
+    Logger.log('totalTickets (monthly trend count): ' + result.monthlyTrend.length);
+    Logger.log('byAffiliate count: ' + result.byAffiliate.length);
+    Logger.log('agentPerformance count: ' + result.agentPerformance.length);
+    Logger.log('fulfilment points: ' + result.fulfilment.length);
+  }
+  if (result.error) Logger.log('ERROR: ' + result.error);
 }
