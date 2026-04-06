@@ -1704,18 +1704,22 @@ function slaFilterPillReset(i) {
 
 function setSLADimension(dim) {
   currentSLADimension = dim;
-  var isInternal = dim === 'internal';
+  var isInternal = (dim === 'internal');
 
-  document.getElementById('dimInternal').classList.toggle('active', isInternal);
-  document.getElementById('dimExternal').classList.toggle('active', !isInternal);
+  var btnInt = document.getElementById('dimInternal');
+  var btnExt = document.getElementById('dimExternal');
+  if (btnInt) btnInt.classList.toggle('active', isInternal);
+  if (btnExt) btnExt.classList.toggle('active', !isInternal);
 
-  document.getElementById('slaInternalView').style.display  = isInternal  ? 'block' : 'none';
-  document.getElementById('slaExternalView').style.display  = !isInternal ? 'block' : 'none';
+  var intView = document.getElementById('slaInternalView');
+  var extView = document.getElementById('slaExternalView');
+  if (intView) intView.style.display = isInternal  ? 'block' : 'none';
+  if (extView) extView.style.display = !isInternal ? 'block' : 'none';
 
   if (isInternal) {
-    loadSLAData(null);
+    loadSLAData();
   } else {
-    loadExternalSLAData(null);
+    loadExternalSLAData();
   }
 }
 
@@ -1835,6 +1839,10 @@ function showSLAError(msg){
   var err = document.getElementById('slaError');
   if (err) { err.textContent = msg; err.style.display = 'block'; }
 }
+function clearSLAError(){
+  var err = document.getElementById('slaError');
+  if (err) { err.textContent = ''; err.style.display = 'none'; }
+}
 
 function renderApproverLeaderboard(data) {
   if (!data.approverStats) return;
@@ -1850,13 +1858,34 @@ function renderApproverLeaderboard(data) {
 /* ── External SLA Analytics ── */
 var externalSLALoaded = false;
 
-function loadExternalSLAData(period) {
+function loadExternalSLAData() {
   showSLALoading(true);
+  clearSLAError();
+
+  var filters = (typeof slaFilters !== 'undefined') ? slaFilters : {
+    year: '2025', period: 'all', month: null,
+    customFrom: null, customTo: null,
+    staff: 'ALL', department: 'ALL'
+  };
+  var affiliate = (typeof currentAffiliate !== 'undefined') ? currentAffiliate : 'ALL';
+
   google.script.run
     .withSuccessHandler(function(data) {
       showSLALoading(false);
-      if (data && data.success) renderExternalSLA(data);
-      else showSLAError(data ? data.error : 'No data returned');
+      if (!data) {
+        showSLAError('No response from server.');
+        return;
+      }
+      if (!data.success) {
+        showSLAError('Error: ' + (data.error || 'Unknown error'));
+        return;
+      }
+      try {
+        renderExternalSLA(data);
+      } catch(e) {
+        showSLAError('Render error: ' + e.message);
+        console.error('renderExternalSLA failed:', e);
+      }
     })
     .withFailureHandler(function(e) {
       showSLALoading(false);
@@ -1864,81 +1893,176 @@ function loadExternalSLAData(period) {
     })
     .handleSLARequest({
       action:    'getExternalSLAAnalytics',
-      filters:   typeof slaFilters !== 'undefined' ? slaFilters : { year: '2025', period: 'all' },
-      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'
+      filters:   filters,
+      affiliate: affiliate
     });
 }
 
 function renderExternalSLA(data) {
-  if (!data || !data.success) {
-    showSLAError('No data available for the selected filters. Try selecting Year 2025.');
+  if (!data || !data.kpis) {
+    showSLAError('No data to display. Try selecting Year 2025.');
     return;
   }
-  var set = function(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; };
-  set('extKpiFirstResponse', Math.round(data.kpis.avgFirstResponseMin));
-  set('extKpiResolution',    Math.round(data.kpis.avgResolutionHrs * 10) / 10);
-  set('extKpiFulfilment',    Math.round(data.kpis.avgFulfilmentHrs * 10) / 10);
-  set('extKpiSatisfaction',  data.kpis.avgCSAT > 0 ? data.kpis.avgCSAT.toFixed(1) : '--');
 
-  // Response trend chart
-  if (window.chartExtResponse) window.chartExtResponse.destroy();
-  var rCtx = document.getElementById('chartExtResponse').getContext('2d');
-  window.chartExtResponse = new Chart(rCtx, {
-    type: 'line',
-    data: {
-      labels: data.monthlyTrend.map(function(m){ return m.month; }),
-      datasets: [
-        { label:'Avg First Response (min)', data:data.monthlyTrend.map(function(m){return m.avgFirstResponse;}), borderColor:'#1A237E', backgroundColor:'rgba(26,35,126,0.06)', fill:true, tension:0.4, pointRadius:4 },
-        { label:'Avg Resolution (hrs)', data:data.monthlyTrend.map(function(m){return m.avgResolutionHrs;}), borderColor:'#FF6F00', backgroundColor:'rgba(255,111,0,0.06)', fill:true, tension:0.4, pointRadius:4, yAxisID:'y1' }
-      ]
-    },
-    options:{ responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
-      plugins:{ annotation:{ annotations:{ slaLine:{ type:'line', yMin:60, yMax:60, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA Target: 60 min', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } } },
-      scales:{ y:{title:{display:true,text:'Response (min)'},position:'left'}, y1:{title:{display:true,text:'Resolution (hrs)'},position:'right',grid:{drawOnChartArea:false}} } }
-  });
+  var kpis = data.kpis;
 
-  // Category chart
-  if (window.chartExtCategory) window.chartExtCategory.destroy();
-  var catColors = { DELIVERY:'#1A237E',QUALITY:'#dc2626',BILLING:'#d97706',ACCOUNT:'#0d9488',PRICING:'#7c3aed',GENERAL:'#64748b' };
-  var cCtx = document.getElementById('chartExtCategory').getContext('2d');
-  window.chartExtCategory = new Chart(cCtx, {
-    type:'bar',
-    data:{
-      labels: data.byCategory.map(function(c){return c.category;}),
-      datasets:[{ label:'Avg Resolution (hrs)', data:data.byCategory.map(function(c){return c.avgResolutionHrs;}), backgroundColor:data.byCategory.map(function(c){return catColors[c.category]||'#94a3b8';}), borderRadius:6 }]
-    },
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, annotation:{ annotations:{ slaLine:{ type:'line', xMin:24, xMax:24, borderColor:'#dc2626', borderWidth:1.5, borderDash:[6,4], label:{ content:'SLA: 24hrs', display:true, position:'end', font:{size:10}, color:'#dc2626', backgroundColor:'rgba(255,255,255,0.85)' } } } } },
-      scales:{x:{title:{display:true,text:'Hours'}},y:{grid:{display:false}}} }
-  });
+  // ── KPI CARDS ────────────────────────────────────────────
+  function setEl(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
 
-  // Fulfilment scatter
-  if (window.chartExtFulfilment) window.chartExtFulfilment.destroy();
-  var fCtx = document.getElementById('chartExtFulfilment').getContext('2d');
-  window.chartExtFulfilment = new Chart(fCtx, {
-    type:'scatter',
-    data:{ datasets:[
-      { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='ON_TIME';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) },
-      { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='SLIGHT';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) },
-      { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.7)',  pointRadius:6, data:data.fulfilment.filter(function(d){return d.status==='DELAYED';}).map(function(d){return{x:new Date(d.orderDate).getTime(),y:d.hrs,label:d.orderNumber};}) }
-    ]},
-    options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{type:'time',time:{unit:'day'},title:{display:true,text:'Order Date'}}, y:{title:{display:true,text:'Hours to Deliver'},min:0} }, plugins:{ tooltip:{ callbacks:{ label:function(ctx){ return ctx.raw.label+': '+ctx.raw.y+'h'; } } } } }
-  });
+  setEl('extKpiFirstResponse', Math.round(kpis.avgFirstResponseMin || 0));
+  setEl('extKpiResolution',    (Math.round((kpis.avgResolutionHrs || 0) * 10) / 10));
+  setEl('extKpiFulfilment',    (Math.round((kpis.avgFulfilmentHrs || 0) * 10) / 10));
+  setEl('extKpiSatisfaction',  kpis.avgCSAT > 0 ? kpis.avgCSAT.toFixed(1) : '--');
 
-  // Affiliate table
-  var tbody = document.getElementById('extAffiliateBody');
-  if (tbody) tbody.innerHTML = data.byAffiliate.map(function(a){
-    function badge(pct){ return '<span class="pct-badge '+(pct>=80?'pct-good':pct>=60?'pct-warn':'pct-bad')+'">'+pct+'%</span>'; }
-    return '<tr><td><strong>'+a.affiliate+'</strong></td><td>'+a.tickets+'</td><td>'+Math.round(a.avgFirstResponseMin)+'</td><td>'+badge(a.firstResponseSLAPct)+'</td><td>'+Math.round(a.avgResolutionHrs*10)/10+'</td><td>'+badge(a.resolutionSLAPct)+'</td><td>'+Math.round(a.avgFulfilmentHrs*10)/10+'</td><td>'+badge(a.fulfilmentSLAPct)+'</td><td>'+(a.avgCSAT>0?'&#9733; '+a.avgCSAT.toFixed(1):'--')+'</td></tr>';
-  }).join('');
+  // ── MONTHLY TREND CHART ──────────────────────────────────
+  var trendCanvas = document.getElementById('chartExtResponse');
+  if (trendCanvas && data.monthlyTrend && data.monthlyTrend.length > 0) {
+    if (window.chartExtResponse) { window.chartExtResponse.destroy(); window.chartExtResponse = null; }
+    window.chartExtResponse = new Chart(trendCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: data.monthlyTrend.map(function(m){ return m.month; }),
+        datasets: [
+          {
+            label: 'Avg First Response (min)',
+            data: data.monthlyTrend.map(function(m){ return m.avgFirstResponse || 0; }),
+            borderColor: '#1A237E',
+            backgroundColor: 'rgba(26,35,126,0.06)',
+            fill: true, tension: 0.4, pointRadius: 4
+          },
+          {
+            label: 'Avg Resolution (hrs)',
+            data: data.monthlyTrend.map(function(m){ return m.avgResolutionHrs || 0; }),
+            borderColor: '#FF6F00',
+            backgroundColor: 'rgba(255,111,0,0.06)',
+            fill: true, tension: 0.4, pointRadius: 4,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          y:  { title: { display: true, text: 'Response (min)' }, position: 'left' },
+          y1: { title: { display: true, text: 'Resolution (hrs)' }, position: 'right', grid: { drawOnChartArea: false } }
+        },
+        plugins: { legend: { position: 'top' } }
+      }
+    });
+  }
 
-  // Agent leaderboard
+  // ── CATEGORY CHART ───────────────────────────────────────
+  var catCanvas = document.getElementById('chartExtCategory');
+  if (catCanvas && data.byCategory && data.byCategory.length > 0) {
+    if (window.chartExtCategory) { window.chartExtCategory.destroy(); window.chartExtCategory = null; }
+    var catColors = { DELIVERY:'#1A237E', QUALITY:'#dc2626', BILLING:'#d97706', ACCOUNT:'#0d9488', PRICING:'#7c3aed', GENERAL:'#64748b' };
+    window.chartExtCategory = new Chart(catCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: data.byCategory.map(function(c){ return c.category; }),
+        datasets: [{
+          label: 'Avg Resolution (hrs)',
+          data: data.byCategory.map(function(c){ return c.avgResolutionHrs || 0; }),
+          backgroundColor: data.byCategory.map(function(c){ return catColors[c.category] || '#94a3b8'; }),
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { title: { display: true, text: 'Hours' } } }
+      }
+    });
+  }
+
+  // ── FULFILMENT SCATTER ───────────────────────────────────
+  var fulCanvas = document.getElementById('chartExtFulfilment');
+  if (fulCanvas && data.fulfilment && data.fulfilment.length > 0) {
+    if (window.chartExtFulfilment) { window.chartExtFulfilment.destroy(); window.chartExtFulfilment = null; }
+    var onTime  = data.fulfilment.filter(function(d){ return d.status === 'ON_TIME'; });
+    var slight  = data.fulfilment.filter(function(d){ return d.status === 'SLIGHT'; });
+    var delayed = data.fulfilment.filter(function(d){ return d.status === 'DELAYED'; });
+    function toXY(arr) {
+      return arr.map(function(d){
+        return { x: new Date(d.orderDate).getTime(), y: d.hrs, label: d.orderNumber };
+      });
+    }
+    window.chartExtFulfilment = new Chart(fulCanvas.getContext('2d'), {
+      type: 'scatter',
+      data: {
+        datasets: [
+          { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.65)',  pointRadius:5, data: toXY(onTime)  },
+          { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.65)',  pointRadius:5, data: toXY(slight)  },
+          { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.65)',  pointRadius:5, data: toXY(delayed) }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Order Date' } },
+          y: { title: { display: true, text: 'Hours to Deliver' }, min: 0 }
+        },
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { callbacks: { label: function(ctx){ return (ctx.raw.label || '') + ': ' + ctx.raw.y + 'h'; } } }
+        }
+      }
+    });
+  }
+
+  // ── AFFILIATE TABLE ──────────────────────────────────────
+  var affBody = document.getElementById('extAffiliateBody');
+  if (affBody && data.byAffiliate && data.byAffiliate.length > 0) {
+    function badge(pct) {
+      var cls = pct >= 80 ? 'pct-good' : pct >= 60 ? 'pct-warn' : 'pct-bad';
+      return '<span class="pct-badge ' + cls + '">' + pct + '%</span>';
+    }
+    affBody.innerHTML = data.byAffiliate.map(function(a) {
+      return '<tr>' +
+        '<td><strong>' + (a.affiliate||'') + '</strong></td>' +
+        '<td>' + (a.tickets||0) + '</td>' +
+        '<td>' + Math.round(a.avgFirstResponseMin||0) + '</td>' +
+        '<td>' + badge(a.firstResponseSLAPct||0) + '</td>' +
+        '<td>' + (Math.round((a.avgResolutionHrs||0)*10)/10) + '</td>' +
+        '<td>' + badge(a.resolutionSLAPct||0) + '</td>' +
+        '<td>' + (Math.round((a.avgFulfilmentHrs||0)*10)/10) + '</td>' +
+        '<td>' + badge(a.fulfilmentSLAPct||0) + '</td>' +
+        '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
+        '</tr>';
+    }).join('');
+  } else if (affBody) {
+    affBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:20px;">No affiliate data for selected period</td></tr>';
+  }
+
+  // ── AGENT LEADERBOARD ────────────────────────────────────
   var agentBody = document.getElementById('extAgentBody');
-  if (agentBody) agentBody.innerHTML = data.agentPerformance.map(function(a, idx){
-    var medal = idx===0?'&#127947;':idx===1?'&#129352;':idx===2?'&#129353;':String(idx+1);
-    var rowClass = a.withinSLAPct < 60 ? 'style="background:#fff5f5"' : idx===0 ? 'style="background:#fefce8"' : '';
-    return '<tr '+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+a.name+'</td><td>'+a.tickets+'</td><td>'+Math.round(a.avgFirstResponse)+'min</td><td>'+Math.round(a.avgResolution*10)/10+'h</td><td>'+(a.avgCSAT>0?'&#9733; '+a.avgCSAT.toFixed(1):'--')+'</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span></td></tr>';
-  }).join('');
+  if (agentBody && data.agentPerformance && data.agentPerformance.length > 0) {
+    var medals = ['&#127947;','&#129352;','&#129353;'];
+    agentBody.innerHTML = data.agentPerformance.map(function(a, idx) {
+      var medal   = idx < 3 ? medals[idx] : String(idx+1);
+      var rowStyle= a.withinSLAPct < 60 ? 'style="background:#fff5f5"' : idx === 0 ? 'style="background:#fefce8"' : '';
+      var slaCell = '<span class="pct-badge ' + (a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad') + '">' + (a.withinSLAPct||0) + '%</span>';
+      return '<tr ' + rowStyle + '>' +
+        '<td><span style="font-size:16px">' + medal + '</span></td>' +
+        '<td>' + (a.name||a.userId||'') + '</td>' +
+        '<td>' + (a.tickets||0) + '</td>' +
+        '<td>' + Math.round(a.avgFirstResponse||0) + ' min</td>' +
+        '<td>' + (Math.round((a.avgResolution||0)*10)/10) + ' h</td>' +
+        '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
+        '<td>' + slaCell + '</td>' +
+        '</tr>';
+    }).join('');
+  } else if (agentBody) {
+    agentBody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">No agent data available</td></tr>';
+  }
 }
 
 /* ══════════ USERS & ROLES ══════════ */
