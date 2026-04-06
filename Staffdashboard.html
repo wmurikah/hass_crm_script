@@ -1621,6 +1621,17 @@ var currentSLAPeriod = 'month';
 var currentSLADimension = 'internal';
 var slaChartFinance, slaChartLA, slaChartTrend;
 
+function safeDestroyChart(chartRef) {
+  try {
+    if (chartRef && typeof chartRef.destroy === 'function') {
+      chartRef.destroy();
+    }
+  } catch(e) {
+    console.warn('Chart destroy failed:', e.message);
+  }
+  return null;
+}
+
 /* ── SLA Advanced Filters ── */
 var slaFilters = { year:'2025', period:'all', month:null, customFrom:null, customTo:null, staff:'ALL', department:'ALL' };
 
@@ -1761,7 +1772,7 @@ function renderSLAData(data) {
   var affiliateColors = { HPK:'#1A237E', HPU:'#FF6F00', HPT:'#0d9488', HPR:'#7c3aed', HSS:'#db2777', HPZ:'#ea580c', HPC:'#0284c7', HTW:'#64748b' };
 
   // Finance chart
-  if (slaChartFinance) slaChartFinance.destroy();
+  slaChartFinance = safeDestroyChart(slaChartFinance);
   var fCtx = document.getElementById('chartFinance').getContext('2d');
   slaChartFinance = new Chart(fCtx, {
     type: 'bar',
@@ -1784,7 +1795,7 @@ function renderSLAData(data) {
   });
 
   // LA chart
-  if (slaChartLA) slaChartLA.destroy();
+  slaChartLA = safeDestroyChart(slaChartLA);
   var lCtx = document.getElementById('chartLA').getContext('2d');
   slaChartLA = new Chart(lCtx, {
     type: 'bar',
@@ -1807,7 +1818,7 @@ function renderSLAData(data) {
   });
 
   // Trend chart
-  if (slaChartTrend) slaChartTrend.destroy();
+  slaChartTrend = safeDestroyChart(slaChartTrend);
   var tCtx = document.getElementById('chartTrend').getContext('2d');
   slaChartTrend = new Chart(tCtx, {
     type: 'line',
@@ -1906,162 +1917,199 @@ function renderExternalSLA(data) {
 
   var kpis = data.kpis;
 
-  // ── KPI CARDS ────────────────────────────────────────────
   function setEl(id, val) {
     var el = document.getElementById(id);
     if (el) el.textContent = val;
   }
 
+  // ── KPI CARDS ────────────────────────────────────────────
   setEl('extKpiFirstResponse', Math.round(kpis.avgFirstResponseMin || 0));
-  setEl('extKpiResolution',    (Math.round((kpis.avgResolutionHrs || 0) * 10) / 10));
-  setEl('extKpiFulfilment',    (Math.round((kpis.avgFulfilmentHrs || 0) * 10) / 10));
+  setEl('extKpiResolution',    Math.round((kpis.avgResolutionHrs  || 0) * 10) / 10);
+  setEl('extKpiFulfilment',    Math.round((kpis.avgFulfilmentHrs  || 0) * 10) / 10);
   setEl('extKpiSatisfaction',  kpis.avgCSAT > 0 ? kpis.avgCSAT.toFixed(1) : '--');
 
-  // ── MONTHLY TREND CHART ──────────────────────────────────
-  var trendCanvas = document.getElementById('chartExtResponse');
-  if (trendCanvas && data.monthlyTrend && data.monthlyTrend.length > 0) {
-    if (window.chartExtResponse) { window.chartExtResponse.destroy(); window.chartExtResponse = null; }
-    window.chartExtResponse = new Chart(trendCanvas.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: data.monthlyTrend.map(function(m){ return m.month; }),
-        datasets: [
-          {
-            label: 'Avg First Response (min)',
-            data: data.monthlyTrend.map(function(m){ return m.avgFirstResponse || 0; }),
-            borderColor: '#1A237E',
-            backgroundColor: 'rgba(26,35,126,0.06)',
-            fill: true, tension: 0.4, pointRadius: 4
-          },
-          {
-            label: 'Avg Resolution (hrs)',
-            data: data.monthlyTrend.map(function(m){ return m.avgResolutionHrs || 0; }),
-            borderColor: '#FF6F00',
-            backgroundColor: 'rgba(255,111,0,0.06)',
-            fill: true, tension: 0.4, pointRadius: 4,
-            yAxisID: 'y1'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        scales: {
-          y:  { title: { display: true, text: 'Response (min)' }, position: 'left' },
-          y1: { title: { display: true, text: 'Resolution (hrs)' }, position: 'right', grid: { drawOnChartArea: false } }
+  // ── SAFE CHART BUILDER ───────────────────────────────────
+  function buildChart(existingRef, canvasId, config) {
+    // Safely destroy old chart
+    if (existingRef && typeof existingRef.destroy === 'function') {
+      try { existingRef.destroy(); } catch(e) {}
+    }
+    // Get canvas
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) {
+      console.warn('Canvas not found: ' + canvasId);
+      return null;
+    }
+    // Get context
+    var ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.warn('Canvas context null: ' + canvasId);
+      return null;
+    }
+    // Build chart
+    try {
+      return new Chart(ctx, config);
+    } catch(e) {
+      console.error('Chart build failed for ' + canvasId + ':', e.message);
+      return null;
+    }
+  }
+
+  // ── TREND CHART ──────────────────────────────────────────
+  if (data.monthlyTrend && data.monthlyTrend.length > 0) {
+    window.chartExtResponse = buildChart(
+      window.chartExtResponse,
+      'chartExtResponse',
+      {
+        type: 'line',
+        data: {
+          labels: data.monthlyTrend.map(function(m){ return m.month; }),
+          datasets: [
+            {
+              label: 'Avg First Response (min)',
+              data: data.monthlyTrend.map(function(m){ return m.avgFirstResponse || 0; }),
+              borderColor: '#1A237E',
+              backgroundColor: 'rgba(26,35,126,0.06)',
+              fill: true, tension: 0.4, pointRadius: 4
+            },
+            {
+              label: 'Avg Resolution (hrs)',
+              data: data.monthlyTrend.map(function(m){ return m.avgResolutionHrs || 0; }),
+              borderColor: '#FF6F00',
+              backgroundColor: 'rgba(255,111,0,0.06)',
+              fill: true, tension: 0.4, pointRadius: 4,
+              yAxisID: 'y1'
+            }
+          ]
         },
-        plugins: { legend: { position: 'top' } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            y:  { title: { display: true, text: 'Response (min)' }, position: 'left', beginAtZero: true },
+            y1: { title: { display: true, text: 'Resolution (hrs)' }, position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+          },
+          plugins: { legend: { position: 'top' } }
+        }
       }
-    });
+    );
   }
 
   // ── CATEGORY CHART ───────────────────────────────────────
-  var catCanvas = document.getElementById('chartExtCategory');
-  if (catCanvas && data.byCategory && data.byCategory.length > 0) {
-    if (window.chartExtCategory) { window.chartExtCategory.destroy(); window.chartExtCategory = null; }
+  if (data.byCategory && data.byCategory.length > 0) {
     var catColors = { DELIVERY:'#1A237E', QUALITY:'#dc2626', BILLING:'#d97706', ACCOUNT:'#0d9488', PRICING:'#7c3aed', GENERAL:'#64748b' };
-    window.chartExtCategory = new Chart(catCanvas.getContext('2d'), {
-      type: 'bar',
-      data: {
-        labels: data.byCategory.map(function(c){ return c.category; }),
-        datasets: [{
-          label: 'Avg Resolution (hrs)',
-          data: data.byCategory.map(function(c){ return c.avgResolutionHrs || 0; }),
-          backgroundColor: data.byCategory.map(function(c){ return catColors[c.category] || '#94a3b8'; }),
-          borderRadius: 6
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { title: { display: true, text: 'Hours' } } }
+    window.chartExtCategory = buildChart(
+      window.chartExtCategory,
+      'chartExtCategory',
+      {
+        type: 'bar',
+        data: {
+          labels: data.byCategory.map(function(c){ return c.category; }),
+          datasets: [{
+            label: 'Avg Resolution (hrs)',
+            data: data.byCategory.map(function(c){ return c.avgResolutionHrs || 0; }),
+            backgroundColor: data.byCategory.map(function(c){ return catColors[c.category] || '#94a3b8'; }),
+            borderRadius: 6
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { x: { beginAtZero: true, title: { display: true, text: 'Hours' } } }
+        }
       }
-    });
+    );
   }
 
   // ── FULFILMENT SCATTER ───────────────────────────────────
-  var fulCanvas = document.getElementById('chartExtFulfilment');
-  if (fulCanvas && data.fulfilment && data.fulfilment.length > 0) {
-    if (window.chartExtFulfilment) { window.chartExtFulfilment.destroy(); window.chartExtFulfilment = null; }
+  if (data.fulfilment && data.fulfilment.length > 0) {
     var onTime  = data.fulfilment.filter(function(d){ return d.status === 'ON_TIME'; });
     var slight  = data.fulfilment.filter(function(d){ return d.status === 'SLIGHT'; });
     var delayed = data.fulfilment.filter(function(d){ return d.status === 'DELAYED'; });
     function toXY(arr) {
       return arr.map(function(d){
-        return { x: new Date(d.orderDate).getTime(), y: d.hrs, label: d.orderNumber };
+        return { x: new Date(d.orderDate).getTime(), y: d.hrs || 0, label: d.orderNumber };
       });
     }
-    window.chartExtFulfilment = new Chart(fulCanvas.getContext('2d'), {
-      type: 'scatter',
-      data: {
-        datasets: [
-          { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.65)',  pointRadius:5, data: toXY(onTime)  },
-          { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.65)',  pointRadius:5, data: toXY(slight)  },
-          { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.65)',  pointRadius:5, data: toXY(delayed) }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Order Date' } },
-          y: { title: { display: true, text: 'Hours to Deliver' }, min: 0 }
+    window.chartExtFulfilment = buildChart(
+      window.chartExtFulfilment,
+      'chartExtFulfilment',
+      {
+        type: 'scatter',
+        data: {
+          datasets: [
+            { label:'On Time (<24h)',  backgroundColor:'rgba(22,163,74,0.65)',  pointRadius:5, data: toXY(onTime)  },
+            { label:'Slight Delay',   backgroundColor:'rgba(217,119,6,0.65)',  pointRadius:5, data: toXY(slight)  },
+            { label:'Delayed (>48h)', backgroundColor:'rgba(220,38,38,0.65)', pointRadius:5, data: toXY(delayed) }
+          ]
         },
-        plugins: {
-          legend: { position: 'top' },
-          tooltip: { callbacks: { label: function(ctx){ return (ctx.raw.label || '') + ': ' + ctx.raw.y + 'h'; } } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'linear', title: { display: true, text: 'Order Date (timestamp)' } },
+            y: { beginAtZero: true, title: { display: true, text: 'Hours to Deliver' } }
+          },
+          plugins: {
+            legend: { position: 'top' },
+            tooltip: { callbacks: { label: function(ctx){ return (ctx.raw.label||'') + ': ' + ctx.raw.y + 'h'; } } }
+          }
         }
       }
-    });
+    );
   }
 
   // ── AFFILIATE TABLE ──────────────────────────────────────
   var affBody = document.getElementById('extAffiliateBody');
-  if (affBody && data.byAffiliate && data.byAffiliate.length > 0) {
-    function badge(pct) {
-      var cls = pct >= 80 ? 'pct-good' : pct >= 60 ? 'pct-warn' : 'pct-bad';
-      return '<span class="pct-badge ' + cls + '">' + pct + '%</span>';
+  if (affBody) {
+    if (!data.byAffiliate || data.byAffiliate.length === 0) {
+      affBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:20px">No data</td></tr>';
+    } else {
+      function badge(pct) {
+        var cls = pct >= 80 ? 'pct-good' : pct >= 60 ? 'pct-warn' : 'pct-bad';
+        return '<span class="pct-badge ' + cls + '">' + (pct||0) + '%</span>';
+      }
+      affBody.innerHTML = data.byAffiliate.map(function(a) {
+        return '<tr>' +
+          '<td><strong>' + (a.affiliate||'') + '</strong></td>' +
+          '<td>' + (a.tickets||0) + '</td>' +
+          '<td>' + Math.round(a.avgFirstResponseMin||0) + '</td>' +
+          '<td>' + badge(a.firstResponseSLAPct||0) + '</td>' +
+          '<td>' + (Math.round((a.avgResolutionHrs||0)*10)/10) + '</td>' +
+          '<td>' + badge(a.resolutionSLAPct||0) + '</td>' +
+          '<td>' + (Math.round((a.avgFulfilmentHrs||0)*10)/10) + '</td>' +
+          '<td>' + badge(a.fulfilmentSLAPct||0) + '</td>' +
+          '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
+          '</tr>';
+      }).join('');
     }
-    affBody.innerHTML = data.byAffiliate.map(function(a) {
-      return '<tr>' +
-        '<td><strong>' + (a.affiliate||'') + '</strong></td>' +
-        '<td>' + (a.tickets||0) + '</td>' +
-        '<td>' + Math.round(a.avgFirstResponseMin||0) + '</td>' +
-        '<td>' + badge(a.firstResponseSLAPct||0) + '</td>' +
-        '<td>' + (Math.round((a.avgResolutionHrs||0)*10)/10) + '</td>' +
-        '<td>' + badge(a.resolutionSLAPct||0) + '</td>' +
-        '<td>' + (Math.round((a.avgFulfilmentHrs||0)*10)/10) + '</td>' +
-        '<td>' + badge(a.fulfilmentSLAPct||0) + '</td>' +
-        '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
-        '</tr>';
-    }).join('');
-  } else if (affBody) {
-    affBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:20px;">No affiliate data for selected period</td></tr>';
   }
 
   // ── AGENT LEADERBOARD ────────────────────────────────────
   var agentBody = document.getElementById('extAgentBody');
-  if (agentBody && data.agentPerformance && data.agentPerformance.length > 0) {
-    var medals = ['&#127947;','&#129352;','&#129353;'];
-    agentBody.innerHTML = data.agentPerformance.map(function(a, idx) {
-      var medal   = idx < 3 ? medals[idx] : String(idx+1);
-      var rowStyle= a.withinSLAPct < 60 ? 'style="background:#fff5f5"' : idx === 0 ? 'style="background:#fefce8"' : '';
-      var slaCell = '<span class="pct-badge ' + (a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad') + '">' + (a.withinSLAPct||0) + '%</span>';
-      return '<tr ' + rowStyle + '>' +
-        '<td><span style="font-size:16px">' + medal + '</span></td>' +
-        '<td>' + (a.name||a.userId||'') + '</td>' +
-        '<td>' + (a.tickets||0) + '</td>' +
-        '<td>' + Math.round(a.avgFirstResponse||0) + ' min</td>' +
-        '<td>' + (Math.round((a.avgResolution||0)*10)/10) + ' h</td>' +
-        '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
-        '<td>' + slaCell + '</td>' +
-        '</tr>';
-    }).join('');
-  } else if (agentBody) {
-    agentBody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px;">No agent data available</td></tr>';
+  if (agentBody) {
+    if (!data.agentPerformance || data.agentPerformance.length === 0) {
+      agentBody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:20px">No data</td></tr>';
+    } else {
+      var medals = ['&#127947;','&#129352;','&#129353;'];
+      agentBody.innerHTML = data.agentPerformance.map(function(a, idx) {
+        var medal    = idx < 3 ? medals[idx] : String(idx+1);
+        var rowStyle = a.withinSLAPct < 60 ? 'style="background:#fff5f5"' : idx === 0 ? 'style="background:#fefce8"' : '';
+        var sla      = '<span class="pct-badge ' + (a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad') + '">' + (a.withinSLAPct||0) + '%</span>';
+        return '<tr ' + rowStyle + '>' +
+          '<td>' + medal + '</td>' +
+          '<td>' + (a.name||'') + '</td>' +
+          '<td>' + (a.tickets||0) + '</td>' +
+          '<td>' + Math.round(a.avgFirstResponse||0) + ' min</td>' +
+          '<td>' + (Math.round((a.avgResolution||0)*10)/10) + ' h</td>' +
+          '<td>' + (a.avgCSAT > 0 ? '&#9733; ' + a.avgCSAT.toFixed(1) : '--') + '</td>' +
+          '<td>' + sla + '</td>' +
+          '</tr>';
+      }).join('');
+    }
   }
 }
 
