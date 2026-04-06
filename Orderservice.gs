@@ -1358,7 +1358,7 @@ function parsePeriod(period) {
     const q = Math.floor(now.getMonth() / 3);
     startDate = new Date(now.getFullYear(), q * 3, 1);
   } else if (period === 'year') {
-    startDate = new Date(now.getFullYear(), 0, 1);
+    startDate = new Date(2025, 0, 1);
   } else if (period === 'ytm') {
     startDate = new Date(now.getFullYear(), 0, 1);
     endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
