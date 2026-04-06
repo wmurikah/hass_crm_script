@@ -702,7 +702,7 @@ function loadConsumptionData(period) {
     .handleOrderRequest({
       service: 'orders',
       action: 'customerConsumption',
-      customerId: currentCustomer ? currentCustomer.customer_id : null,
+      customerId: SESSION.customerId || null,
       period: period
     });
 }
