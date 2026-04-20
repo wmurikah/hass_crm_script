@@ -114,23 +114,23 @@ function syncCustomerToOracle(customerId) {
     logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/customers', payload, response.data, response.status, duration);
     
     if (response.success) {
-      // Update customer with Oracle ID
+      // Update customer with Oracle code
       if (response.data.oracle_customer_id) {
         updateRow('Customers', 'customer_id', customerId, {
-          oracle_customer_id: response.data.oracle_customer_id,
+          oracle_customer_code: response.data.oracle_customer_id,
           last_synced_at: new Date(),
         });
         clearSheetCache('Customers');
       }
-      
+
       return {
         success: true,
         oracleCustomerId: response.data.oracle_customer_id,
       };
     }
-    
+
     return { success: false, error: response.error || 'Oracle sync failed' };
-    
+
   } catch (e) {
     const duration = new Date() - startTime;
     logIntegrationCall('ORACLE_EBS', 'OUTBOUND', '/customers', { customerId }, { error: e.message }, 500, duration);
@@ -160,25 +160,25 @@ function syncOrderToOracle(orderId) {
     }
     
     const customer = getById('Customers', order.customer_id);
-    if (!customer || !customer.oracle_customer_id) {
+    if (!customer || !customer.oracle_customer_code) {
       // Sync customer first
       const customerSync = syncCustomerToOracle(order.customer_id);
       if (!customerSync.success) {
         return { success: false, error: 'Failed to sync customer first: ' + customerSync.error };
       }
     }
-    
+
     // Get order lines
     const lines = findWhere('OrderLines', { order_id: orderId }).data || [];
-    
+
     // Get delivery location
-    const location = order.delivery_location_id ? 
+    const location = order.delivery_location_id ?
       getById('DeliveryLocations', order.delivery_location_id) : null;
-    
+
     // Build Oracle payload
     const payload = {
       order_number: order.order_number,
-      oracle_customer_id: customer.oracle_customer_id,
+      oracle_customer_id: customer.oracle_customer_code,
       order_date: order.created_at,
       requested_delivery_date: order.requested_date,
       po_number: order.po_number,
@@ -474,7 +474,7 @@ function processWebhook(webhookData, signature) {
 function handleCustomerWebhook(eventType, data) {
   try {
     // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
+    const customer = findRow('Customers', 'oracle_customer_code', data.oracle_customer_id);
     
     if (!customer) {
       return { success: true, message: 'Customer not found in CMS', skipped: true };
@@ -490,11 +490,7 @@ function handleCustomerWebhook(eventType, data) {
     if (data.credit_used !== undefined) {
       updates.credit_used = data.credit_used;
     }
-    
-    if (data.status) {
-      updates.oracle_status = data.status;
-    }
-    
+
     if (Object.keys(updates).length > 0) {
       updates.last_synced_at = new Date();
       updateRow('Customers', 'customer_id', customer.customer_id, updates);
@@ -560,7 +556,7 @@ function handleOrderStatusWebhook(data) {
 function handleInvoiceWebhook(eventType, data) {
   try {
     // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
+    const customer = findRow('Customers', 'oracle_customer_code', data.oracle_customer_id);
     
     if (!customer) {
       return { success: true, message: 'Customer not found', skipped: true };
@@ -617,7 +613,7 @@ function handleInvoiceWebhook(eventType, data) {
 function handlePaymentWebhook(data) {
   try {
     // Find customer by Oracle ID
-    const customer = findRow('Customers', 'oracle_customer_id', data.oracle_customer_id);
+    const customer = findRow('Customers', 'oracle_customer_code', data.oracle_customer_id);
     
     if (!customer) {
       return { success: true, message: 'Customer not found', skipped: true };
@@ -628,8 +624,6 @@ function handlePaymentWebhook(data) {
       const newCreditUsed = Math.max(0, (customer.credit_used || 0) - data.amount);
       updateRow('Customers', 'customer_id', customer.customer_id, {
         credit_used: newCreditUsed,
-        last_payment_date: data.payment_date || new Date(),
-        last_payment_amount: data.amount,
       });
       clearSheetCache('Customers');
     }

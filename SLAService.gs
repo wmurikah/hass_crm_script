@@ -22,7 +22,7 @@ function handleSLARequest(params) {
   }
 }
 
-function parsePeriod(periodOrFilters) {
+function parseSLAPeriod(periodOrFilters) {
   // Backward compatible: accepts either a plain string or a filters object
   if (typeof periodOrFilters === 'object' && periodOrFilters !== null) {
     return parseFilters(periodOrFilters);

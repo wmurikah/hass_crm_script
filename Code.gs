@@ -80,6 +80,10 @@ function serveCustomerPortal(session, token) {
     }
   } catch(e) { Logger.log('serveCustomerPortal: ' + e.message); }
 
+  if (!customerId) {
+    return HtmlService.createHtmlOutput('<div style="font-family:sans-serif;padding:40px;text-align:center"><h2>Account Not Linked</h2><p>Your portal account is not linked to a customer record. Please contact support@hasspetroleum.com</p></div>').setTitle('Account Error');
+  }
+
   var tmpl = HtmlService.createTemplateFromFile('Customerportal');
   tmpl.SESSION = JSON.stringify({
     contactId:  session.userId,
@@ -132,8 +136,26 @@ function doPost(e) {
       case 'integrations':
         result = handleIntegrationRequest(params);
         break;
+      case 'sla':
+        result = handleSLARequest(params);
+        break;
+      case 'chat':
+        result = handleChatRequest(params);
+        break;
+      case 'settings':
+        result = handleSettingsRequest(params);
+        break;
+      case 'upload':
+        result = handleDataUploadRequest(params);
+        break;
+      case 'dashboard':
+        result = handleDashboardRequest(params);
+        break;
+      case 'users':
+        result = handleUserRequest(params);
+        break;
       default:
-        result = { success: false, error: 'Unknown service' };
+        result = { success: false, error: 'Unknown service: ' + service };
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))

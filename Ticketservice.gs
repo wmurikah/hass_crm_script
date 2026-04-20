@@ -1598,28 +1598,107 @@ function categorizeEmailSubject(subject) {
 // ============================================================================
 
 function createTicketAssignmentNotification(ticketId, ticketNumber, userId, customerName) {
-  // Would integrate with NotificationService
-  Logger.log(`Notification: Ticket ${ticketNumber} assigned to ${userId}`);
+  if (!userId) return;
+  createNotification({
+    recipient_type:   'INTERNAL_USER',
+    recipient_id:     userId,
+    notification_type:'TICKET_ASSIGNED',
+    reference_type:   'Ticket',
+    reference_id:     ticketId,
+    title:            'Ticket Assigned: ' + ticketNumber,
+    message:          'You have been assigned ticket ' + ticketNumber + (customerName ? ' from ' + customerName : '') + '.',
+    action_url:       '/tickets/' + ticketId,
+    priority:         'HIGH'
+  });
 }
 
 function createTicketCreatedNotification(ticketId, ticketNumber, contactId, customerName) {
-  Logger.log(`Notification: Ticket ${ticketNumber} created for contact ${contactId}`);
+  if (!contactId) return;
+  createNotification({
+    recipient_type:   'CUSTOMER_CONTACT',
+    recipient_id:     contactId,
+    notification_type:'TICKET_CREATED',
+    reference_type:   'Ticket',
+    reference_id:     ticketId,
+    title:            'Support Ticket Created - ' + ticketNumber,
+    message:          'Your support ticket ' + ticketNumber + ' has been created. We will respond shortly.',
+    action_url:       '/portal/tickets',
+    priority:         'NORMAL'
+  });
 }
 
 function createTicketResolvedNotification(ticketId, ticketNumber, contactId) {
-  Logger.log(`Notification: Ticket ${ticketNumber} resolved, notifying ${contactId}`);
+  if (!contactId) return;
+  createNotification({
+    recipient_type:   'CUSTOMER_CONTACT',
+    recipient_id:     contactId,
+    notification_type:'TICKET_RESOLVED',
+    reference_type:   'Ticket',
+    reference_id:     ticketId,
+    title:            'Ticket Resolved - ' + ticketNumber,
+    message:          'Your support ticket ' + ticketNumber + ' has been resolved. Please rate your experience.',
+    action_url:       '/portal/tickets',
+    priority:         'NORMAL'
+  });
 }
 
 function createTicketReopenedNotification(ticketId, ticketNumber, userId) {
-  Logger.log(`Notification: Ticket ${ticketNumber} reopened, notifying ${userId}`);
+  if (!userId) return;
+  createNotification({
+    recipient_type:   'INTERNAL_USER',
+    recipient_id:     userId,
+    notification_type:'TICKET_REOPENED',
+    reference_type:   'Ticket',
+    reference_id:     ticketId,
+    title:            'Ticket Reopened: ' + ticketNumber,
+    message:          'Ticket ' + ticketNumber + ' has been reopened by the customer.',
+    action_url:       '/tickets/' + ticketId,
+    priority:         'HIGH'
+  });
 }
 
 function createTicketEscalationNotification(ticketId, ticketNumber, userId, level) {
-  Logger.log(`Notification: Ticket ${ticketNumber} escalated to level ${level}, notifying ${userId}`);
+  if (!userId) return;
+  createNotification({
+    recipient_type:   'INTERNAL_USER',
+    recipient_id:     userId,
+    notification_type:'TICKET_ESCALATED',
+    reference_type:   'Ticket',
+    reference_id:     ticketId,
+    title:            'Ticket Escalated L' + level + ': ' + ticketNumber,
+    message:          'Ticket ' + ticketNumber + ' has been escalated to level ' + level + ' and requires your attention.',
+    action_url:       '/tickets/' + ticketId,
+    priority:         'CRITICAL'
+  });
 }
 
 function createTicketReplyNotification(ticketId, ticketNumber, recipientId, senderType) {
-  Logger.log(`Notification: New reply on ${ticketNumber} from ${senderType}, notifying ${recipientId}`);
+  if (!recipientId) return;
+  if (senderType === 'CUSTOMER') {
+    createNotification({
+      recipient_type:   'INTERNAL_USER',
+      recipient_id:     recipientId,
+      notification_type:'TICKET_REPLY',
+      reference_type:   'Ticket',
+      reference_id:     ticketId,
+      title:            'Customer Reply: ' + ticketNumber,
+      message:          'The customer replied on ticket ' + ticketNumber + '.',
+      action_url:       '/tickets/' + ticketId,
+      priority:         'HIGH'
+    });
+  } else if (senderType === 'AGENT') {
+    createNotification({
+      recipient_type:   'CUSTOMER_CONTACT',
+      recipient_id:     recipientId,
+      notification_type:'TICKET_REPLY',
+      reference_type:   'Ticket',
+      reference_id:     ticketId,
+      title:            'New Reply on ' + ticketNumber,
+      message:          'Our team replied on your ticket ' + ticketNumber + '.',
+      action_url:       '/portal/tickets',
+      priority:         'NORMAL'
+    });
+  }
 }
 
 // ============================================================================
