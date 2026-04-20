@@ -950,7 +950,113 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     </div>
 
     <div class="page-section" id="page-customers">
-      <div class="page-placeholder">Customers — loaded by SD-3 prompt</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <h5 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">Customers</h5>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="custSearch" class="form-input" placeholder="Search by company, account, or country..." style="width:auto;min-width:260px;" oninput="filterCustomers()">
+          <select id="custTypeFilter" class="form-input" style="width:auto;min-width:140px;" onchange="filterCustomers()">
+            <option value="ALL">All Types</option>
+            <option value="B2B">B2B</option>
+            <option value="B2C">B2C</option>
+            <option value="GOVERNMENT">GOVERNMENT</option>
+          </select>
+          <select id="custRiskFilter" class="form-input" style="width:auto;min-width:160px;" onchange="filterCustomers()">
+            <option value="ALL">All Risk Levels</option>
+            <option value="LOW">LOW</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="HIGH">HIGH</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
+        <div class="dash-stat-card"><div class="dash-stat-val" id="custStatTotal">--</div><div class="dash-stat-label">Total Customers</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="custStatActive">--</div><div class="dash-stat-label">Active</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="custStatHighRisk" style="color:#dc2626;">--</div><div class="dash-stat-label">High Risk</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="custStatExposure">--</div><div class="dash-stat-label">Total Credit Exposure</div></div>
+      </div>
+
+      <div class="table-wrap" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table class="users-table" id="custMainTable">
+          <thead>
+            <tr>
+              <th>Account #</th>
+              <th>Company</th>
+              <th>Type</th>
+              <th>Country</th>
+              <th>Credit Limit</th>
+              <th>Credit Used</th>
+              <th>Utilisation %</th>
+              <th>Risk</th>
+              <th>Status</th>
+              <th>Last Updated</th>
+            </tr>
+          </thead>
+          <tbody id="custTableBody">
+            <tr><td colspan="10" class="users-loading">Loading customers...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-overlay" id="custDetailModal" style="display:none">
+        <div class="modal-card" style="max-width:860px;">
+          <div class="modal-header">
+            <h3 id="custModalCompany">Customer</h3>
+            <button class="modal-close" onclick="document.getElementById('custDetailModal').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Account Number</div>
+                <div id="custModalAccount" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Trading Name</div>
+                <div id="custModalTrading" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Industry</div>
+                <div id="custModalIndustry" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Payment Terms</div>
+                <div id="custModalTerms" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Oracle Customer Code</div>
+                <div id="custModalOracle" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Affiliate Code</div>
+                <div id="custModalAffiliate" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Notes</div>
+                <div id="custModalNotes" style="font-size:13px;color:#334155;white-space:pre-wrap;"></div>
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Credit Limit</div>
+                <div id="custModalLimit" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Credit Used</div>
+                <div id="custModalUsed" style="font-size:14px;color:#1e293b;margin-bottom:6px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Utilisation</div>
+                <progress id="custModalUtilBar" value="0" max="100" style="width:100%;height:14px;margin-bottom:12px;"></progress>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Lifetime Value</div>
+                <div id="custModalLTV" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Risk Level</div>
+                <div id="custModalRisk" style="margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Onboarding Status</div>
+                <div id="custModalOnboarding" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Relationship Owner</div>
+                <div id="custModalOwner" style="font-size:14px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Created At</div>
+                <div id="custModalCreated" style="font-size:14px;color:#1e293b;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="page-section" id="page-tickets">
@@ -1682,6 +1788,9 @@ function showPage(name) {
       window.unreadChatCount = 0;
       if (typeof updateChatBadge === 'function') updateChatBadge();
       if (typeof updateTabTitle === 'function') updateTabTitle();
+      break;
+    case 'customers':
+      if (!window._customersLoaded) { window._customersLoaded = true; loadCustomersPage(); }
       break;
     case 'tickets':
       if (typeof loadTicketsPage === 'function') loadTicketsPage();
@@ -2847,6 +2956,143 @@ if (typeof window.showToast !== 'function') {
   };
 }
 
+
+/* ══════════ CUSTOMERS PAGE ══════════ */
+window._customersData = [];
+window._activeCustomerId = null;
+
+function loadCustomersPage() {
+  var tbody = document.getElementById('custTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="users-loading">Loading customers...</td></tr>';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        window._customersData = r.data || [];
+        renderCustomersPageTable(window._customersData);
+        renderCustomerKPIs(window._customersData);
+      } else {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:#dc2626;">Failed to load customers</td></tr>';
+      }
+    })
+    .withFailureHandler(function() {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:#dc2626;">Failed to load customers</td></tr>';
+    })
+    .handleCustomerRequest({ action:'list', conditions:{}, options:{ limit:200 } });
+}
+
+function renderCustomersPageTable(customers) {
+  var tbody = document.getElementById('custTableBody');
+  if (!tbody) return;
+  var qEl = document.getElementById('custSearch');
+  var tEl = document.getElementById('custTypeFilter');
+  var rEl = document.getElementById('custRiskFilter');
+  var q = (qEl && qEl.value || '').toLowerCase().trim();
+  var typeF = tEl ? tEl.value : 'ALL';
+  var riskF = rEl ? rEl.value : 'ALL';
+  var af = (typeof currentAffiliate !== 'undefined') ? currentAffiliate : 'ALL';
+
+  var filtered = (customers || []).filter(function(c) {
+    if (af !== 'ALL' && c.country_code !== af) return false;
+    if (typeF && typeF !== 'ALL' && c.customer_type !== typeF) return false;
+    if (riskF && riskF !== 'ALL' && c.risk_level !== riskF) return false;
+    if (q) {
+      var hay = ((c.company_name||'') + ' ' + (c.account_number||'') + ' ' + (c.country_code||'')).toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:#64748b;">No customers found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(c) {
+    var lim = parseFloat(c.credit_limit) || 0;
+    var used = parseFloat(c.credit_used) || 0;
+    var util = lim > 0 ? (used / lim * 100) : 0;
+    var utilStr = util.toFixed(1) + '%';
+    var utilCell = util > 80
+      ? '<td style="color:#dc2626;font-weight:700;">' + utilStr + '</td>'
+      : '<td>' + utilStr + '</td>';
+    var typeColor = c.customer_type === 'B2B' ? '#2563eb'
+                  : c.customer_type === 'B2C' ? '#64748b'
+                  : c.customer_type === 'GOVERNMENT' ? '#7c3aed' : '#94a3b8';
+    var typeBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:' + typeColor + '1a;color:' + typeColor + ';font-size:11px;font-weight:700;">' + (c.customer_type||'-') + '</span>';
+    var riskColor = c.risk_level === 'LOW' ? '#16a34a'
+                  : c.risk_level === 'MEDIUM' ? '#ea580c'
+                  : c.risk_level === 'HIGH' ? '#dc2626' : '#94a3b8';
+    var riskBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;background:' + riskColor + '1a;color:' + riskColor + ';font-size:11px;font-weight:700;">' + (c.risk_level||'-') + '</span>';
+    var safeId = String(c.customer_id||'').replace(/'/g,"\\'");
+
+    return '<tr>'
+      + '<td><a href="#" onclick="openCustomerDetail(\'' + safeId + '\');return false;" style="color:#1A237E;font-weight:600;">' + (c.account_number||'-') + '</a></td>'
+      + '<td>' + (c.company_name||'-') + '</td>'
+      + '<td>' + typeBadge + '</td>'
+      + '<td>' + (c.country_code||'-') + '</td>'
+      + '<td>' + formatCurrency(c.credit_limit, c.currency_code) + '</td>'
+      + '<td>' + formatCurrency(c.credit_used, c.currency_code) + '</td>'
+      + utilCell
+      + '<td>' + riskBadge + '</td>'
+      + '<td>' + getStatusBadge(c.status) + '</td>'
+      + '<td>' + formatDate(c.updated_at) + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function renderCustomerKPIs(customers) {
+  customers = customers || [];
+  var total = customers.length;
+  var active = customers.filter(function(c){ return c.status === 'ACTIVE'; }).length;
+  var highRisk = customers.filter(function(c){ return c.risk_level === 'HIGH'; }).length;
+  var totalExposure = customers.reduce(function(sum, c){ return sum + (parseFloat(c.credit_used) || 0); }, 0);
+  var t = document.getElementById('custStatTotal'); if (t) t.textContent = total;
+  var a = document.getElementById('custStatActive'); if (a) a.textContent = active;
+  var h = document.getElementById('custStatHighRisk'); if (h) h.textContent = highRisk;
+  var e = document.getElementById('custStatExposure'); if (e) e.textContent = formatCurrency(totalExposure, 'KES');
+}
+
+function openCustomerDetail(customerId) {
+  var arr = window._customersData || [];
+  var c = null;
+  for (var i = 0; i < arr.length; i++) { if (String(arr[i].customer_id) === String(customerId)) { c = arr[i]; break; } }
+  if (!c) return;
+  window._activeCustomerId = customerId;
+
+  var setText = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = (val == null || val === '') ? '-' : val; };
+  var setHtml = function(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; };
+
+  setText('custModalCompany', c.company_name || 'Customer');
+  setText('custModalAccount', c.account_number);
+  setText('custModalTrading', c.trading_name);
+  setText('custModalIndustry', c.industry);
+  setText('custModalTerms', c.payment_terms);
+  setText('custModalOracle', c.oracle_customer_code);
+  setText('custModalAffiliate', c.affiliate_code);
+  setText('custModalNotes', c.notes);
+
+  setText('custModalLimit', formatCurrency(c.credit_limit, c.currency_code));
+  setText('custModalUsed', formatCurrency(c.credit_used, c.currency_code));
+  var lim = parseFloat(c.credit_limit) || 0;
+  var used = parseFloat(c.credit_used) || 0;
+  var util = lim > 0 ? Math.min(100, used / lim * 100) : 0;
+  var bar = document.getElementById('custModalUtilBar'); if (bar) bar.value = util;
+
+  setText('custModalLTV', formatCurrency(c.lifetime_value, c.currency_code));
+  var riskColor = c.risk_level === 'LOW' ? '#16a34a'
+                : c.risk_level === 'MEDIUM' ? '#ea580c'
+                : c.risk_level === 'HIGH' ? '#dc2626' : '#94a3b8';
+  setHtml('custModalRisk', '<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:' + riskColor + '1a;color:' + riskColor + ';font-size:12px;font-weight:700;">' + (c.risk_level||'-') + '</span>');
+  setText('custModalOnboarding', c.onboarding_status);
+  setText('custModalOwner', c.relationship_owner_id);
+  setText('custModalCreated', formatDate(c.created_at));
+
+  document.getElementById('custDetailModal').style.display = 'flex';
+}
+
+function filterCustomers() {
+  renderCustomersPageTable(window._customersData || []);
+}
 
 /* ══════════ SUPPORT TICKETS ══════════ */
 window._ticketsData = [];
