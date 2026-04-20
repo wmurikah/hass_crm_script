@@ -10,7 +10,7 @@ function handleDataUploadRequest(params) {
       case 'importSalesRows':
         return importSalesRows(params.rows);
       case 'importPurRows':
-        return importPurRows(params.rows);
+        return importPurRows(params.rows, params.affiliateCountryCode);
       case 'getUploadHistory':
         return getUploadHistory();
       default:
@@ -23,6 +23,71 @@ function handleDataUploadRequest(params) {
 }
 
 // ─── SALES Import ───────────────────────────────────────────────────────────
+
+function normaliseAffiliate(raw) {
+  if (!raw) return '';
+  var clean = String(raw).replace(/\t/g, '').trim().toUpperCase();
+  var map = [
+    { key: 'HASS PETROLEUM ZAMBIA',      code: 'ZM' },
+    { key: 'HASS PETROLEUM TANZANIA',    code: 'TZ' },
+    { key: 'HASS PETROLEUM KENYA',       code: 'KE' },
+    { key: 'HASS PETROLEUM UGANDA',      code: 'UG' },
+    { key: 'HASS PETROLEUM RWANDA',      code: 'RW' },
+    { key: 'HASS PETROLEUM SOUTH SUDAN', code: 'SS' },
+    { key: 'HASS PETROLEUM DRC',         code: 'CD' },
+    { key: 'HASS PETROLEUM CONGO',       code: 'CD' },
+    { key: 'HASS PETROLEUM MALAWI',      code: 'MW' },
+    { key: 'HASS PETROLEUM SOMALIA',     code: 'SO' },
+    { key: 'HASS TERMINAL',              code: 'HTW' },
+    { key: 'HTW',                        code: 'HTW' }
+  ];
+  for (var i = 0; i < map.length; i++) {
+    if (clean.indexOf(map[i].key) >= 0) return map[i].code;
+  }
+  Logger.log('[DataUpload] Unknown affiliate: ' + raw);
+  return '';
+}
+
+function resolveProductCode(oracleCode) {
+  if (!oracleCode) return null;
+  var clean = String(oracleCode).replace(/\t/g, '').trim().toUpperCase();
+
+  // Check Config sheet first for PROD_MAP_ entries
+  try {
+    var ss = getSpreadsheet();
+    var cfg = ss.getSheetByName('Config');
+    if (cfg) {
+      var cfgData = cfg.getDataRange().getValues();
+      var cfgH = cfgData[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
+      var kCol = cfgH.indexOf('config_key');
+      var vCol = cfgH.indexOf('config_value');
+      var mapKey = 'PROD_MAP_' + clean;
+      for (var r = 1; r < cfgData.length; r++) {
+        if (String(cfgData[r][kCol] || '').trim() === mapKey) {
+          return String(cfgData[r][vCol] || '').trim() || null;
+        }
+      }
+    }
+  } catch(e) {
+    Logger.log('[resolveProductCode] Config lookup failed: ' + e.message);
+  }
+
+  // Hardcoded fallbacks
+  var fallback = {
+    'AGO': 'PROD001', 'DIESEL': 'PROD001',
+    'HS-38-208': 'PROD001', 'HS-03-208': 'PROD001',
+    'HS-03-020': 'PROD001', 'HS-25-005': 'PROD002',
+    'PMS': 'PROD002', 'PETROL': 'PROD002',
+    'KERO': 'PROD003', 'KEROSENE': 'PROD003',
+    'JET-A1': 'PROD004', 'JET': 'PROD004',
+    'LPG-6': 'PROD005', 'LPG-13': 'PROD006', 'LPG': 'PROD005'
+  };
+
+  if (fallback[clean]) return fallback[clean];
+
+  Logger.log('[resolveProductCode] No mapping for: ' + oracleCode);
+  return null;
+}
 
 function importSalesRows(rows) {
   if (!rows || rows.length === 0) return { success: true, imported: 0, skipped: 0, errors: [] };
@@ -62,13 +127,15 @@ function importSalesRows(rows) {
     if (c.account_number) custLookup[String(c.account_number).trim()] = c.customer_id;
   });
 
-  // Affiliate name to country code mapping
-  var affToCC = {
-    'HASS PETROLEUM KENYA': 'KE', 'HASS PETROLEUM UGANDA': 'UG',
-    'HASS PETROLEUM TANZANIA': 'TZ', 'HASS PETROLEUM RWANDA': 'RW',
-    'HASS PETROLEUM SOUTH SUDAN': 'SS', 'HASS PETROLEUM ZAMBIA': 'ZM',
-    'HASS PETROLEUM DRC': 'DRC', 'HASS PETROLEUM CONGO': 'DRC'
-  };
+  // Build dedup set for SLAData
+  var slaExistingDocs = new Set();
+  var slaExistingData = slaSheet.getDataRange().getValues();
+  var slaH = slaExistingData[0].map(function(h){ return String(h||'').toLowerCase().trim(); });
+  var slaDocCol = slaH.indexOf('document_number');
+  for (var si = 1; si < slaExistingData.length; si++) {
+    var sDoc = String(slaExistingData[si][slaDocCol] || '').trim();
+    if (sDoc) slaExistingDocs.add(sDoc);
+  }
 
   var batchId = 'SALES_' + new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
   var imported = 0, skipped = 0, errors = [];
@@ -83,11 +150,10 @@ function importSalesRows(rows) {
       if (!docNum) { skipped++; return; }
 
       var affiliate = String(row['AFFILIATE'] || '').trim().toUpperCase();
-      var countryCode = '';
-      Object.keys(affToCC).forEach(function(k) {
-        if (affiliate.indexOf(k) >= 0) countryCode = affToCC[k];
-      });
+      var countryCode = normaliseAffiliate(row['AFFILIATE']);
+      if (!countryCode) { skipped++; return; }
 
+      var custName = String(row['CUSTOMER_NAME'] || '').replace(/\t/g, '').trim();
       var custCode = String(row['CUSTOMER_CODE'] || '').trim();
       var customerId = custLookup[custCode] || '';
       var approverUsername = String(row['APPROVER'] || '').trim().toUpperCase();
@@ -105,12 +171,17 @@ function importSalesRows(rows) {
       if (status === 'REJECT' || status === 'REJECTED') orderStatus = 'REJECTED';
       if (laDt) orderStatus = 'DISPATCHED';
 
-      // Append to SLAData for direct analytics
-      slaRows.push([
-        'SALES', affiliate, docNum, String(row['CUSTOMER_NAME'] || ''),
-        approverUsername, financeVar, laVar,
-        createDt, approvalDt, laDt, orderedItem, batchId
-      ]);
+      // Append to SLAData for direct analytics (dedup by document_number)
+      if (!slaExistingDocs.has(docNum)) {
+        slaRows.push([
+          'SALES', affiliate, docNum, custName,
+          approverUsername, financeVar, laVar,
+          createDt, approvalDt, laDt, orderedItem, batchId
+        ]);
+        slaExistingDocs.add(docNum);
+      } else {
+        Logger.log('[DataUpload] SLAData dedup skip: ' + docNum);
+      }
 
       // Upsert to Orders sheet
       if (oracleLookup[docNum]) {
@@ -147,6 +218,12 @@ function importSalesRows(rows) {
             case 'updated_at': newRow.push(now); break;
             case 'created_by_type': newRow.push('ORACLE_IMPORT'); break;
             case 'po_number': newRow.push(docNum); break;
+            case 'finance_approval_at': newRow.push(approvalDt || ''); break;
+            case 'la_issued_at': newRow.push(String(row['LOADING_AUTHORITY_DATE'] || '')); break;
+            case 'credit_hold_at': newRow.push(String(row['CREDIT_HOLD_DATE'] || '')); break;
+            case 'credit_release_at': newRow.push(String(row['CREDIT_HOLD_RELEASE_DATE'] || '')); break;
+            case 'credit_hold_reason': newRow.push(String(row['RELEASE_REASON_CODE'] || '') + (row['CREDIT_HOLD_NAME'] ? ' - ' + row['CREDIT_HOLD_NAME'] : '')); break;
+            case 'loading_authority_number': newRow.push(''); break;
             default: newRow.push('');
           }
         });
@@ -175,7 +252,8 @@ function importSalesRows(rows) {
 
 // ─── PUR Import ─────────────────────────────────────────────────────────────
 
-function importPurRows(rows) {
+function importPurRows(rows, affiliateCountryCode) {
+  affiliateCountryCode = affiliateCountryCode || 'UNKNOWN';
   if (!rows || rows.length === 0) return { success: true, imported: 0, skipped: 0, errors: [] };
 
   var ss = getSpreadsheet();
@@ -268,7 +346,101 @@ function importPurRows(rows) {
     poSheet.getRange(poSheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
   }
 
+  // Unpivot into ApprovalWorkflows table
+  var wfResult = unpivotPURtoWorkflows(rows, affiliateCountryCode, batchId);
+  Logger.log('[importPurRows] ApprovalWorkflows written: ' + wfResult.written + ', skipped: ' + wfResult.skipped);
+
   return { success: true, imported: imported, skipped: skipped, errors: errors };
+}
+
+function unpivotPURtoWorkflows(rows, affiliateCountryCode, batchId) {
+  if (!rows || rows.length === 0) return { written: 0, skipped: 0 };
+
+  var ss = getSpreadsheet();
+  var wfSheet = ss.getSheetByName('ApprovalWorkflows');
+  if (!wfSheet) {
+    Logger.log('[unpivotPUR] ApprovalWorkflows sheet not found');
+    return { written: 0, skipped: 0 };
+  }
+
+  // Build dedup set: reference_id + '_' + step_number
+  var wfData = wfSheet.getDataRange().getValues();
+  var wfH = wfData[0].map(function(h){ return String(h||'').toLowerCase().trim().replace(/ /g,'_'); });
+  var wfRefCol  = wfH.indexOf('reference_id');
+  var wfStepCol = wfH.indexOf('step_number');
+  var wfTypeCol = wfH.indexOf('workflow_type');
+  var existingKeys = new Set();
+  for (var i = 1; i < wfData.length; i++) {
+    if (String(wfData[i][wfTypeCol]||'').trim() === 'PO') {
+      existingKeys.add(String(wfData[i][wfRefCol]||'').trim() + '_' + String(wfData[i][wfStepCol]||'').trim());
+    }
+  }
+
+  var levels = ['FIRST','SECOND','THIRD','FOURTH','FIFTH','SIXTH','SEVENTH'];
+  var now = new Date().toISOString();
+  var newRows = [];
+  var skipped = 0;
+
+  // Resolve affiliate from _sheet field if not provided
+  function resolveAffiliate(row) {
+    if (affiliateCountryCode && affiliateCountryCode !== 'UNKNOWN') return affiliateCountryCode;
+    var sheet = String(row['_sheet'] || '').trim().toUpperCase();
+    var direct = ['KE','UG','TZ','RW','SS','ZM','CD','MW','SO'];
+    if (direct.indexOf(sheet) >= 0) return sheet;
+    return 'UNKNOWN';
+  }
+
+  rows.forEach(function(row) {
+    var poNum   = String(row['purchase Number'] || '').trim();
+    if (!poNum) return;
+    var aff     = resolveAffiliate(row);
+    var subDate = String(row['SUBMISSION_FOR_APPROVAL_DATE'] || '');
+    var prevApprovedAt = subDate;
+
+    levels.forEach(function(lvl, idx) {
+      var approvalDate = String(row[lvl + '_APPROVAL_DATE'] || '').trim();
+      if (!approvalDate || approvalDate === 'NaT' || approvalDate === 'None') return;
+
+      var stepNum    = idx + 1;
+      var dedupKey   = poNum + '_' + stepNum;
+      if (existingKeys.has(dedupKey)) { skipped++; return; }
+
+      var approverRaw  = String(row[lvl + '_APPROVER'] || '').trim();
+      var approverClean = approverRaw.replace(/^Mr\.?\s*/i, '').trim();
+      var varianceMin  = parseFloat(row[lvl + '_APPROVALS_VARIANCE']) || 0;
+
+      newRows.push([
+        'WF' + Date.now().toString(36).toUpperCase() + stepNum,
+        'PO',
+        poNum,
+        aff,
+        stepNum,
+        '',
+        approverClean.toUpperCase().replace(/ /g, '.'),
+        approverRaw,
+        30,
+        prevApprovedAt,
+        approvalDate,
+        varianceMin,
+        String(row['AUTHORIZATION_STATUS'] || 'APPROVED').toUpperCase(),
+        '',
+        batchId,
+        now
+      ]);
+
+      existingKeys.add(dedupKey);
+      prevApprovedAt = approvalDate;
+    });
+  });
+
+  if (newRows.length > 0) {
+    var lastRow = wfSheet.getLastRow();
+    wfSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+    SpreadsheetApp.flush();
+  }
+
+  Logger.log('[unpivotPUR] Written: ' + newRows.length + ' | Skipped: ' + skipped);
+  return { written: newRows.length, skipped: skipped };
 }
 
 // ─── Upload History ─────────────────────────────────────────────────────────
