@@ -3,6 +3,12 @@
  * Manages staff users and customer accounts
  */
 
+function getSpreadsheetUS_() {
+  var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) throw new Error('SPREADSHEET_ID not set in Script Properties');
+  return SpreadsheetApp.openById(id);
+}
+
 function handleUserRequest(params) {
   try {
     var action = params.action;
@@ -36,7 +42,7 @@ function handleUserRequest(params) {
  * Returns all staff users from the Users sheet
  */
 function getAllStaff() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Users');
   if (!sheet) return { success: false, error: 'Users sheet not found' };
 
@@ -72,7 +78,7 @@ function getAllStaff() {
  * Returns all customers with their contact counts
  */
 function getAllCustomers() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
 
   // Get customers
   var custSheet = ss.getSheetByName('Customers');
@@ -128,7 +134,7 @@ function addStaffUser(data) {
     return { success: false, error: 'Missing required fields: first_name, last_name, email, role' };
   }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Users');
   if (!sheet) return { success: false, error: 'Users sheet not found' };
 
@@ -205,7 +211,7 @@ function updateStaffRole(userId, newRole) {
   var validRoles = ['SUPER_ADMIN', 'ADMIN', 'CS_MANAGER', 'CS_SUPERVISOR', 'CS_AGENT', 'BD_MANAGER', 'BD_REP', 'FINANCE_OFFICER', 'COUNTRY_MANAGER', 'REGIONAL_MANAGER', 'GROUP_HEAD', 'VIEWER'];
   if (validRoles.indexOf(newRole) === -1) return { success: false, error: 'Invalid role: ' + newRole };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Users');
   var data = sheet.getDataRange().getValues();
   var headers = data[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
@@ -231,7 +237,7 @@ function setUserStatus(userId, status) {
   if (!userId || !status) return { success: false, error: 'userId and status required' };
   if (['ACTIVE', 'INACTIVE'].indexOf(status) === -1) return { success: false, error: 'Invalid status' };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Users');
   var data = sheet.getDataRange().getValues();
   var headers = data[0].map(function(h) { return String(h || '').toLowerCase().trim(); });
@@ -259,7 +265,7 @@ function resetUserPassword(userId, userType) {
   var sheetName = (userType === 'CUSTOMER') ? 'Contacts' : 'Users';
   var idField = (userType === 'CUSTOMER') ? 'contact_id' : 'user_id';
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) return { success: false, error: sheetName + ' sheet not found' };
 
@@ -316,7 +322,7 @@ function resetUserPassword(userId, userType) {
 function getCustomerContacts(customerId) {
   if (!customerId) return { success: false, error: 'customerId required' };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Contacts');
   if (!sheet) return { success: false, error: 'Contacts sheet not found' };
 
@@ -346,7 +352,7 @@ function getCustomerContacts(customerId) {
 function setContactPortalAccess(contactId, hasAccess) {
   if (!contactId) return { success: false, error: 'contactId required' };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Contacts');
   if (!sheet) return { success: false, error: 'Contacts sheet not found' };
 

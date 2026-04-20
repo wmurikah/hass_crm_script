@@ -4,6 +4,12 @@
  * Uses StaffMessages sheet
  */
 
+function getSpreadsheetUS_() {
+  var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  if (!id) throw new Error('SPREADSHEET_ID not set in Script Properties');
+  return SpreadsheetApp.openById(id);
+}
+
 function handleChatRequest(params) {
   try {
     var action = params.action;
@@ -32,7 +38,7 @@ function getChatMessages(roomId, limit) {
   if (!roomId) return { success: false, error: 'roomId required' };
   limit = limit || 50;
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('StaffMessages');
 
   // Create sheet if it doesn't exist
@@ -79,7 +85,7 @@ function sendChatMessage(roomId, roomType, senderId, senderName, content) {
     return { success: false, error: 'roomId, senderId, and content required' };
   }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('StaffMessages');
 
   if (!sheet) {
@@ -131,7 +137,7 @@ function sendChatMessage(roomId, roomType, senderId, senderName, content) {
 function getNewChatMessages(roomId, since) {
   if (!roomId) return { success: false, error: 'roomId required' };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('StaffMessages');
   if (!sheet) return { success: true, messages: [], checkedAt: new Date().toISOString() };
 
@@ -168,7 +174,7 @@ function getNewChatMessages(roomId, since) {
  * Returns all active staff members with online status
  */
 function getStaffMembers() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheetUS_();
   var sheet = ss.getSheetByName('Users');
   if (!sheet) return { success: true, members: [] };
 
