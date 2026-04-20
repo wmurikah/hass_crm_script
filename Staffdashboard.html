@@ -1287,6 +1287,21 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
                 </table>
                 <div class="schema-legend"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
               </div>
+              <div class='form-group' style='margin-bottom:12px;'>
+                <label class='filter-label'>Affiliate (which country is this PUR file for?)</label>
+                <select id='purAffiliate' class='filter-select' style='width:100%;'>
+                  <option value=''>Select affiliate...</option>
+                  <option value='KE'>HPK &mdash; Kenya</option>
+                  <option value='UG'>HPU &mdash; Uganda</option>
+                  <option value='TZ'>HPT &mdash; Tanzania</option>
+                  <option value='RW'>HPR &mdash; Rwanda</option>
+                  <option value='SS'>HSS &mdash; South Sudan</option>
+                  <option value='ZM'>HPZ &mdash; Zambia</option>
+                  <option value='CD'>HPC &mdash; DRC</option>
+                  <option value='MW'>HPM &mdash; Malawi</option>
+                  <option value='SO'>HSO &mdash; Somalia</option>
+                </select>
+              </div>
               <div class="upload-drop-zone" id="purDropZone">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
                 <p>Drag and drop PUR .xls/.xlsx/.csv here</p>
@@ -2834,7 +2849,7 @@ function processPurUpload() {
             sendBatch(idx + 1);
           })
           .withFailureHandler(function(e) { logUpload('Server error: ' + e.message); sendBatch(idx + 1); })
-          .handleDataUploadRequest({ action: 'importPurRows', rows: batches[idx] });
+          .handleDataUploadRequest({ action: 'importPurRows', rows: batches[idx], affiliateCountryCode: document.getElementById('purAffiliate').value || 'UNKNOWN' });
       }
       sendBatch(0);
 
