@@ -954,7 +954,110 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     </div>
 
     <div class="page-section" id="page-tickets">
-      <div class="page-placeholder">Support Tickets — loaded by SD-4 prompt</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <h5 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">Support Tickets</h5>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="tktStatusFilter" class="form-input" style="width:auto;min-width:160px;" onchange="filterTickets()">
+            <option value="ALL">All Statuses</option>
+            <option value="NEW">New</option>
+            <option value="OPEN">Open</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="ESCALATED">Escalated</option>
+            <option value="RESOLVED">Resolved</option>
+            <option value="CLOSED">Closed</option>
+          </select>
+          <input type="text" id="tktSearch" class="form-input" placeholder="Search tickets..." style="width:220px;" oninput="filterTickets()">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
+        <div class="dash-stat-card"><div class="dash-stat-val" id="tktStatTotal">--</div><div class="dash-stat-label">Total Tickets</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="tktStatOpen">--</div><div class="dash-stat-label">Open</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="tktStatBreached" style="color:#dc2626;">--</div><div class="dash-stat-label">SLA Breached</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="tktStatResolvedToday">--</div><div class="dash-stat-label">Resolved Today</div></div>
+      </div>
+
+      <div class="table-wrap" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table class="users-table" id="ticketsTable">
+          <thead>
+            <tr>
+              <th>Ticket #</th>
+              <th>Subject</th>
+              <th>Customer</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Assigned To</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="ticketsTableBody">
+            <tr><td colspan="7" class="users-loading">Loading tickets...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-overlay" id="tktDetailModal" style="display:none">
+        <div class="modal-card" style="max-width:820px;">
+          <div class="modal-header">
+            <h3 id="tktModalNumber">Ticket</h3>
+            <button class="modal-close" onclick="closeModal('tktDetailModal')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid;grid-template-columns:1fr 280px;gap:20px;">
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Subject</div>
+                <div id="tktModalSubject" style="font-size:15px;font-weight:600;color:#1e293b;margin-bottom:14px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Description</div>
+                <div id="tktModalDescription" style="font-size:13px;color:#334155;margin-bottom:14px;white-space:pre-wrap;"></div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Customer</div>
+                    <div id="tktModalCustomer" style="font-size:13px;color:#1e293b;"></div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Channel</div>
+                    <div id="tktModalChannel" style="font-size:13px;color:#1e293b;"></div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Category</div>
+                    <div id="tktModalCategory" style="font-size:13px;color:#1e293b;"></div>
+                  </div>
+                </div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;">
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Priority</div>
+                  <div id="tktModalPriority"></div>
+                </div>
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Status</div>
+                  <div id="tktModalStatus"></div>
+                </div>
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">SLA Resolve Deadline</div>
+                  <div id="tktModalSLA" style="font-size:13px;color:#1e293b;"></div>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Assigned To</div>
+                  <div id="tktModalAssigned" style="font-size:13px;color:#1e293b;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin:18px 0 8px;">Conversation</div>
+            <div id="tktComments" style="max-height:250px;overflow-y:auto;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;"></div>
+
+            <textarea id="tktReplyBox" class="form-input" placeholder="Type your reply..." style="margin-top:10px;min-height:70px;resize:vertical;"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="sendTicketReply(true)">Mark Internal</button>
+            <button class="btn-secondary" onclick="resolveActiveTicket()" style="color:#15803d;border-color:#86efac;">Resolve Ticket</button>
+            <button class="btn-primary" onclick="sendTicketReply(false)">Send Reply</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ══════════ TEAM CHAT PAGE ══════════ -->
@@ -1177,7 +1280,76 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
     <!-- ══════════ REPORTS PAGE ══════════ -->
     <div class="page-section" id="page-reports">
-      <div class="page-placeholder">Reports — loaded by SD-6 prompt</div>
+      <div style="margin-bottom:18px;">
+        <h5 style="margin:0 0 4px;font-size:18px;font-weight:700;color:#1e293b;">Reports</h5>
+        <div style="font-size:13px;color:#64748b;">Generate and export operational reports</div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+        <div class="form-group" style="max-width:180px;margin-bottom:0;">
+          <label>From</label>
+          <input type="month" id="rptFrom" class="form-input">
+        </div>
+        <div class="form-group" style="max-width:180px;margin-bottom:0;">
+          <label>To</label>
+          <input type="month" id="rptTo" class="form-input">
+        </div>
+        <button class="btn-primary" onclick="applyReportRange()">Apply</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">📦</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">Order Summary</div>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Totals, delivered, cancelled and value by affiliate.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" onclick="runReport('orders')">Run</button>
+            <button class="btn-secondary" onclick="exportReport('orders')">Export CSV</button>
+          </div>
+          <div id="rpt-orders-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">🎫</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">Ticket Summary</div>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Tickets by category with resolution and CSAT.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" onclick="runReport('tickets')">Run</button>
+            <button class="btn-secondary" onclick="exportReport('tickets')">Export CSV</button>
+          </div>
+          <div id="rpt-tickets-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">💳</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">Credit Exposure</div>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Credit limit vs utilisation by customer.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" onclick="runReport('credit')">Run</button>
+            <button class="btn-secondary" onclick="exportReport('credit')">Export CSV</button>
+          </div>
+          <div id="rpt-credit-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">⏱</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">SLA Summary</div>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Finance / Loading SLA performance per affiliate.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-primary" onclick="runReport('sla')">Run</button>
+            <button class="btn-secondary" onclick="exportReport('sla')">Export CSV</button>
+          </div>
+          <div id="rpt-sla-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- ══════════ SETTINGS PAGE ══════════ -->
@@ -1507,6 +1679,15 @@ function showPage(name) {
     case 'chat':
       if (typeof selectRoom === 'function' && !window.chatLoaded) { window.chatLoaded=true; selectRoom('ROOM_GENERAL'); }
       if (typeof initChat === 'function') initChat();
+      window.unreadChatCount = 0;
+      if (typeof updateChatBadge === 'function') updateChatBadge();
+      if (typeof updateTabTitle === 'function') updateTabTitle();
+      break;
+    case 'tickets':
+      if (typeof loadTicketsPage === 'function') loadTicketsPage();
+      break;
+    case 'reports':
+      if (typeof loadReportsPage === 'function') loadReportsPage();
       break;
     case 'users':
       if (typeof loadUsersPage === 'function' && !window.usersLoaded) { window.usersLoaded=true; loadUsersPage(); }
@@ -2468,7 +2649,9 @@ function selectRoom(roomId, el) {
   chatPollInterval = setInterval(function() {
     google.script.run
       .withSuccessHandler(function(r) {
-        if (r.success && r.messages.length > 0) {
+        if (typeof onNewChatMessages === 'function') {
+          onNewChatMessages(r);
+        } else if (r && r.success && r.messages && r.messages.length > 0) {
           r.messages.forEach(function(m) { appendChatMsg(m); });
           chatLastFetch = r.checkedAt;
         }
@@ -2604,6 +2787,545 @@ function startDM(userId, name) {
     existing = div;
   }
   selectRoom(dmRoomId, existing);
+}
+
+
+/* ══════════ SHARED HELPERS (tickets/reports) ══════════ */
+if (typeof window.formatDate !== 'function') {
+  window.formatDate = function(d) {
+    if (!d) return '-';
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return '-';
+    return dt.toLocaleDateString([], {year:'numeric',month:'short',day:'2-digit'}) + ' ' +
+           dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  };
+}
+if (typeof window.getStatusBadge !== 'function') {
+  window.getStatusBadge = function(s) {
+    var st = (s || '').toUpperCase();
+    var map = {
+      NEW:         { bg:'#dbeafe', fg:'#1d4ed8' },
+      OPEN:        { bg:'#dbeafe', fg:'#1d4ed8' },
+      IN_PROGRESS: { bg:'#fef3c7', fg:'#92400e' },
+      ESCALATED:   { bg:'#fee2e2', fg:'#b91c1c' },
+      RESOLVED:    { bg:'#dcfce7', fg:'#15803d' },
+      CLOSED:      { bg:'#e2e8f0', fg:'#475569' },
+      PENDING:     { bg:'#fef3c7', fg:'#92400e' },
+      ACTIVE:      { bg:'#dcfce7', fg:'#15803d' },
+      INACTIVE:    { bg:'#fee2e2', fg:'#dc2626' },
+      DELIVERED:   { bg:'#dcfce7', fg:'#15803d' },
+      CANCELLED:   { bg:'#fee2e2', fg:'#b91c1c' },
+      IN_TRANSIT:  { bg:'#e0f2fe', fg:'#0369a1' }
+    };
+    var c = map[st] || { bg:'#e2e8f0', fg:'#475569' };
+    return '<span class="status-badge" style="background:' + c.bg + ';color:' + c.fg + ';">' + st + '</span>';
+  };
+}
+if (typeof window.getPriorityBadge !== 'function') {
+  window.getPriorityBadge = function(p) {
+    var pr = (p || '').toUpperCase();
+    var map = {
+      LOW:      { bg:'#e2e8f0', fg:'#475569' },
+      NORMAL:   { bg:'#dbeafe', fg:'#1d4ed8' },
+      MEDIUM:   { bg:'#dbeafe', fg:'#1d4ed8' },
+      HIGH:     { bg:'#fef3c7', fg:'#92400e' },
+      URGENT:   { bg:'#fee2e2', fg:'#b91c1c' },
+      CRITICAL: { bg:'#fee2e2', fg:'#b91c1c' }
+    };
+    var c = map[pr] || { bg:'#e2e8f0', fg:'#475569' };
+    return '<span class="status-badge" style="background:' + c.bg + ';color:' + c.fg + ';">' + pr + '</span>';
+  };
+}
+if (typeof window.showToast !== 'function') {
+  window.showToast = function(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,0.18);opacity:0;transition:opacity .2s;';
+    document.body.appendChild(t);
+    requestAnimationFrame(function(){ t.style.opacity = '1'; });
+    setTimeout(function(){ t.style.opacity = '0'; setTimeout(function(){ t.remove(); }, 250); }, 2200);
+  };
+}
+
+
+/* ══════════ SUPPORT TICKETS ══════════ */
+window._ticketsData = [];
+window._activeTicketId = null;
+
+function loadTicketsPage() {
+  var tbody = document.getElementById('ticketsTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="users-loading">Loading tickets...</td></tr>';
+
+  var conditions = {};
+  var statusSel = document.getElementById('tktStatusFilter');
+  if (statusSel && statusSel.value && statusSel.value !== 'ALL') conditions.status = statusSel.value;
+  if (typeof currentAffiliate !== 'undefined' && currentAffiliate && currentAffiliate !== 'ALL') {
+    conditions.country_code = currentAffiliate;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="users-empty">Failed to load tickets</td></tr>';
+        return;
+      }
+      var data = result.data || [];
+      window._ticketsData = data;
+      renderTicketsTable(data);
+      renderTicketKPIs(data);
+    })
+    .withFailureHandler(function(e) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="users-empty">Error: ' + (e && e.message || 'failed') + '</td></tr>';
+    })
+    .handleTicketRequest({
+      action: 'list',
+      conditions: conditions,
+      options: { sortBy:'created_at', sortOrder:'desc', limit:200 }
+    });
+}
+
+function filterTickets() { loadTicketsPage(); }
+
+function renderTicketsTable(tickets) {
+  var tbody = document.getElementById('ticketsTableBody');
+  if (!tbody) return;
+
+  var q = (document.getElementById('tktSearch') && document.getElementById('tktSearch').value || '').toLowerCase().trim();
+  var list = q ? tickets.filter(function(t) {
+    return (t.ticket_number||'').toLowerCase().indexOf(q) > -1
+        || (t.subject||'').toLowerCase().indexOf(q) > -1
+        || (t.customer_id||'').toLowerCase().indexOf(q) > -1;
+  }) : tickets;
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="users-empty">No tickets found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list.map(function(t) {
+    var subj = t.subject || '';
+    if (subj.length > 40) subj = subj.substring(0, 40) + '...';
+    var breached = t.sla_resolve_breached ? ' <span style="color:#dc2626;font-size:10px;font-weight:700;margin-left:4px;">BREACHED</span>' : '';
+    var safeId = (t.ticket_id || '').replace(/'/g, "\\'");
+    return '<tr>'
+      + '<td><a href="javascript:void(0)" onclick="openTicketDetail(\'' + safeId + '\')" style="font-weight:700;color:var(--navy-800);text-decoration:none;">' + (t.ticket_number || '-') + '</a></td>'
+      + '<td>' + escapeHtml(subj) + '</td>'
+      + '<td>' + (t.customer_id || '-') + '</td>'
+      + '<td>' + getPriorityBadge(t.priority) + '</td>'
+      + '<td>' + getStatusBadge(t.status) + breached + '</td>'
+      + '<td>' + (t.assigned_to || 'Unassigned') + '</td>'
+      + '<td style="font-size:11px;color:#64748b;">' + formatDate(t.created_at) + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function renderTicketKPIs(tickets) {
+  var openStatuses = ['NEW','OPEN','IN_PROGRESS','ESCALATED'];
+  var today = new Date().toDateString();
+
+  var total = tickets.length;
+  var open = tickets.filter(function(t){ return openStatuses.indexOf((t.status||'').toUpperCase()) > -1; }).length;
+  var breached = tickets.filter(function(t){ return t.sla_resolve_breached === true; }).length;
+  var resolvedToday = tickets.filter(function(t){
+    if (!t.resolved_at) return false;
+    var d = new Date(t.resolved_at);
+    return !isNaN(d.getTime()) && d.toDateString() === today;
+  }).length;
+
+  var setText = function(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('tktStatTotal', total);
+  setText('tktStatOpen', open);
+  setText('tktStatBreached', breached);
+  setText('tktStatResolvedToday', resolvedToday);
+}
+
+function openTicketDetail(ticketId) {
+  var t = (window._ticketsData || []).filter(function(x){ return x.ticket_id === ticketId; })[0];
+  if (!t) return;
+
+  window._activeTicketId = ticketId;
+
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+  var setHtml = function(id, v) { var el = document.getElementById(id); if (el) el.innerHTML = v; };
+
+  set('tktModalNumber', 'Ticket ' + (t.ticket_number || ''));
+  set('tktModalSubject', t.subject || '-');
+  set('tktModalDescription', t.description || '-');
+  set('tktModalCustomer', t.customer_id || '-');
+  set('tktModalChannel', t.channel || '-');
+  set('tktModalCategory', t.category || '-');
+  setHtml('tktModalPriority', getPriorityBadge(t.priority));
+  setHtml('tktModalStatus', getStatusBadge(t.status));
+  set('tktModalSLA', t.sla_resolve_deadline ? formatDate(t.sla_resolve_deadline) : '-');
+  set('tktModalAssigned', t.assigned_to || 'Unassigned');
+
+  var box = document.getElementById('tktReplyBox'); if (box) box.value = '';
+  document.getElementById('tktDetailModal').style.display = 'flex';
+  loadTicketComments(ticketId);
+}
+
+function loadTicketComments(ticketId) {
+  var c = document.getElementById('tktComments');
+  if (!c) return;
+  c.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:12px;">Loading...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result || !result.success) {
+        c.innerHTML = '<div style="text-align:center;color:#dc2626;font-size:12px;padding:12px;">Failed to load comments</div>';
+        return;
+      }
+      var comments = result.data || result.comments || [];
+      if (!comments.length) {
+        c.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:12px;">No messages yet.</div>';
+        return;
+      }
+      c.innerHTML = comments.map(function(cm) {
+        var isCustomer = (cm.author_type || '').toUpperCase() === 'CUSTOMER';
+        var isInternal = cm.is_internal === true;
+        if (isInternal) {
+          return '<div style="font-style:italic;color:#64748b;font-size:11px;margin:6px 0;padding:6px 10px;border-left:3px solid #cbd5e1;">'
+               + '<strong>' + (cm.author_name || cm.author_id || 'Agent') + ' (internal):</strong> '
+               + escapeHtml(cm.content || '') + '</div>';
+        }
+        var align = isCustomer ? 'right' : 'left';
+        var bg = isCustomer ? 'var(--navy-800)' : '#e2e8f0';
+        var fg = isCustomer ? '#fff' : '#1e293b';
+        return '<div style="display:flex;justify-content:' + (isCustomer?'flex-end':'flex-start') + ';margin:6px 0;">'
+             + '<div style="max-width:75%;background:' + bg + ';color:' + fg + ';padding:8px 12px;border-radius:10px;font-size:13px;text-align:' + align + ';">'
+             + '<div style="font-size:10px;font-weight:700;opacity:0.75;margin-bottom:2px;">' + (cm.author_name || cm.author_id || (isCustomer?'Customer':'Agent')) + '</div>'
+             + escapeHtml(cm.content || '')
+             + '<div style="font-size:10px;opacity:0.65;margin-top:4px;">' + (cm.created_at ? formatDate(cm.created_at) : '') + '</div>'
+             + '</div></div>';
+      }).join('');
+      c.scrollTop = c.scrollHeight;
+    })
+    .withFailureHandler(function() {
+      c.innerHTML = '<div style="text-align:center;color:#dc2626;font-size:12px;padding:12px;">Error loading comments</div>';
+    })
+    .handleTicketRequest({ action:'getComments', ticketId: ticketId });
+}
+
+function sendTicketReply(isInternal) {
+  var box = document.getElementById('tktReplyBox');
+  if (!box) return;
+  var text = (box.value || '').trim();
+  if (!text) return;
+  var ticketId = window._activeTicketId;
+  if (!ticketId) return;
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        box.value = '';
+        loadTicketComments(ticketId);
+        showToast(isInternal ? 'Internal note added' : 'Reply sent');
+      } else {
+        showToast((r && r.error) || 'Failed to send');
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + (e && e.message || 'failed')); })
+    .handleTicketRequest({
+      action:'addComment',
+      ticketId: ticketId,
+      comment: {
+        content: text,
+        author_type: 'AGENT',
+        author_id: SESSION.userId,
+        is_internal: !!isInternal
+      }
+    });
+}
+
+function resolveActiveTicket() {
+  var ticketId = window._activeTicketId;
+  if (!ticketId) return;
+  var summary = window.prompt('Resolution summary:');
+  if (summary === null) return;
+  summary = (summary || '').trim();
+  if (!summary) return;
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        closeModal('tktDetailModal');
+        loadTicketsPage();
+        showToast('Ticket resolved');
+      } else {
+        showToast((r && r.error) || 'Failed to resolve');
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + (e && e.message || 'failed')); })
+    .handleTicketRequest({
+      action:'resolve',
+      ticketId: ticketId,
+      resolution: { type:'RESOLVED', summary: summary },
+      context: { actorType:'STAFF', actorId: SESSION.userId }
+    });
+}
+
+
+/* ══════════ REPORTS ══════════ */
+window._reportData = window._reportData || {};
+
+function loadReportsPage() {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = String(now.getMonth() + 1).padStart(2, '0');
+  var from = document.getElementById('rptFrom');
+  var to = document.getElementById('rptTo');
+  if (from && !from.value) from.value = y + '-01';
+  if (to && !to.value) to.value = y + '-' + m;
+}
+
+function applyReportRange() {
+  var from = document.getElementById('rptFrom');
+  var to = document.getElementById('rptTo');
+  window._rptFrom = from ? from.value : null;
+  window._rptTo = to ? to.value : null;
+  ['orders','tickets','credit','sla'].forEach(function(id) {
+    var el = document.getElementById('rpt-' + id + '-result');
+    if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+    if (window._reportData) delete window._reportData[id];
+  });
+  showToast('Date range updated. Re-run reports to refresh.');
+}
+
+function runReport(reportId) {
+  var wrap = document.getElementById('rpt-' + reportId + '-result');
+  if (!wrap) return;
+  wrap.style.display = 'block';
+  wrap.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:13px;padding:20px;">Loading...</div>';
+
+  var onSuccess = function(result) {
+    var data = result && result.success ? (result.data || result) : null;
+    if (!result || !result.success || !data) {
+      wrap.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:12px;">Failed to load report.</div>';
+      return;
+    }
+    window._reportData[reportId] = data;
+    renderReport(reportId, data);
+  };
+  var onFail = function(e) {
+    wrap.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:12px;">Error: ' + (e && e.message || 'failed') + '</div>';
+  };
+
+  if (reportId === 'orders') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleOrderRequest({ action:'list', conditions:{}, options:{ limit:1000 } });
+  } else if (reportId === 'tickets') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleTicketRequest({ action:'list', conditions:{}, options:{ limit:1000 } });
+  } else if (reportId === 'credit') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleCustomerRequest({ action:'list', conditions:{}, options:{ limit:200 } });
+  } else if (reportId === 'sla') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleSLARequest({ action:'getSLAAnalytics', filters:{ year:'2026', period:'all' }, affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+  }
+}
+
+function renderReport(reportId, data) {
+  var wrap = document.getElementById('rpt-' + reportId + '-result');
+  if (!wrap) return;
+  var headers = [], rows = [];
+
+  if (reportId === 'orders') {
+    var byCountry = {};
+    (data || []).forEach(function(o) {
+      var k = o.country_code || '-';
+      if (!byCountry[k]) byCountry[k] = { total:0, delivered:0, cancelled:0, value:0 };
+      byCountry[k].total++;
+      var st = (o.status || '').toUpperCase();
+      if (st === 'DELIVERED') byCountry[k].delivered++;
+      if (st === 'CANCELLED') byCountry[k].cancelled++;
+      byCountry[k].value += Number(o.total_amount || o.total_value || 0);
+    });
+    headers = ['Affiliate','Total Orders','Delivered','Cancelled','Total Value KES'];
+    rows = Object.keys(byCountry).sort().map(function(k) {
+      var r = byCountry[k];
+      return [k, r.total, r.delivered, r.cancelled, Math.round(r.value).toLocaleString()];
+    });
+  } else if (reportId === 'tickets') {
+    var byCat = {};
+    (data || []).forEach(function(t) {
+      var k = t.category || 'UNCATEGORISED';
+      if (!byCat[k]) byCat[k] = { total:0, resolved:0, breached:0, csatSum:0, csatN:0 };
+      byCat[k].total++;
+      if ((t.status||'').toUpperCase() === 'RESOLVED' || (t.status||'').toUpperCase() === 'CLOSED') byCat[k].resolved++;
+      if (t.sla_resolve_breached === true) byCat[k].breached++;
+      if (t.csat_score !== null && t.csat_score !== undefined && !isNaN(Number(t.csat_score))) {
+        byCat[k].csatSum += Number(t.csat_score);
+        byCat[k].csatN++;
+      }
+    });
+    headers = ['Category','Total','Resolved','SLA Breached','Avg CSAT'];
+    rows = Object.keys(byCat).sort().map(function(k) {
+      var r = byCat[k];
+      var avg = r.csatN ? (r.csatSum / r.csatN).toFixed(2) : '-';
+      return [k, r.total, r.resolved, r.breached, avg];
+    });
+  } else if (reportId === 'credit') {
+    headers = ['Company','Country','Credit Limit','Credit Used','Available','Utilisation %'];
+    var list = (data || []).map(function(c) {
+      var limit = Number(c.credit_limit || 0);
+      var used = Number(c.credit_used || c.outstanding_balance || 0);
+      var avail = Math.max(0, limit - used);
+      var util = limit > 0 ? (used / limit) * 100 : 0;
+      return {
+        company: c.company_name || '-',
+        country: c.country_code || '-',
+        limit: limit, used: used, avail: avail, util: util,
+        currency: c.currency_code || ''
+      };
+    });
+    list.sort(function(a,b){ return b.util - a.util; });
+    rows = list.map(function(r) {
+      return [
+        r.company, r.country,
+        formatCurrency(r.limit, r.currency),
+        formatCurrency(r.used, r.currency),
+        formatCurrency(r.avail, r.currency),
+        r.util.toFixed(1) + '%'
+      ];
+    });
+  } else if (reportId === 'sla') {
+    headers = ['Affiliate','Avg Finance (min)','Finance SLA %','Avg LA (min)','LA SLA %','On-Time %'];
+    var byAff = (data && data.byAffiliate) || data || [];
+    if (!Array.isArray(byAff)) byAff = [];
+    rows = byAff.map(function(r) {
+      return [
+        r.affiliate || r.country_code || '-',
+        r.avgFinance != null ? Number(r.avgFinance).toFixed(1) : '-',
+        r.financeSLA != null ? Number(r.financeSLA).toFixed(1) + '%' : '-',
+        r.avgLA != null ? Number(r.avgLA).toFixed(1) : '-',
+        r.laSLA != null ? Number(r.laSLA).toFixed(1) + '%' : '-',
+        r.onTime != null ? Number(r.onTime).toFixed(1) + '%' : '-'
+      ];
+    });
+  }
+
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:12px;">No data for this report.</div>';
+    return;
+  }
+
+  var html = '<table class="users-table"><thead><tr>'
+    + headers.map(function(h){ return '<th>' + escapeHtml(h) + '</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + rows.map(function(r){
+        return '<tr>' + r.map(function(c){ return '<td>' + escapeHtml(String(c == null ? '' : c)) + '</td>'; }).join('') + '</tr>';
+      }).join('')
+    + '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function buildCSV(headers, rows) {
+  return [headers].concat(rows).map(function(r) {
+    return r.map(function(c) {
+      return '"' + String(c === null || c === undefined ? '' : c).replace(/"/g, '""') + '"';
+    }).join(',');
+  }).join('\n');
+}
+
+function exportReport(reportId) {
+  var proceed = function() {
+    var wrap = document.getElementById('rpt-' + reportId + '-result');
+    if (!wrap) return;
+    var table = wrap.querySelector('table');
+    if (!table) { showToast('Run the report first.'); return; }
+    var headers = Array.prototype.map.call(table.querySelectorAll('thead th'), function(th){ return th.textContent; });
+    var rows = Array.prototype.map.call(table.querySelectorAll('tbody tr'), function(tr) {
+      return Array.prototype.map.call(tr.querySelectorAll('td'), function(td){ return td.textContent; });
+    });
+    var csv = buildCSV(headers, rows);
+    var blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var ts = new Date().toISOString().substring(0,10);
+    a.href = url;
+    a.download = 'hass-' + reportId + '-report-' + ts + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  };
+
+  if (!window._reportData || !window._reportData[reportId]) {
+    runReport(reportId);
+    setTimeout(proceed, 1200);
+  } else {
+    proceed();
+  }
+}
+
+
+/* ══════════ CHAT BROWSER NOTIFICATIONS ══════════ */
+window.unreadChatCount = window.unreadChatCount || 0;
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
+}
+
+function showChatBrowserNotification(senderName, messageContent, roomName) {
+  if (document.visibilityState === 'visible' && currentPage === 'chat') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  var preview = (messageContent || '').length > 60 ? messageContent.substring(0, 60) + '...' : (messageContent || '');
+  try {
+    var n = new Notification('Hass CMS — ' + (roomName || 'Team Chat'), {
+      body: (senderName || 'Team') + ': ' + preview,
+      icon: 'https://lh3.googleusercontent.com/d/1AL9fUgYXM9DXj9-X_0YonrloqCXat2wq',
+      tag: 'hass-chat',
+      requireInteraction: false
+    });
+    n.onclick = function() { window.focus(); showPage('chat'); n.close(); };
+    setTimeout(function() { n.close(); }, 6000);
+  } catch (e) {}
+}
+
+function updateTabTitle() {
+  if (!window._originalTitle) window._originalTitle = document.title;
+  if (window.unreadChatCount > 0) {
+    document.title = '(' + window.unreadChatCount + ') ' + window._originalTitle;
+  } else {
+    document.title = window._originalTitle;
+  }
+}
+
+function updateChatBadge() {
+  var badge = document.getElementById('chatBadge');
+  if (!badge) return;
+  if (window.unreadChatCount > 0) {
+    badge.textContent = window.unreadChatCount;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function onNewChatMessages(result) {
+  if (!result || !result.success) return;
+  var msgs = result.messages || [];
+  var filtered = msgs.filter(function(m){ return m && m.sender_id !== SESSION.userId; });
+  filtered.forEach(function(msg) {
+    appendChatMsg(msg);
+    var roomMeta = chatRoomMeta[currentRoomId] || {};
+    showChatBrowserNotification(
+      msg.sender_name || 'Team',
+      msg.content || '',
+      roomMeta.name || 'Team Chat'
+    );
+  });
+  if (filtered.length > 0 && (document.visibilityState !== 'visible' || currentPage !== 'chat')) {
+    window.unreadChatCount = (window.unreadChatCount || 0) + filtered.length;
+    updateChatBadge();
+    updateTabTitle();
+  }
+  if (result.checkedAt) chatLastFetch = result.checkedAt;
 }
 
 
@@ -2913,6 +3635,8 @@ function loadDashboardHome() {
 document.addEventListener('DOMContentLoaded', function(){
   feather.replace();
   initDashboard();
+  window._originalTitle = document.title;
+  requestNotificationPermission();
 });
 </script>
 </body>
