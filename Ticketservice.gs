@@ -1710,6 +1710,53 @@ function createTicketReplyNotification(ticketId, ticketNumber, recipientId, send
  * @param {Object} params - Request parameters
  * @returns {Object} Response
  */
+/**
+ * Lists tickets with optional filtering, sorting, and limit.
+ * @param {Object} conditions - Filter conditions (status, country_code, customer_id)
+ * @param {Object} options - Sort and limit options (sortBy, sortOrder, limit)
+ * @returns {Object} { success, data, total }
+ */
+function listTickets(conditions, options) {
+  try {
+    var allTickets = getSheetData('Tickets');
+    var filtered = allTickets;
+
+    // Filter by status
+    if (conditions.status) {
+      var statuses = Array.isArray(conditions.status) ? conditions.status : [conditions.status];
+      filtered = filtered.filter(function(t) { return statuses.includes(t.status); });
+    }
+
+    // Filter by country_code
+    if (conditions.country_code) {
+      filtered = filtered.filter(function(t) { return t.country_code === conditions.country_code; });
+    }
+
+    // Filter by customer_id
+    if (conditions.customer_id) {
+      filtered = filtered.filter(function(t) { return t.customer_id === conditions.customer_id; });
+    }
+
+    // Sort
+    var sortBy = options.sortBy || 'created_at';
+    var sortOrder = options.sortOrder || 'desc';
+    filtered.sort(function(a, b) {
+      var av = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
+      var bv = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+      return sortOrder === 'asc' ? av - bv : bv - av;
+    });
+
+    // Limit
+    var limit = options.limit || 200;
+    filtered = filtered.slice(0, limit);
+
+    return { success: true, data: filtered, total: filtered.length };
+  } catch (e) {
+    Logger.log('listTickets error: ' + e.message);
+    return { success: false, error: e.message, data: [] };
+  }
+}
+
 function handleTicketRequest(params) {
   const action = params.action;
   
@@ -1776,6 +1823,9 @@ function handleTicketRequest(params) {
 
     case 'getComments':
       return getTicketComments(params.ticketId);
+
+    case 'list':
+      return listTickets(params.conditions || {}, params.options || {});
 
     case 'getByCustomer':
       return getTicketsByCustomer(params.customerId, params.limit);
