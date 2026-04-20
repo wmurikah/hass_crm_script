@@ -209,6 +209,12 @@ function handleCustomerRequest(params) {
       case 'documentStatus':
         return getDocumentCompletionStatus(params.customerId);
 
+      case 'getConsumption':
+        return getCustomerConsumption(params.customerId, params.period);
+
+      case 'getPriceList':
+        return getCustomerPriceList(params.customerId);
+
       default:
         return { success: false, error: 'Unknown customer action: ' + action };
     }
