@@ -532,6 +532,17 @@ function showPage(id){
   var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account'};
   document.getElementById('pageTitle').textContent=t[id]||id;
   if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('year'); }
+  if(id==='dashboard'){
+    var rob=document.getElementById('recentOrdersBody');
+    if(!rob || rob.querySelector('td.text-muted')) loadCustomerInfo();
+  }
+  if(id==='orders'){
+    var aob=document.getElementById('allOrdersBody');
+    if(!aob || aob.querySelector('td.text-muted')) loadAllOrders();
+  }
+  if(id==='tickets') loadAllTickets();
+  if(id==='documents') loadDocuments();
+  if(id==='account') loadAccountDetails();
   stopChatPolling();
 }
 
@@ -579,12 +590,264 @@ function calcTotals(){
 }
 
 function submitOrder(){
+  if(!currentCustomer){ showToast('Customer profile not loaded yet','error'); return; }
+  var locationId = document.getElementById('orderLocation').value;
+  var requestedDate = document.getElementById('orderDate').value;
+  var poNumber = document.getElementById('orderPO').value;
+  var instructions = document.getElementById('orderInstructions').value;
+
+  var lines = [];
+  document.querySelectorAll('#orderLines .order-line-item').forEach(function(row){
+    var sel = row.querySelector('select');
+    var nums = row.querySelectorAll('input[type="number"]');
+    var pid = sel ? sel.value : '';
+    var qty = nums[0] ? parseFloat(nums[0].value) : 0;
+    var price = nums[1] ? parseFloat(nums[1].value) : 0;
+    if(pid && qty>0){
+      lines.push({ product_id: pid, quantity: qty, unit_price: price });
+    }
+  });
+  if(!lines.length){ showToast('Add at least one line item','error'); return; }
+
   showToast('Submitting order...','info');
   google.script.run.withSuccessHandler(function(r){
-    if(r.success){showToast('Order submitted: '+r.orderNumber,'success');document.getElementById('orderFormCard').style.display='none';}
-    else showToast(r.error||'Failed','error');
+    if(r && r.success){
+      showToast('Order submitted: '+(r.orderNumber||''),'success');
+      document.getElementById('orderFormCard').style.display='none';
+      loadAllOrders();
+    } else {
+      showToast((r&&r.error)||'Failed','error');
+    }
   }).withFailureHandler(function(e){showToast(e.message,'error');})
-  .processRequest({service:'orders',action:'create',data:{customer_id:currentCustomer?.customer_id},context:{actorType:'CUSTOMER',actorId:currentContact?.contact_id}});
+  .handleOrderRequest({
+    service:'orders',
+    action:'create',
+    data:{
+      customer_id: currentCustomer.customer_id,
+      contact_id: currentContact ? currentContact.contact_id : null,
+      delivery_location_id: locationId,
+      requested_date: requestedDate,
+      po_number: poNumber,
+      special_instructions: instructions,
+      lines: lines
+    },
+    context:{ actorType:'CUSTOMER', actorId: SESSION.contactId }
+  });
+}
+
+// ===== Customer Portal data-fetch functions =====
+
+function loadCustomerInfo(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(!r || !r.success){ return; }
+    currentCustomer = r.customer || null;
+    currentContact = (r.contacts && r.contacts.length) ? r.contacts[0] : null;
+    if(!currentCustomer) return;
+    var c = currentCustomer;
+    var currency = c.currency_code || 'KES';
+    var used = parseFloat(c.credit_used) || 0;
+    var limit = parseFloat(c.credit_limit) || 0;
+    var available = Math.max(0, limit - used);
+    var pct = limit > 0 ? Math.round(used / limit * 100) : 0;
+    setText('kpiBalance', formatCurrency(used, currency));
+    setText('kpiCredit', pct + '%');
+    setText('ccAccount', c.account_number || '');
+    setText('ccLimit', formatCurrency(limit, currency));
+    setText('ccAvail', formatCurrency(available, currency));
+    setText('ccCountry', (AFFILIATE_MAP[c.country_code]||{}).code || c.country_code || '');
+    loadRecentOrders();
+    loadOpenTickets();
+  }).withFailureHandler(function(){})
+  .handleCustomerRequest({ service:'customers', action:'customer360', customerId: SESSION.customerId });
+}
+
+function setText(id, v){ var el = document.getElementById(id); if(el) el.textContent = v; }
+
+function loadRecentOrders(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var body = document.getElementById('recentOrdersBody');
+    if(!body) return;
+    var orders = (r && r.data) || (r && r.orders) || [];
+    var openCount = orders.filter(function(o){ return o.status !== 'DELIVERED' && o.status !== 'CANCELLED'; }).length;
+    setText('kpiOrders', String(openCount));
+    if(!orders.length){
+      body.innerHTML='<tr><td colspan="4" class="text-center text-muted py-4">No recent orders</td></tr>';
+      return;
+    }
+    body.innerHTML = orders.slice(0,5).map(function(o){
+      return '<tr><td class="cell-primary">'+(o.order_number||'')+'</td>'+
+             '<td>'+formatDate(o.created_at)+'</td>'+
+             '<td>'+formatCurrency(o.total_amount, o.currency_code)+'</td>'+
+             '<td>'+getStatusBadge(o.status||'')+'</td></tr>';
+    }).join('');
+  }).withFailureHandler(function(){})
+  .handleOrderRequest({ service:'orders', action:'customerOrders', customerId: SESSION.customerId,
+    options:{ limit:5, sortBy:'created_at', sortOrder:'desc' } });
+}
+
+function loadOpenTickets(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var body = document.getElementById('openTicketsBody');
+    if(!body) return;
+    var tickets = (r && r.tickets) || [];
+    var openCount = tickets.filter(function(t){ return t.status !== 'RESOLVED' && t.status !== 'CLOSED'; }).length;
+    setText('kpiTickets', String(openCount));
+    if(!tickets.length){
+      body.innerHTML='<tr><td colspan="5" class="text-center text-muted py-4">No open tickets</td></tr>';
+      return;
+    }
+    body.innerHTML = tickets.slice(0,5).map(function(t){
+      var subj = (t.subject||'');
+      if(subj.length>45) subj = subj.substring(0,45)+'...';
+      return '<tr><td class="cell-primary">'+(t.ticket_number||'')+'</td>'+
+             '<td>'+subj+'</td>'+
+             '<td>'+getPriorityBadge(t.priority||'MEDIUM')+'</td>'+
+             '<td>'+getStatusBadge(t.status||'')+'</td>'+
+             '<td>'+formatDate(t.created_at)+'</td></tr>';
+    }).join('');
+  }).withFailureHandler(function(){})
+  .handleTicketRequest({ service:'tickets', action:'getByCustomer', customerId: SESSION.customerId, limit:5 });
+}
+
+function loadAllOrders(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var body = document.getElementById('allOrdersBody');
+    if(!body) return;
+    var orders = (r && r.data) || (r && r.orders) || [];
+    if(!orders.length){
+      body.innerHTML='<tr><td colspan="5" class="text-center text-muted py-4">No orders found</td></tr>';
+      return;
+    }
+    body.innerHTML = orders.map(function(o){
+      return '<tr><td class="cell-primary">'+(o.order_number||'')+'</td>'+
+             '<td>'+formatDate(o.created_at)+'</td>'+
+             '<td>'+formatCurrency(o.total_amount, o.currency_code)+'</td>'+
+             '<td>'+getStatusBadge(o.status||'')+'</td>'+
+             '<td>'+getStatusBadge(o.payment_status||'PENDING')+'</td></tr>';
+    }).join('');
+  }).withFailureHandler(function(){})
+  .handleOrderRequest({ service:'orders', action:'customerOrders', customerId: SESSION.customerId, options:{ limit:50 } });
+}
+
+function loadAllTickets(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var body = document.getElementById('allTicketsBody');
+    if(!body) return;
+    var tickets = (r && r.tickets) || [];
+    if(!tickets.length){
+      body.innerHTML='<tr><td colspan="6" class="text-center text-muted py-4">No tickets found</td></tr>';
+      return;
+    }
+    body.innerHTML = tickets.map(function(t){
+      return '<tr><td class="cell-primary"><a href="#" onclick="openTicketDetail(\''+(t.ticket_id||'')+'\');return false;">'+(t.ticket_number||'')+'</a></td>'+
+             '<td>'+(t.subject||'')+'</td>'+
+             '<td>'+(t.category||'')+'</td>'+
+             '<td>'+getPriorityBadge(t.priority||'MEDIUM')+'</td>'+
+             '<td>'+getStatusBadge(t.status||'')+'</td>'+
+             '<td>'+formatDate(t.created_at)+'</td></tr>';
+    }).join('');
+  }).withFailureHandler(function(){})
+  .handleTicketRequest({ service:'tickets', action:'getByCustomer', customerId: SESSION.customerId, limit:50 });
+}
+
+function openTicketDetail(ticketId){
+  if(!ticketId) return;
+  var modalEl = document.getElementById('ticketDetailModal');
+  if(!modalEl) return;
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  google.script.run.withSuccessHandler(function(r){
+    if(!r || !r.success) return;
+    var t = r.ticket || {};
+    document.getElementById('tdTitle').textContent = t.ticket_number || 'Ticket';
+    document.getElementById('tdFields').innerHTML =
+      '<div class="col-md-6"><div class="hp-form-label">Subject</div><div>'+(t.subject||'')+'</div></div>'+
+      '<div class="col-md-3"><div class="hp-form-label">Status</div><div>'+getStatusBadge(t.status||'')+'</div></div>'+
+      '<div class="col-md-3"><div class="hp-form-label">Priority</div><div>'+getPriorityBadge(t.priority||'MEDIUM')+'</div></div>';
+    var thread = document.getElementById('tdThread');
+    var comments = (r.comments||[]).filter(function(c){ return !c.is_internal; });
+    thread.innerHTML = comments.map(function(c){
+      var cls = c.author_type === 'CUSTOMER' ? 'hp-bubble-customer' : 'hp-bubble-agent';
+      return '<div class="'+cls+'">'+(c.content||'')+'</div>';
+    }).join('') || '<div class="text-muted text-center">No replies yet</div>';
+  }).handleTicketRequest({ service:'tickets', action:'get', ticketId: ticketId });
+}
+
+function loadDocuments(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var body = document.getElementById('allDocsBody');
+    if(!body) return;
+    var docs = (r && r.data) || (r && r.documents) || [];
+    if(!docs.length){
+      body.innerHTML='<tr><td colspan="5" class="text-center text-muted py-4">No documents uploaded</td></tr>';
+      return;
+    }
+    var now = Date.now();
+    body.innerHTML = docs.map(function(d){
+      var expStr = '-';
+      if(d.expiry_date){
+        var exp = new Date(d.expiry_date);
+        var daysLeft = (exp - now) / 86400000;
+        var color = daysLeft < 30 ? 'color:#dc2626;font-weight:600;' : '';
+        expStr = '<span style="'+color+'">'+formatDate(d.expiry_date)+'</span>';
+      }
+      return '<tr><td class="cell-primary">'+(d.document_name||d.file_name||'')+'</td>'+
+             '<td>'+(d.document_type||'')+'</td>'+
+             '<td>'+getStatusBadge(d.status||'PENDING')+'</td>'+
+             '<td>'+expStr+'</td>'+
+             '<td>'+formatDate(d.created_at)+'</td></tr>';
+    }).join('');
+  }).withFailureHandler(function(){})
+  .handleDocumentRequest({ service:'documents', action:'getCustomerDocuments', customerId: SESSION.customerId });
+}
+
+function loadAccountDetails(){
+  var render = function(c){
+    var el = document.getElementById('accountDetails');
+    if(!el || !c) return;
+    var currency = c.currency_code || 'KES';
+    el.innerHTML =
+      '<div class="mb-2"><strong>Company:</strong> '+(c.company_name||'')+'</div>'+
+      '<div class="mb-2"><strong>Account #:</strong> '+(c.account_number||'')+'</div>'+
+      '<div class="mb-2"><strong>Country:</strong> '+(c.country_code||'')+'</div>'+
+      '<div class="mb-2"><strong>Payment Terms:</strong> '+(c.payment_terms||'')+'</div>'+
+      '<div class="mb-2"><strong>Tax PIN:</strong> '+(c.tax_pin||'')+'</div>'+
+      '<div class="mb-2"><strong>Status:</strong> '+getStatusBadge(c.status||'ACTIVE')+'</div>'+
+      '<div class="mb-2"><strong>Credit Limit:</strong> '+formatCurrency(c.credit_limit, currency)+'</div>'+
+      '<div class="mb-2"><strong>Credit Used:</strong> '+formatCurrency(c.credit_used, currency)+'</div>'+
+      '<div class="mb-2"><strong>Segment:</strong> '+(c.segment_id||'')+'</div>';
+  };
+  if(currentCustomer){ render(currentCustomer); return; }
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    if(r && r.success){
+      currentCustomer = r.customer || null;
+      render(currentCustomer);
+    }
+  }).handleCustomerRequest({ service:'customers', action:'customer360', customerId: SESSION.customerId });
+}
+
+function loadDeliveryLocations(){
+  if(!SESSION || !SESSION.customerId) return;
+  google.script.run.withSuccessHandler(function(r){
+    var sel = document.getElementById('orderLocation');
+    if(!sel) return;
+    sel.innerHTML = '<option value="">Select location...</option>';
+    if(!r || !r.success || !r.locations) return;
+    r.locations.forEach(function(loc){
+      var opt = document.createElement('option');
+      opt.value = loc.location_id;
+      opt.textContent = loc.name + (loc.city ? ' ('+loc.city+')' : '');
+      sel.appendChild(opt);
+    });
+  }).withFailureHandler(function(){})
+  .getCustomerDeliveryLocations(SESSION.customerId);
 }
 
 function submitTicket(){
@@ -653,7 +916,9 @@ document.addEventListener('DOMContentLoaded',function(){
   var greetEl = document.getElementById('customerGreeting');
   if (greetEl && SESSION.name) greetEl.textContent = 'Welcome, ' + SESSION.name.split(' ')[0];
 
-  // Logo replaced with text badge — no Drive fetch needed
+  // Kick off dashboard data fetch
+  loadCustomerInfo();
+  loadDeliveryLocations();
 });
 
 /* ===== Consumption Analytics ===== */

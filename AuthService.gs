@@ -5,7 +5,7 @@
 //
 // Users sheet    → staff login  (password_hash col added by setupAuth)
 // Contacts sheet → customer login (password_hash col 14)
-// Sessions sheet → token_hash, is_active, expires_at, device_type(=role)
+// Sessions sheet → token_hash, is_active, expires_at, role
 // ================================================================
 
 function isDateInFuture(val) {
@@ -37,14 +37,6 @@ function handleAuthRequest(params) {
   }
 }
 
-function getSpreadsheet() {
-  try {
-    var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
-    if (id && id.trim() !== '') return SpreadsheetApp.openById(id.trim());
-  } catch (e) {}
-  return SpreadsheetApp.getActiveSpreadsheet();
-}
-
 function getScriptUrl() {
   try { return ScriptApp.getService().getUrl(); } catch(e) { return ''; }
 }
@@ -57,19 +49,6 @@ function hashPassword(plain) {
 
 function normaliseHeaders(row) {
   return row.map(function(h) { return String(h || '').toLowerCase().trim().replace(/\s+/g, '_'); });
-}
-
-function sheetToObjects(sheet) {
-  var data = sheet.getDataRange().getValues();
-  var headers = normaliseHeaders(data[0]);
-  var result = [];
-  for (var r = 1; r < data.length; r++) {
-    if (data[r].every(function(c){ return c === '' || c === null || c === undefined; })) continue;
-    var obj = {};
-    headers.forEach(function(h, i) { obj[h] = data[r][i]; });
-    result.push(obj);
-  }
-  return result;
 }
 
 function trim2(v) { return String(v || '').trim(); }
@@ -161,6 +140,7 @@ function createSession(userId, userType, role, hoursValid) {
   var now       = new Date();
   var expiresAt = new Date(now.getTime() + hoursValid * 3600000);
   var sessionId = 'SES' + Utilities.getUuid().replace(/-/g,'').substring(0,16).toUpperCase();
+  // role stored in role column (was device_type)
   sheet.appendRow([
     sessionId, userType, userId, tokenHash, '', '', role, '', true,
     expiresAt.toISOString(), now.toISOString(), now.toISOString()
@@ -183,7 +163,7 @@ function checkSession(params) {
     if (String(row.is_active || '').toUpperCase() === 'FALSE') return { valid: false, reason: 'logged_out' };
     if (row.expires_at && new Date(row.expires_at) < new Date()) return { valid: false, reason: 'expired' };
     return { valid: true, userId: String(row.user_id || ''), userType: String(row.user_type || ''),
-      role: String(row.device_type || ''), token: token };
+      role: String(row.role || ''), token: token };
   }
   return { valid: false, reason: 'not_found' };
 }

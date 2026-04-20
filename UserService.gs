@@ -392,13 +392,3 @@ function generateTempPassword() {
   // Shuffle
   return pw.split('').sort(function() { return 0.5 - Math.random(); }).join('');
 }
-
-/**
- * Hashes a password with SHA-256
- */
-function hashPassword(password) {
-  var rawHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, password);
-  return rawHash.map(function(b) {
-    return ('0' + ((b + 256) % 256).toString(16)).slice(-2);
-  }).join('');
-}

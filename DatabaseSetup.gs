@@ -24,7 +24,7 @@ const CONFIG = {
  * Returns the CMS spreadsheet. The ID is stored in Script Properties
  * under the key SPREADSHEET_ID.
  */
-function getSpreadsheet_() {
+function getSpreadsheet() {
   var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
   if (!id) throw new Error('SPREADSHEET_ID not set in Script Properties');
   return SpreadsheetApp.openById(id);
@@ -36,7 +36,7 @@ function getSpreadsheet_() {
  */
 function getSheet_(sheetName) {
   var tabName = COLLECTION_MAP[sheetName] || sheetName;
-  var sheet = getSpreadsheet_().getSheetByName(tabName);
+  var sheet = getSpreadsheet().getSheetByName(tabName);
   if (!sheet) throw new Error('Sheet not found: ' + tabName);
   return sheet;
 }
@@ -84,6 +84,12 @@ const COLLECTION_MAP = {
   'RetentionActivities': 'RetentionActivities',
   'JobQueue': 'JobQueue',
   'NotificationTemplates': 'NotificationTemplates',
+  'PasswordResets': 'PasswordResets',
+  'SLAData': 'SLAData',
+  'POApprovals': 'POApprovals',
+  'Invoices': 'Invoices',
+  'ApprovalWorkflows': 'ApprovalWorkflows',
+  'PaymentUploads': 'PaymentUploads',
 };
 
 function getCollectionName(sheetName) {
@@ -98,7 +104,7 @@ function getCollectionName(sheetName) {
  * Reads all rows from a sheet and returns them as an array of objects.
  * Row 1 is the header row; data starts at row 2.
  */
-function sheetToObjects_(sheet) {
+function sheetToObjects(sheet) {
   var data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
   var headers = data[0];
@@ -162,7 +168,7 @@ function clearSheetCache(sheetName) {
 function getSheetData(sheetName) {
   try {
     var sheet = getSheet_(sheetName);
-    return sheetToObjects_(sheet);
+    return sheetToObjects(sheet);
   } catch (e) {
     Logger.log('[DatabaseSetup] getSheetData error (' + sheetName + '): ' + e.message);
     return [];
@@ -332,6 +338,12 @@ function getIdField(sheetName) {
     'JobQueue': 'job_id',
     'Config': 'config_key',
     'NotificationTemplates': 'template_id',
+    'Invoices': 'invoice_id',
+    'ApprovalWorkflows': 'workflow_id',
+    'PaymentUploads': 'upload_id',
+    'SLAData': 'log_id',
+    'POApprovals': 'po_number',
+    'PasswordResets': 'email',
   };
   return idFields[sheetName] || null;
 }
@@ -355,6 +367,7 @@ function generateIdForSheet(sheetName) {
     'KnowledgeCategories': 'KCAT', 'KnowledgeArticles': 'KART',
     'AuditLog': 'LOG', 'Sessions': 'SES', 'IntegrationLog': 'INT',
     'JobQueue': 'JOB',
+    'Invoices': 'INV', 'ApprovalWorkflows': 'WF', 'PaymentUploads': 'PUP',
   };
   var prefix = prefixes[sheetName] || 'REC';
   return generateId(prefix);
