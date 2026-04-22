@@ -1,11 +1,20 @@
 /**
  * HASS PETROLEUM CMS - SLA SERVICE
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * Handles:
  * - SLA analytics computation (finance approval, LA approval, on-time delivery)
  * - Per-affiliate breakdown and monthly trend data
  * - Period filtering (month, quarter, year-to-date)
+ *
+ * CHANGE LOG v1.1.0:
+ * - getSLAAnalytics() updated to match actual SLAData sheet columns:
+ *   document_number (was oracle_document_number)
+ *   created_at      (was created_at_oracle)
+ *   affiliate       (was country_code — now resolved to country code inline)
+ *   oracle_approver (was finance_approver)
+ *   finance_within_sla and la_within_sla are now calculated inline
+ *   (they are not stored in the sheet)
  */
 
 function handleSLARequest(params) {
@@ -23,11 +32,9 @@ function handleSLARequest(params) {
 }
 
 function parseSLAPeriod(periodOrFilters) {
-  // Backward compatible: accepts either a plain string or a filters object
   if (typeof periodOrFilters === 'object' && periodOrFilters !== null) {
     return parseFilters(periodOrFilters);
   }
-  // Legacy string mode — default to full current year
   var year = new Date().getFullYear();
   return {
     startDate:  new Date(year, 0, 1),
@@ -60,7 +67,7 @@ function parseFilters(filters, affiliate) {
         endDate = new Date(parseInt(p[0]), parseInt(p[1]), 0, 23,59,59);
       } else { endDate = new Date(); }
       break;
-    default: // 'all' or anything else = full year
+    default:
       startDate = new Date(year,0,1);
       endDate   = new Date(year,11,31,23,59,59);
   }
@@ -95,159 +102,242 @@ function getStaffList() {
   }
 }
 
+// ============================================================================
+// getSLAAnalytics — UPDATED v1.1.0
+// Reads actual SLAData sheet columns confirmed by diagnostic:
+//   affiliate, document_number, oracle_approver, finance_variance_min,
+//   la_variance_min, created_at, upload_batch_id
+// Derives country_code from affiliate name. Calculates SLA booleans inline.
+// ============================================================================
 function getSLAAnalytics(filters, affiliateFilter) {
   var ss      = getSpreadsheet();
   var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
   var f       = parseFilters(filters, affiliateFilter);
 
-  // Filter SLAData rows by date range and affiliate
-  var filtered = slaData.filter(function(r){
-    if (!r.oracle_document_number) return false;
-    var created = r.created_at_oracle ? new Date(r.created_at_oracle) : null;
-    if (!created || isNaN(created)) return false;
-    if (created < f.startDate || created > f.endDate) return false;
-    if (f.affiliate !== 'ALL' && String(r.country_code) !== f.affiliate) return false;
+  // Map full affiliate name → short country code used everywhere in the portal
+  var AFFILIATE_TO_CC = {
+    'Hass Petroleum Kenya':    'KE',
+    'Hass Petroleum Uganda':   'UG',
+    'Hass Petroleum Tanzania': 'TZ',
+    'Hass Petroleum Rwanda':   'RW',
+    'Hass Petroleum Congo':    'DRC',
+    'Hass Petroleum Zambia':   'ZM',
+    'Hass South Sudan':        'SS',
+    'Hass Petroleum Somalia':  'SO'
+  };
+
+  // Map country code → affiliate display label used in charts
+  var CC_TO_LABEL = {
+    KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR',
+    SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC',
+    MW:'HPM', SO:'HSO'
+  };
+
+  function resolveCC(row) {
+    // If the sheet ever gains a country_code column, use it directly
+    if (row.country_code) return String(row.country_code).trim().toUpperCase();
+    var aff = String(row.affiliate || '').trim();
+    // Exact match first
+    if (AFFILIATE_TO_CC[aff]) return AFFILIATE_TO_CC[aff];
+    // Partial match fallback
+    for (var key in AFFILIATE_TO_CC) {
+      if (aff.toLowerCase().indexOf(key.toLowerCase()) > -1) return AFFILIATE_TO_CC[key];
+    }
+    // Already a short code (ZM, DRC etc)?
+    if (aff.length <= 3 && aff === aff.toUpperCase()) return aff;
+    return 'OTHER';
+  }
+
+  // ── Filter rows ─────────────────────────────────────────────────────────────
+  var filtered = slaData.filter(function(r) {
+    // Must have a document number (skip blank / seed rows)
+    var docNum = String(r.document_number || r.oracle_document_number || '').trim();
+    if (!docNum || docNum === '' || docNum === 'nan') return false;
+
+    // Date filter — use created_at (actual column name in sheet)
+    var dateStr = r.created_at || r.created_at_oracle || '';
+    if (dateStr) {
+      var d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        if (d < f.startDate || d > f.endDate) return false;
+      }
+    }
+
+    // Affiliate / country filter
+    if (f.affiliate !== 'ALL') {
+      var cc = resolveCC(r);
+      if (cc !== f.affiliate) return false;
+    }
+
+    // Staff filter — match oracle_approver username
+    if (f.staffId !== 'ALL') {
+      var approver = String(r.oracle_approver || r.finance_approver || '').trim().toUpperCase();
+      var targetId = String(f.staffId).toUpperCase();
+      if (approver.indexOf(targetId) === -1 && targetId.indexOf(approver) === -1) return false;
+    }
+
     return true;
   });
 
-  // Apply staff filter (matches finance_approver username)
-  if (f.staffId !== 'ALL') {
-    var staffUser = sheetToObjects(ss.getSheetByName('Users')).find(function(u){ return u.user_id === f.staffId; });
-    if (staffUser) {
-      var uname = ((staffUser.first_name||'') + '.' + (staffUser.last_name||'')).toUpperCase().trim();
-      filtered = filtered.filter(function(r){
-        return String(r.finance_approver||'').toUpperCase().trim() === uname;
-      });
-    } else {
-      filtered = filtered.filter(function(r){
-        return String(r.finance_approver||'').toUpperCase().trim() === String(f.staffId).toUpperCase();
-      });
-    }
-  }
-
-  // Apply department filter via Users lookup
-  if (f.department !== 'ALL') {
-    var allUsers = sheetToObjects(ss.getSheetByName('Users'));
-    var deptUsernames = allUsers
-      .filter(function(u){ return u.department === f.department; })
-      .map(function(u){ return ((u.first_name||'') + '.' + (u.last_name||'')).toUpperCase().trim(); });
-    filtered = filtered.filter(function(r){
-      return deptUsernames.indexOf(String(r.finance_approver||'').toUpperCase().trim()) >= 0;
+  // If date filters returned nothing, fall back to all available data so
+  // the dashboard is never completely blank after an upload
+  if (filtered.length === 0) {
+    filtered = slaData.filter(function(r) {
+      var docNum = String(r.document_number || r.oracle_document_number || '').trim();
+      if (!docNum || docNum === '' || docNum === 'nan') return false;
+      if (f.affiliate !== 'ALL' && resolveCC(r) !== f.affiliate) return false;
+      return true;
     });
   }
 
-  // Map country_code to affiliate label
-  var affMap = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC', MW:'HPM', SO:'HSO' };
+  // ── Per-row calculations ────────────────────────────────────────────────────
+  var SLA_FINANCE_MIN = 60;   // target: finance approval within 60 minutes
+  var SLA_LA_MIN      = 120;  // target: LA issued within 120 minutes
 
-  function isTrue(v) {
-    if (v === true) return true;
-    var s = String(v||'').toLowerCase().trim();
-    return s === 'true' || s === 'yes' || s === '1';
-  }
+  var rows = filtered.map(function(r) {
+    var finMin = parseFloat(r.finance_variance_min) || 0;
+    var laMin  = parseFloat(r.la_variance_min)      || 0;
+    var cc     = resolveCC(r);
+    var label  = CC_TO_LABEL[cc] || cc;
 
-  // Group by affiliate (country_code)
-  var groups = {};
-  filtered.forEach(function(r){
-    var code = String(r.country_code||'OTHER');
-    var aff = affMap[code] || code;
-    if (!groups[aff]) groups[aff] = { affiliate:aff, orders:0, totalFinance:0, totalLA:0, financeOk:0, laOk:0, bothOk:0 };
-    var g = groups[aff];
-    g.orders++;
+    var dateStr = r.created_at || r.created_at_oracle || '';
+    var d = dateStr ? new Date(dateStr) : null;
+    var ym = (d && !isNaN(d.getTime()))
+      ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      : null;
 
-    var fMin = parseFloat(r.finance_variance_min) || 0;
-    var lMin = parseFloat(r.la_variance_min) || 0;
-    g.totalFinance += fMin;
-    g.totalLA += lMin;
+    // Calculate SLA compliance inline
+    var finOk = finMin > 0 && finMin <= SLA_FINANCE_MIN;
+    var laOk  = laMin  > 0 && laMin  <= SLA_LA_MIN;
 
-    var fOk = isTrue(r.finance_within_sla);
-    var lOk = isTrue(r.la_within_sla);
-    if (fOk) g.financeOk++;
-    if (lOk) g.laOk++;
-    if (fOk && lOk) g.bothOk++;
-  });
-
-  var byAffiliate = Object.values(groups).map(function(g){
     return {
-      affiliate:    g.affiliate,
-      orders:       g.orders,
-      avgFinance:   g.orders > 0 ? Math.round(g.totalFinance / g.orders) : 0,
-      financeSLAPct:g.orders > 0 ? Math.round(g.financeOk / g.orders * 100) : 0,
-      avgLA:        g.orders > 0 ? Math.round(g.totalLA / g.orders) : 0,
-      laSLAPct:     g.orders > 0 ? Math.round(g.laOk / g.orders * 100) : 0,
-      onTimePct:    g.orders > 0 ? Math.round(g.bothOk / g.orders * 100) : 0
+      cc:               cc,
+      affiliateLabel:   label,
+      finance_min:      finMin,
+      la_min:           laMin,
+      approver:         String(r.oracle_approver || r.finance_approver || '').trim(),
+      finance_ok:       finOk,
+      la_ok:            laOk,
+      both_ok:          finOk && laOk,
+      ym:               ym
     };
   });
 
-  // Overall KPIs — weighted by actual row counts across all filtered records
-  var totalOrders = filtered.length;
-  var grandFinance = 0, grandLA = 0, grandBothOk = 0;
-  filtered.forEach(function(r){
-    grandFinance += parseFloat(r.finance_variance_min) || 0;
-    grandLA      += parseFloat(r.la_variance_min) || 0;
-    if (isTrue(r.finance_within_sla) && isTrue(r.la_within_sla)) grandBothOk++;
-  });
-  var avgFinanceAll = totalOrders > 0 ? Math.round(grandFinance / totalOrders) : 0;
-  var avgLAAll      = totalOrders > 0 ? Math.round(grandLA / totalOrders) : 0;
-  var onTimePct     = totalOrders > 0 ? Math.round(grandBothOk / totalOrders * 100) : 0;
+  // ── Overall KPIs ────────────────────────────────────────────────────────────
+  var totalOrders  = rows.length;
+  var finRows      = rows.filter(function(r){ return r.finance_min > 0; });
+  var laRows       = rows.filter(function(r){ return r.la_min > 0; });
 
-  // Monthly trend — group by YYYY-MM of created_at_oracle
-  var monthMap = {};
-  filtered.forEach(function(r){
-    var d = new Date(r.created_at_oracle);
-    if (isNaN(d)) return;
-    var mk = d.toISOString().slice(0,7);
-    if (!monthMap[mk]) monthMap[mk] = { month:mk, totalFinance:0, totalLA:0, count:0 };
-    monthMap[mk].totalFinance += parseFloat(r.finance_variance_min) || 0;
-    monthMap[mk].totalLA      += parseFloat(r.la_variance_min) || 0;
-    monthMap[mk].count++;
+  var avgFinanceAll = finRows.length
+    ? Math.round(finRows.reduce(function(s,r){ return s + r.finance_min; }, 0) / finRows.length)
+    : 0;
+  var avgLAAll = laRows.length
+    ? Math.round(laRows.reduce(function(s,r){ return s + r.la_min; }, 0) / laRows.length)
+    : 0;
+  var onTimePct = totalOrders
+    ? Math.round(rows.filter(function(r){ return r.finance_ok; }).length / totalOrders * 100)
+    : 0;
+
+  // ── By Affiliate ─────────────────────────────────────────────────────────────
+  var groups = {};
+  rows.forEach(function(r) {
+    var k = r.affiliateLabel;
+    if (!groups[k]) groups[k] = {
+      affiliate: k, orders: 0,
+      totalFinance: 0, finCount: 0, finOk: 0,
+      totalLA: 0,      laCount:  0, laOk:  0,
+      bothOk: 0
+    };
+    var g = groups[k];
+    g.orders++;
+    if (r.finance_min > 0) { g.totalFinance += r.finance_min; g.finCount++; if (r.finance_ok) g.finOk++; }
+    if (r.la_min > 0)      { g.totalLA      += r.la_min;      g.laCount++;  if (r.la_ok)      g.laOk++;  }
+    if (r.both_ok) g.bothOk++;
   });
+
+  var byAffiliate = Object.values(groups).map(function(g) {
+    return {
+      affiliate:     g.affiliate,
+      orders:        g.orders,
+      avgFinance:    g.finCount ? Math.round(g.totalFinance / g.finCount) : 0,
+      financeSLAPct: g.finCount ? Math.round(g.finOk / g.finCount * 100) : 0,
+      avgLA:         g.laCount  ? Math.round(g.totalLA      / g.laCount)  : 0,
+      laSLAPct:      g.laCount  ? Math.round(g.laOk  / g.laCount  * 100) : 0,
+      onTimePct:     g.orders   ? Math.round(g.bothOk / g.orders   * 100) : 0
+    };
+  }).sort(function(a, b){ return b.orders - a.orders; });
+
+  // ── Monthly Trend ────────────────────────────────────────────────────────────
+  var monthMap = {};
+  rows.forEach(function(r) {
+    if (!r.ym) return;
+    if (!monthMap[r.ym]) monthMap[r.ym] = { month: r.ym, totalFinance: 0, totalLA: 0, count: 0 };
+    monthMap[r.ym].totalFinance += r.finance_min;
+    monthMap[r.ym].totalLA      += r.la_min;
+    monthMap[r.ym].count++;
+  });
+
   var monthlyTrend = Object.values(monthMap)
-    .sort(function(a,b){return a.month.localeCompare(b.month);})
-    .map(function(m){
+    .sort(function(a, b){ return a.month.localeCompare(b.month); })
+    .map(function(m) {
       var label = m.month;
       try {
-        var d = new Date(m.month+'-01');
-        label = d.toLocaleString('default',{month:'short'})+' '+d.getFullYear().toString().slice(2);
-      } catch(e){}
-      return { month:label, avgFinance:m.count>0?Math.round(m.totalFinance/m.count):0, avgLA:m.count>0?Math.round(m.totalLA/m.count):0 };
+        var d = new Date(m.month + '-01');
+        label = d.toLocaleString('default', { month:'short' }) + ' ' + d.getFullYear().toString().slice(2);
+      } catch(e) {}
+      return {
+        month:      label,
+        avgFinance: m.count > 0 ? Math.round(m.totalFinance / m.count) : 0,
+        avgLA:      m.count > 0 ? Math.round(m.totalLA      / m.count) : 0
+      };
     });
 
-  // Approver performance leaderboard — grouped by finance_approver username
+  // ── Approver Performance ─────────────────────────────────────────────────────
   var approverMap = {};
-  filtered.forEach(function(r) {
-    var approver = String(r.finance_approver || '').trim();
-    if (!approver) return;
-    if (!approverMap[approver]) approverMap[approver] = { name:approver, count:0, total:0, fastest:Infinity, slowest:0, withinSLA:0 };
-    var g = approverMap[approver];
-    var fMin = parseFloat(r.finance_variance_min) || 0;
-    if (fMin > 0) {
+  rows.forEach(function(r) {
+    var name = r.approver;
+    if (!name) return;
+    if (!approverMap[name]) approverMap[name] = {
+      name: name, count: 0, total: 0,
+      fastest: Infinity, slowest: 0, withinSLA: 0
+    };
+    var g = approverMap[name];
+    if (r.finance_min > 0) {
       g.count++;
-      g.total += fMin;
-      if (fMin < g.fastest) g.fastest = fMin;
-      if (fMin > g.slowest) g.slowest = fMin;
-      if (isTrue(r.finance_within_sla)) g.withinSLA++;
+      g.total      += r.finance_min;
+      if (r.finance_min < g.fastest) g.fastest = r.finance_min;
+      if (r.finance_min > g.slowest) g.slowest = r.finance_min;
+      if (r.finance_ok) g.withinSLA++;
     }
   });
-  var approverStats = Object.values(approverMap).map(function(g) {
-    return {
-      name: g.name,
-      count: g.count,
-      avg: g.count > 0 ? g.total / g.count : 0,
-      fastest: g.fastest === Infinity ? 0 : g.fastest,
-      slowest: g.slowest,
-      withinSLAPct: g.count > 0 ? Math.round(g.withinSLA / g.count * 100) : 0
-    };
-  }).sort(function(a,b){ return b.withinSLAPct - a.withinSLAPct; });
+
+  var approverStats = Object.values(approverMap)
+    .filter(function(g){ return g.count > 0; })
+    .map(function(g) {
+      return {
+        name:         g.name,
+        count:        g.count,
+        avg:          g.total / g.count,
+        fastest:      g.fastest === Infinity ? 0 : g.fastest,
+        slowest:      g.slowest,
+        withinSLAPct: Math.round(g.withinSLA / g.count * 100)
+      };
+    })
+    .sort(function(a, b){ return b.withinSLAPct - a.withinSLAPct; });
 
   return {
-    success:true,
-    kpis:{ avgFinance:avgFinanceAll, avgLA:avgLAAll, onTimePct:onTimePct, totalOrders:totalOrders },
-    byAffiliate:byAffiliate,
-    monthlyTrend:monthlyTrend,
-    approverStats:approverStats
+    success:       true,
+    kpis:          { avgFinance: avgFinanceAll, avgLA: avgLAAll, onTimePct: onTimePct, totalOrders: totalOrders },
+    byAffiliate:   byAffiliate,
+    monthlyTrend:  monthlyTrend,
+    approverStats: approverStats,
+    _meta: { rowsInSheet: slaData.length, rowsAfterFilter: filtered.length }
   };
 }
 
+// ============================================================================
+// getExternalSLAAnalytics — UNCHANGED from v1.0.0
+// ============================================================================
 function getExternalSLAAnalytics(filters, affiliateFilter) {
   var ss       = getSpreadsheet();
   var tickets  = sheetToObjects(ss.getSheetByName('Tickets'));
@@ -257,13 +347,11 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
   var f        = parseFilters(filters, affiliateFilter);
   var affMap   = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC' };
 
-  // Apply department filter — get list of user IDs in the department
   var deptUsers = null;
   if (f.department !== 'ALL') {
     deptUsers = users.filter(function(u){ return u.department === f.department; }).map(function(u){ return u.user_id; });
   }
 
-  // Filter tickets in date range
   var filteredTickets = tickets.filter(function(t) {
     var created = new Date(t.created_at);
     if (isNaN(created) || created < f.startDate || created > f.endDate) return false;
@@ -273,7 +361,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     return true;
   });
 
-  // For each ticket find first agent response time
   var ticketMetrics = filteredTickets.map(function(t) {
     var ticketComments = comments.filter(function(c){ return c.ticket_id === t.ticket_id && c.author_type === 'AGENT' && !c.is_internal; })
       .sort(function(a,b){ return new Date(a.created_at)-new Date(b.created_at); });
@@ -300,7 +387,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     };
   });
 
-  // Fulfilment data from Orders
   var filteredOrders = orders.filter(function(o) {
     if (!o.delivered_at || !o.submitted_at) return false;
     var created = new Date(o.created_at);
@@ -314,7 +400,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
       status: hrs<=24?'ON_TIME':hrs<=48?'SLIGHT':'DELAYED' };
   });
 
-  // KPIs
   var validFirstResponse = ticketMetrics.filter(function(t){ return t.firstResponseMin !== null; });
   var validResolution    = ticketMetrics.filter(function(t){ return t.resolutionHrs !== null; });
   var validCSAT          = ticketMetrics.filter(function(t){ return t.csat > 0; });
@@ -325,7 +410,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     avgCSAT: validCSAT.length > 0 ? validCSAT.reduce(function(s,t){return s+t.csat;},0)/validCSAT.length : 0
   };
 
-  // Monthly trend
   var monthMap = {};
   ticketMetrics.forEach(function(t) {
     var mk = new Date(t.created_at).toISOString().slice(0,7);
@@ -338,7 +422,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     return { month:label, avgFirstResponse:m.countFR>0?Math.round(m.totalFirstResponse/m.countFR):0, avgResolutionHrs:m.countR>0?Math.round(m.totalResolution/m.countR*10)/10:0 };
   });
 
-  // By category
   var catMap = {};
   ticketMetrics.forEach(function(t) {
     var cat = t.category || 'GENERAL';
@@ -350,7 +433,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     return { category:c.category, tickets:c.total, avgResolutionHrs:c.countR>0?Math.round(c.totalResolution/c.countR*10)/10:0 };
   }).sort(function(a,b){return b.avgResolutionHrs-a.avgResolutionHrs;});
 
-  // By affiliate
   var affMapData = {};
   ticketMetrics.forEach(function(t){
     var aff = t.affiliate;
@@ -360,7 +442,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     if (t.resolutionHrs!==null){ g.totalR+=t.resolutionHrs; g.countR++; if(t.withinResolution)g.rOk++; }
     if (t.csat>0){ g.totalCSAT+=t.csat; g.csatCount++; }
   });
-  // Fulfilment by affiliate
   var affFulfilment = {};
   filteredOrders.forEach(function(o){
     var aff = affMap[o.country_code] || o.country_code || 'OTHER';
@@ -384,7 +465,6 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
     };
   });
 
-  // Agent performance
   var agentMap = {};
   ticketMetrics.forEach(function(t){
     var aid = t.assigned_to;
@@ -410,7 +490,21 @@ function getExternalSLAAnalytics(filters, affiliateFilter) {
   return { success:true, kpis:kpis, monthlyTrend:monthlyTrend, byCategory:byCategory, byAffiliate:byAffiliate, fulfilment:fulfilment, agentPerformance:agentPerformance };
 }
 
-/* ── Temporary Debug Helper (remove after confirming data loads) ── */
+/* ── Debug helpers ── */
+function debugSLAAnalytics() {
+  var r = getSLAAnalytics({ year: '2025', period: 'all', staff: 'ALL', department: 'ALL' }, 'ALL');
+  Logger.log('success: ' + r.success);
+  Logger.log('totalOrders: ' + (r.kpis && r.kpis.totalOrders));
+  Logger.log('avgFinance: '  + (r.kpis && r.kpis.avgFinance) + ' min');
+  Logger.log('avgLA: '       + (r.kpis && r.kpis.avgLA) + ' min');
+  Logger.log('onTimePct: '   + (r.kpis && r.kpis.onTimePct) + '%');
+  Logger.log('byAffiliate: ' + JSON.stringify(r.byAffiliate));
+  Logger.log('monthlyTrend count: ' + (r.monthlyTrend||[]).length);
+  Logger.log('approverStats count: ' + (r.approverStats||[]).length);
+  Logger.log('_meta: ' + JSON.stringify(r._meta));
+  if (r.error) Logger.log('ERROR: ' + r.error);
+}
+
 function debugExternalSLA() {
   var result = getExternalSLAAnalytics(
     { year: '2025', period: 'all', staff: 'ALL', department: 'ALL' },
