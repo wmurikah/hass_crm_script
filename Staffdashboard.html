@@ -946,7 +946,127 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     </div>
 
     <div class="page-section" id="page-orders">
-      <div class="page-placeholder">Orders — loaded by SD-3 prompt</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <h5 style="margin:0;font-size:18px;font-weight:700;color:#1e293b;">Orders</h5>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="ordStatusFilter" class="form-input" style="width:auto;min-width:180px;" onchange="filterOrders()">
+            <option value="ALL">All Statuses</option>
+            <option value="SUBMITTED">SUBMITTED</option>
+            <option value="PENDING_APPROVAL">PENDING_APPROVAL</option>
+            <option value="APPROVED">APPROVED</option>
+            <option value="SCHEDULED">SCHEDULED</option>
+            <option value="IN_TRANSIT">IN_TRANSIT</option>
+            <option value="DELIVERED">DELIVERED</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+          <input type="text" id="ordSearch" class="form-input" placeholder="Search by order # or customer..." style="width:auto;min-width:260px;" oninput="filterOrders()">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;">
+        <div class="dash-stat-card"><div class="dash-stat-val" id="ordStatTotal">--</div><div class="dash-stat-label">Total Orders</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="ordStatPending" style="color:#92400e;">--</div><div class="dash-stat-label">Pending Approval</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="ordStatInTransit" style="color:#0369a1;">--</div><div class="dash-stat-label">In Transit</div></div>
+        <div class="dash-stat-card"><div class="dash-stat-val" id="ordStatDeliveredToday" style="color:#15803d;">--</div><div class="dash-stat-label">Delivered Today</div></div>
+      </div>
+
+      <div class="table-wrap" style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table class="users-table" id="ordersTable">
+          <thead>
+            <tr>
+              <th>Order #</th>
+              <th>Customer</th>
+              <th>Country</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Payment</th>
+              <th>Requested Date</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTableBody">
+            <tr><td colspan="8" class="users-loading">Loading orders...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Order Detail Modal -->
+      <div class="modal-overlay" id="ordDetailModal" style="display:none">
+        <div class="modal-card" style="max-width:760px;">
+          <div class="modal-header">
+            <h3 id="ordModalNumber">Order</h3>
+            <button class="modal-close" onclick="document.getElementById('ordDetailModal').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Order ID</div>
+                <div id="ordModalId" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Customer</div>
+                <div id="ordModalCustomer" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Country</div>
+                <div id="ordModalCountry" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Requested Date</div>
+                <div id="ordModalRequested" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Delivered At</div>
+                <div id="ordModalDelivered" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Special Instructions</div>
+                <div id="ordModalInstructions" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+              </div>
+              <div>
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Total Amount</div>
+                <div id="ordModalAmount" style="font-size:26px;font-weight:700;color:#1A237E;margin-bottom:4px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Currency</div>
+                <div id="ordModalCurrency" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Status</div>
+                <div id="ordModalStatus" style="margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Payment Status</div>
+                <div id="ordModalPayment" style="margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Created</div>
+                <div id="ordModalCreated" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:4px;">Updated</div>
+                <div id="ordModalUpdated" style="font-size:13px;color:#1e293b;margin-bottom:12px;"></div>
+              </div>
+            </div>
+
+            <div style="margin-top:18px;">
+              <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">Order Lines</div>
+              <div class="table-wrap" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                <table class="users-table" id="ordLinesTable">
+                  <thead>
+                    <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+                  </thead>
+                  <tbody id="ordLinesBody">
+                    <tr><td colspan="4" class="users-loading">Loading lines...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <select id="ordStatusUpdate" class="form-input" style="width:auto;min-width:180px;">
+              <option value="SUBMITTED">SUBMITTED</option>
+              <option value="PENDING_APPROVAL">PENDING_APPROVAL</option>
+              <option value="APPROVED">APPROVED</option>
+              <option value="SCHEDULED">SCHEDULED</option>
+              <option value="IN_TRANSIT">IN_TRANSIT</option>
+              <option value="DELIVERED">DELIVERED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+            <button class="btn-add-staff" onclick="updateOrderStatus()">Update Status</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="page-section" id="page-customers">
@@ -1231,6 +1351,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <div class="users-tabs">
         <button class="users-tab active" id="tabStaff" onclick="switchUserTab('staff')">Staff Users</button>
         <button class="users-tab" id="tabCustomers" onclick="switchUserTab('customers')">Customer Accounts</button>
+        <button class="users-tab" id="tabPendingSignups" onclick="switchUserTab('pending')">Pending Signups <span id="pendingSignupsBadge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">0</span></button>
         <div style="flex:1"></div>
         <input type="text" id="userSearch" class="users-search" placeholder="Search by name or email..." oninput="filterUserTable()">
         <button class="btn-add-staff" onclick="openAddStaffModal()">+ Add Staff</button>
@@ -1262,6 +1383,20 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </div>
         <div class="users-empty" id="customersEmpty" style="display:none">No customer accounts found</div>
         <div class="users-loading" id="customersLoading">Loading customers...</div>
+      </div>
+
+      <!-- Pending Signups Tab -->
+      <div id="pendingSignupsPanel" class="user-panel" style="display:none">
+        <div class="table-wrap">
+          <table class="users-table" id="pendingSignupsTable">
+            <thead>
+              <tr><th>Company</th><th>Email</th><th>Account Type</th><th>Submitted</th><th>Status</th><th style="text-align:right">Actions</th></tr>
+            </thead>
+            <tbody id="pendingSignupsBody"></tbody>
+          </table>
+        </div>
+        <div class="users-empty" id="pendingSignupsEmpty" style="display:none">No pending signup requests</div>
+        <div class="users-loading" id="pendingSignupsLoading">Loading...</div>
       </div>
     </div>
 
@@ -1791,6 +1926,9 @@ function showPage(name) {
       break;
     case 'customers':
       if (!window._customersLoaded) { window._customersLoaded = true; loadCustomersPage(); }
+      break;
+    case 'orders':
+      if (typeof loadOrdersPage === 'function') loadOrdersPage();
       break;
     case 'tickets':
       if (typeof loadTicketsPage === 'function') loadTicketsPage();
@@ -2504,9 +2642,99 @@ function loadCustomersData() {
 function switchUserTab(tab) {
   document.getElementById('tabStaff').classList.toggle('active', tab === 'staff');
   document.getElementById('tabCustomers').classList.toggle('active', tab === 'customers');
+  var pendingTab = document.getElementById('tabPendingSignups');
+  if (pendingTab) pendingTab.classList.toggle('active', tab === 'pending');
   document.getElementById('staffPanel').style.display = tab === 'staff' ? 'block' : 'none';
   document.getElementById('customersPanel').style.display = tab === 'customers' ? 'block' : 'none';
+  var pendingPanel = document.getElementById('pendingSignupsPanel');
+  if (pendingPanel) pendingPanel.style.display = tab === 'pending' ? 'block' : 'none';
   if (tab === 'customers' && usersCustomerData.length === 0) loadCustomersData();
+  if (tab === 'pending') loadPendingSignups();
+}
+
+function loadPendingSignups() {
+  var body = document.getElementById('pendingSignupsBody');
+  var loader = document.getElementById('pendingSignupsLoading');
+  var empty = document.getElementById('pendingSignupsEmpty');
+  if (loader) loader.style.display = 'block';
+  if (empty) empty.style.display = 'none';
+  if (body) body.innerHTML = '';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (loader) loader.style.display = 'none';
+      var requests = (r && r.requests) || [];
+      var badge = document.getElementById('pendingSignupsBadge');
+      if (badge) {
+        if (requests.length > 0) { badge.textContent = requests.length; badge.style.display = 'inline-block'; }
+        else { badge.style.display = 'none'; }
+      }
+      if (!r || !r.success) {
+        if (empty) { empty.textContent = (r && r.error) || 'Failed to load pending signups'; empty.style.display = 'block'; }
+        return;
+      }
+      if (!requests.length) {
+        if (empty) { empty.textContent = 'No pending signup requests'; empty.style.display = 'block'; }
+        return;
+      }
+      if (!body) return;
+      body.innerHTML = requests.map(function(req) {
+        var rid = String(req.request_id || '').replace(/'/g, "\\'");
+        var company = (req.company_name || '').replace(/'/g, "\\'");
+        return '<tr>'
+          + '<td><strong>' + escapeHtml(req.company_name || '-') + '</strong></td>'
+          + '<td>' + escapeHtml(req.email || '-') + '</td>'
+          + '<td>' + escapeHtml(req.account_type || '-') + '</td>'
+          + '<td style="font-size:12px;color:#64748b;">' + formatDate(req.submitted_at) + '</td>'
+          + '<td>' + getStatusBadge(req.status || 'PENDING_APPROVAL') + '</td>'
+          + '<td style="text-align:right;white-space:nowrap;">'
+          + '<button class="action-btn" style="color:#15803d;border-color:#bbf7d0;" onclick="approveSignup(\'' + rid + '\',\'' + company + '\')">Approve</button>'
+          + '<button class="action-btn danger" onclick="rejectSignup(\'' + rid + '\')">Reject</button>'
+          + '</td></tr>';
+      }).join('');
+    })
+    .withFailureHandler(function(e) {
+      if (loader) loader.style.display = 'none';
+      if (empty) { empty.textContent = 'Error: ' + (e && e.message || 'failed'); empty.style.display = 'block'; }
+    })
+    .handleUserRequest({ action: 'getPendingSignups' });
+}
+
+function approveSignup(requestId, companyName) {
+  var role = SESSION.role || '';
+  if (role !== 'SUPER_ADMIN' && role !== 'GROUP_HEAD') {
+    showToast('Only Super Admin can approve signups');
+    return;
+  }
+  if (!window.confirm('Approve signup for ' + companyName + '?')) return;
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('Signup approved — credentials sent to applicant');
+        loadPendingSignups();
+      } else {
+        showToast((r && r.error) || 'Failed to approve');
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + (e && e.message || 'failed')); })
+    .handleUserRequest({ action: 'approveSignup', requestId: requestId, approvedBy: SESSION.userId });
+}
+
+function rejectSignup(requestId) {
+  var reason = window.prompt('Reason for rejection (optional):');
+  if (reason === null) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('Signup rejected');
+        loadPendingSignups();
+      } else {
+        showToast((r && r.error) || 'Failed to reject');
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + (e && e.message || 'failed')); })
+    .handleUserRequest({ action: 'rejectSignup', requestId: requestId, reason: reason || 'Not specified' });
 }
 
 function renderStaffTable(staff) {
@@ -3092,6 +3320,183 @@ function openCustomerDetail(customerId) {
 
 function filterCustomers() {
   renderCustomersPageTable(window._customersData || []);
+}
+
+/* ══════════ ORDERS PAGE ══════════ */
+window._ordersData = [];
+window._activeOrderId = null;
+
+function loadOrdersPage() {
+  var tbody = document.getElementById('ordersTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="users-loading">Loading orders...</td></tr>';
+
+  var conditions = {};
+  var statusSel = document.getElementById('ordStatusFilter');
+  if (statusSel && statusSel.value && statusSel.value !== 'ALL') conditions.status = statusSel.value;
+  if (typeof currentAffiliate !== 'undefined' && currentAffiliate && currentAffiliate !== 'ALL') {
+    conditions.country_code = currentAffiliate;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        window._ordersData = r.data || [];
+        renderOrdersTable(window._ordersData);
+        renderOrdersKPIs(window._ordersData);
+      } else {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626;">Failed to load orders' + (r && r.error ? ': ' + r.error : '') + '</td></tr>';
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#dc2626;">Failed to load orders: ' + (e && e.message || '') + '</td></tr>';
+    })
+    .handleOrderRequest({ action:'list', conditions: conditions, options:{ sortBy:'created_at', sortOrder:'desc', limit:200 } });
+}
+
+function renderOrdersTable(orders) {
+  var tbody = document.getElementById('ordersTableBody');
+  if (!tbody) return;
+
+  var qEl = document.getElementById('ordSearch');
+  var sEl = document.getElementById('ordStatusFilter');
+  var q = (qEl && qEl.value || '').toLowerCase().trim();
+  var statusF = sEl ? sEl.value : 'ALL';
+  var af = (typeof currentAffiliate !== 'undefined') ? currentAffiliate : 'ALL';
+
+  var filtered = (orders || []).filter(function(o) {
+    if (af !== 'ALL' && o.country_code !== af) return false;
+    if (statusF && statusF !== 'ALL' && String(o.status||'').toUpperCase() !== statusF) return false;
+    if (q) {
+      var num = String(o.order_number||'').toLowerCase();
+      var cid = String(o.customer_id||'').toLowerCase();
+      if (num.indexOf(q) === -1 && cid.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748b;">No orders found</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(o) {
+    var orderId = String(o.order_id || '').replace(/'/g,"\\'");
+    return '<tr>'
+      + '<td><a href="#" onclick="openOrderDetail(\'' + orderId + '\');return false;" style="color:#1A237E;font-weight:600;">' + escapeHtml(o.order_number || o.order_id || '-') + '</a></td>'
+      + '<td>' + escapeHtml(o.customer_id || '-') + '</td>'
+      + '<td>' + escapeHtml(o.country_code || '-') + '</td>'
+      + '<td>' + formatCurrency(o.total_amount, o.currency_code) + '</td>'
+      + '<td>' + getStatusBadge(o.status) + '</td>'
+      + '<td>' + getStatusBadge(o.payment_status || 'PENDING') + '</td>'
+      + '<td style="font-size:12px;color:#64748b;">' + formatDate(o.requested_date) + '</td>'
+      + '<td style="font-size:12px;color:#64748b;">' + formatDate(o.created_at) + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function renderOrdersKPIs(orders) {
+  orders = orders || [];
+  var total = orders.length;
+  var pendingStatuses = ['SUBMITTED','PENDING_APPROVAL','APPROVED'];
+  var pending = orders.filter(function(o){ return pendingStatuses.indexOf(String(o.status||'').toUpperCase()) > -1; }).length;
+  var inTransit = orders.filter(function(o){ return String(o.status||'').toUpperCase() === 'IN_TRANSIT'; }).length;
+  var today = new Date().toDateString();
+  var deliveredToday = orders.filter(function(o){
+    return o.delivered_at && new Date(o.delivered_at).toDateString() === today;
+  }).length;
+
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ordStatTotal', total);
+  set('ordStatPending', pending);
+  set('ordStatInTransit', inTransit);
+  set('ordStatDeliveredToday', deliveredToday);
+}
+
+function openOrderDetail(orderId) {
+  var order = (window._ordersData || []).find(function(o){ return String(o.order_id) === String(orderId); });
+  if (!order) { showToast('Order not found'); return; }
+  window._activeOrderId = orderId;
+
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = (v == null || v === '') ? '-' : v; };
+  var setHtml = function(id, v) { var el = document.getElementById(id); if (el) el.innerHTML = v; };
+
+  set('ordModalNumber', 'Order ' + (order.order_number || order.order_id || ''));
+  set('ordModalId', order.order_id);
+  set('ordModalCustomer', order.customer_id);
+  set('ordModalCountry', order.country_code);
+  set('ordModalRequested', order.requested_date ? formatDate(order.requested_date) : '-');
+  set('ordModalDelivered', order.delivered_at ? formatDate(order.delivered_at) : '-');
+  set('ordModalInstructions', order.special_instructions || '-');
+  set('ordModalAmount', formatCurrency(order.total_amount, order.currency_code));
+  set('ordModalCurrency', order.currency_code);
+  setHtml('ordModalStatus', getStatusBadge(order.status));
+  setHtml('ordModalPayment', getStatusBadge(order.payment_status || 'PENDING'));
+  set('ordModalCreated', formatDate(order.created_at));
+  set('ordModalUpdated', formatDate(order.updated_at));
+
+  var statusSel = document.getElementById('ordStatusUpdate');
+  if (statusSel) statusSel.value = String(order.status || '').toUpperCase() || 'SUBMITTED';
+
+  document.getElementById('ordDetailModal').style.display = 'flex';
+  loadOrderLines(orderId);
+}
+
+function loadOrderLines(orderId) {
+  var tbody = document.getElementById('ordLinesBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="users-loading">Loading lines...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!tbody) return;
+      var lines = (r && r.lines) || (r && r.data) || [];
+      if (!r || !r.success || !lines.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#64748b;">No line items</td></tr>';
+        return;
+      }
+      tbody.innerHTML = lines.map(function(l) {
+        var productName = (l.product && (l.product.product_name || l.product.name)) || l.product_id || '-';
+        var currency = l.currency_code || '';
+        return '<tr>'
+          + '<td>' + escapeHtml(productName) + '</td>'
+          + '<td>' + (l.quantity != null ? l.quantity : '-') + '</td>'
+          + '<td>' + formatCurrency(l.unit_price, currency) + '</td>'
+          + '<td>' + formatCurrency(l.total_amount != null ? l.total_amount : (Number(l.unit_price||0) * Number(l.quantity||0)), currency) + '</td>'
+          + '</tr>';
+      }).join('');
+    })
+    .withFailureHandler(function(e) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#dc2626;">Failed to load lines</td></tr>';
+    })
+    .handleOrderRequest({ action:'getLines', orderId: orderId });
+}
+
+function updateOrderStatus() {
+  var sel = document.getElementById('ordStatusUpdate');
+  var newStatus = sel ? sel.value : '';
+  var orderId = window._activeOrderId;
+  if (!orderId || !newStatus) return;
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showToast('Status updated');
+        document.getElementById('ordDetailModal').style.display = 'none';
+        loadOrdersPage();
+      } else {
+        showToast((r && r.error) || 'Failed to update status');
+      }
+    })
+    .withFailureHandler(function(e) { showToast('Error: ' + (e && e.message || 'failed')); })
+    .handleOrderRequest({
+      action: 'updateStatus',
+      orderId: orderId,
+      status: newStatus,
+      context: { actorType:'STAFF', actorId: SESSION.userId }
+    });
+}
+
+function filterOrders() {
+  renderOrdersTable(window._ordersData || []);
 }
 
 /* ══════════ SUPPORT TICKETS ══════════ */

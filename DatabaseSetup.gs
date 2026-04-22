@@ -90,6 +90,7 @@ const COLLECTION_MAP = {
   'Invoices': 'Invoices',
   'ApprovalWorkflows': 'ApprovalWorkflows',
   'PaymentUploads': 'PaymentUploads',
+  'SignupRequests': 'SignupRequests',
 };
 
 function getCollectionName(sheetName) {

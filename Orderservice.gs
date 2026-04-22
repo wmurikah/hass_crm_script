@@ -1251,6 +1251,49 @@ function getOrdersPendingApproval(countryCode) {
 // ============================================================================
 
 /**
+ * Lists orders with optional filtering, sorting, and limit.
+ * @param {Object} conditions - Filter conditions: status, country_code, customer_id
+ * @param {Object} options - sortBy, sortOrder, limit
+ * @returns {Object} { success, data, total }
+ */
+function listOrders(conditions, options) {
+  try {
+    conditions = conditions || {};
+    options = options || {};
+    var allOrders = getSheetData('Orders') || [];
+    var filtered = allOrders;
+
+    if (conditions.status) {
+      var statuses = Array.isArray(conditions.status) ? conditions.status : [conditions.status];
+      statuses = statuses.map(function(s) { return String(s || '').toUpperCase(); });
+      filtered = filtered.filter(function(o) { return statuses.indexOf(String(o.status||'').toUpperCase()) > -1; });
+    }
+    if (conditions.country_code) {
+      filtered = filtered.filter(function(o) { return String(o.country_code||'') === conditions.country_code; });
+    }
+    if (conditions.customer_id) {
+      filtered = filtered.filter(function(o) { return String(o.customer_id||'') === conditions.customer_id; });
+    }
+
+    var sortBy = options.sortBy || 'created_at';
+    var sortOrder = options.sortOrder || 'desc';
+    filtered.sort(function(a, b) {
+      var av = a[sortBy] ? new Date(a[sortBy]).getTime() : 0;
+      var bv = b[sortBy] ? new Date(b[sortBy]).getTime() : 0;
+      return sortOrder === 'asc' ? av - bv : bv - av;
+    });
+
+    var limit = parseInt(options.limit) || 200;
+    filtered = filtered.slice(0, limit);
+
+    return { success: true, data: filtered, total: filtered.length };
+  } catch (e) {
+    Logger.log('listOrders error: ' + e.message);
+    return { success: false, error: e.message, data: [] };
+  }
+}
+
+/**
  * Handles order API requests.
  * @param {Object} params - Request parameters
  * @returns {Object} Response
@@ -1328,8 +1371,39 @@ function handleOrderRequest(params) {
     case 'getCustomerForChat':
       return getCustomerForChat(params.customerId);
 
+    case 'list':
+      return listOrders(params.conditions || {}, params.options || {});
+
+    case 'getLines':
+      return getOrderLinesForStaff(params.orderId);
+
+    case 'updateStatus':
+      return updateOrderStatus(params.orderId, params.status, params.context || {});
+
     default:
       return { success: false, error: 'Unknown action: ' + action };
+  }
+}
+
+/**
+ * Returns enriched order lines for the staff portal detail modal.
+ * @param {string} orderId
+ * @returns {Object} { success, lines }
+ */
+function getOrderLinesForStaff(orderId) {
+  try {
+    if (!orderId) return { success: false, error: 'orderId required', lines: [] };
+    var res = findWhere('OrderLines', { order_id: orderId }, { sortBy: 'created_at', sortOrder: 'asc' });
+    var lines = (res && res.data) ? res.data : [];
+    var products = getSheetData('Products') || [];
+    var enriched = lines.map(function(line) {
+      var product = products.find(function(p) { return p.product_id === line.product_id; });
+      return Object.assign({}, line, { product: product || null });
+    });
+    return { success: true, lines: enriched };
+  } catch (e) {
+    Logger.log('getOrderLinesForStaff error: ' + e.message);
+    return { success: false, error: e.message, lines: [] };
   }
 }
 

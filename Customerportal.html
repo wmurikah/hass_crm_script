@@ -282,8 +282,8 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
         <div class="hp-card-header"><span>New Order</span><button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('orderFormCard').style.display='none'">&times;</button></div>
         <div class="p-4">
           <div class="row g-3 mb-3">
-            <div class="col-md-4"><label class="hp-form-label">Delivery Location</label><select class="form-select form-select-sm" id="orderLocation"><option>Select location...</option></select></div>
-            <div class="col-md-4"><label class="hp-form-label">Requested Date</label><input type="date" class="form-control form-control-sm" id="orderDate"></div>
+            <div class="col-md-4"><label class="hp-form-label">Delivery Location <span style="color:#dc2626;">*</span></label><select class="form-select form-select-sm" id="orderLocation"><option value="">Select location...</option></select></div>
+            <div class="col-md-4"><label class="hp-form-label">Requested Date <span style="color:#dc2626;">*</span></label><input type="date" class="form-control form-control-sm" id="orderDate"></div>
             <div class="col-md-4"><label class="hp-form-label">PO Number</label><input type="text" class="form-control form-control-sm" id="orderPO" placeholder="Optional"></div>
           </div>
           <label class="hp-form-label">Line Items</label>
@@ -303,6 +303,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
             <div class="col-md-3"><div class="hp-form-label">Grand Total</div><div id="orderGrandTotal" class="fw-bold fs-5" style="color:var(--hp-navy-800)">0.00</div></div>
           </div>
           <div class="mt-3"><label class="hp-form-label">Special Instructions</label><textarea class="form-control form-control-sm" id="orderInstructions" rows="2"></textarea></div>
+          <div id="orderFormError" style="display:none;color:#dc2626;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13px;"></div>
           <div class="mt-3 text-end"><button class="btn btn-hp-primary" onclick="submitOrder()">Submit Order</button></div>
         </div>
       </div>
@@ -617,6 +618,9 @@ function calcTotals(){
 }
 
 function submitOrder(){
+  var errorEl = document.getElementById('orderFormError');
+  if (errorEl) { errorEl.style.display = 'none'; errorEl.innerHTML = ''; }
+
   if(!currentCustomer){ showToast('Customer profile not loaded yet','error'); return; }
   var locationId = document.getElementById('orderLocation').value;
   var requestedDate = document.getElementById('orderDate').value;
@@ -634,7 +638,22 @@ function submitOrder(){
       lines.push({ product_id: pid, quantity: qty, unit_price: price });
     }
   });
-  if(!lines.length){ showToast('Add at least one line item','error'); return; }
+
+  // Mandatory-field validation
+  var missing = [];
+  if (!locationId) missing.push('Delivery Location');
+  if (!requestedDate) missing.push('Requested Date');
+  if (!lines.length) missing.push('At least one line item with a product and quantity > 0');
+  if (missing.length) {
+    if (errorEl) {
+      errorEl.innerHTML = '<strong>Please complete the following before submitting:</strong><ul style="margin:6px 0 0 18px;padding:0;">'
+        + missing.map(function(m){ return '<li>' + m + '</li>'; }).join('')
+        + '</ul>';
+      errorEl.style.display = 'block';
+    }
+    showToast('Missing required fields','error');
+    return;
+  }
 
   showToast('Submitting order...','info');
   google.script.run.withSuccessHandler(function(r){

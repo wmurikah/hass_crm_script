@@ -742,9 +742,12 @@ body {
   <div class="auth-card" id="authCard">
 
     <!-- Logo -->
-    <div class="auth-logo">
-      <img id="logo" src="" alt="Hass Petroleum Group" width="48" style="display:none;border-radius:50%;">
-      <div id="logoFallback" class="auth-logo-fallback">Hass Petroleum Group</div>
+    <div class="auth-logo" style="background:#fff;border-radius:10px;padding:6px 12px;display:inline-flex;align-items:center;">
+      <img id="logo"
+           src="https://lh3.googleusercontent.com/d/1f8FUWRh0XQuSOaF84GQ0QGPiIBXY2-YG"
+           alt="Hass Petroleum"
+           style="height:48px;width:auto;object-fit:contain;display:block;">
+      <div id="logoFallback" class="auth-logo-fallback" style="display:none;">Hass Petroleum Group</div>
     </div>
 
     <!-- ============================================ -->
@@ -764,26 +767,11 @@ body {
 
       <form id="loginForm" autocomplete="on" novalidate>
 
-        <!-- Account Type -->
-        <div id="accountTypeRow">
-          <div class="field-group">
-            <label class="auth-label" for="accountType">Account Type <span style="color:var(--error)">*</span></label>
-            <select class="auth-select" id="accountType" required>
-              <option value="">Select account type</option>
-              <option value="Card Holder">Card Holder</option>
-              <option value="Dealer">Dealer</option>
-              <option value="Top-Up Account">Top-Up Account</option>
-              <option value="Corporate Account">Corporate Account</option>
-            </select>
-            <div class="field-error" id="accountTypeError"></div>
-          </div>
-        </div>
-
-        <!-- Email / Account Number -->
+        <!-- Email -->
         <div class="field-group">
-          <label class="auth-label" for="loginEmail" id="loginEmailLabel">Email or Account Number <span style="color:var(--error)">*</span></label>
-          <input class="auth-input" type="text" id="loginEmail" required
-                 placeholder="Enter your email or account number"
+          <label class="auth-label" for="loginEmail" id="loginEmailLabel">Email <span style="color:var(--error)">*</span></label>
+          <input class="auth-input" type="email" id="loginEmail" required
+                 placeholder="you@company.com"
                  autocomplete="username">
           <div class="field-error" id="loginEmailError"></div>
         </div>
@@ -809,14 +797,6 @@ body {
             </button>
           </div>
           <div class="field-error" id="loginPasswordError"></div>
-        </div>
-
-        <!-- Corporate Company Name (hidden by default) -->
-        <div class="field-group" id="corporateNameField" style="display:none">
-          <label class="auth-label" for="loginCorpName">Company Name <span style="color:var(--error)">*</span></label>
-          <input class="auth-input" type="text" id="loginCorpName"
-                 placeholder="Your registered company name">
-          <div class="field-error" id="loginCorpNameError"></div>
         </div>
 
         <!-- Remember me / Forgot -->
@@ -1228,15 +1208,20 @@ body {
 
     var els = {
       accountTypeRow:   document.getElementById('accountTypeRow'),
+      companyNameField: document.getElementById('corporateNameField'),
       signupPrompt:     document.getElementById('loginSignupPrompt'),
       ssoSection:       document.getElementById('ssoSection'),
       emailLabel:       document.getElementById('loginEmailLabel')
     };
 
-    if (els.accountTypeRow) els.accountTypeRow.style.display = isStaff ? 'none' : 'block';
-    if (els.signupPrompt)   els.signupPrompt.style.display   = isStaff ? 'none' : 'block';
-    if (els.ssoSection)     els.ssoSection.style.display     = isStaff ? 'none' : 'block';
-    if (els.emailLabel)     els.emailLabel.innerHTML          = (isStaff ? 'Staff Email' : 'Email or Account Number') + ' <span style="color:var(--error)">*</span>';
+    // Safety-net: if account type or company name fields exist (e.g. legacy DOM or signup view
+    // left mounted), hide them in staff mode. On the login form these are removed entirely,
+    // so these lookups are usually null.
+    if (els.accountTypeRow)   els.accountTypeRow.style.display   = isStaff ? 'none' : 'block';
+    if (els.companyNameField) els.companyNameField.style.display = isStaff ? 'none' : els.companyNameField.style.display;
+    if (els.signupPrompt)     els.signupPrompt.style.display     = isStaff ? 'none' : 'block';
+    if (els.ssoSection)       els.ssoSection.style.display       = isStaff ? 'none' : 'block';
+    if (els.emailLabel)       els.emailLabel.innerHTML           = (isStaff ? 'Staff Email' : 'Email') + ' <span style="color:var(--error)">*</span>';
 
     // Card height fix — customer mode is taller, so make it more compact
     var authCard = document.getElementById('authCard');
@@ -1288,7 +1273,7 @@ body {
   };
 
   function clearAllLoginErrors() {
-    ['accountType', 'loginEmail', 'loginPassword', 'loginCorpName'].forEach(function(id) {
+    ['loginEmail', 'loginPassword'].forEach(function(id) {
       clearFieldError(id);
     });
     hideLoginError();
@@ -1316,17 +1301,7 @@ body {
     }, 500);
   }
 
-  /* ── Account Type toggle for Corporate field ── */
-  document.getElementById('accountType').addEventListener('change', function() {
-    var corpField = document.getElementById('corporateNameField');
-    if (this.value === 'Corporate Account') {
-      corpField.style.display = 'block';
-    } else {
-      corpField.style.display = 'none';
-      document.getElementById('loginCorpName').value = '';
-      clearFieldError('loginCorpName');
-    }
-  });
+  /* Account Type toggle for Corporate field is no longer needed on the login form. */
 
   /* ── Login button state ── */
   function setLoginLoading(loading) {
@@ -1343,34 +1318,18 @@ body {
   /* ── Validate login form ── */
   function validateLoginForm() {
     var valid = true;
-    var isStaff = window._loginMode === 'staff';
     clearAllLoginErrors();
 
-    var accountType = document.getElementById('accountType').value;
     var email = document.getElementById('loginEmail').value.trim();
     var password = document.getElementById('loginPassword').value;
 
-    if (!isStaff) {
-      if (!accountType) {
-        showFieldError('accountType', 'Please select an account type');
-        valid = false;
-      }
-    }
     if (!email) {
-      showFieldError('loginEmail', 'Please enter your email or account number');
+      showFieldError('loginEmail', 'Please enter your email');
       valid = false;
     }
     if (!password) {
       showFieldError('loginPassword', 'Please enter your password');
       valid = false;
-    }
-
-    if (!isStaff && accountType === 'Corporate Account') {
-      var corpName = document.getElementById('loginCorpName').value.trim();
-      if (!corpName) {
-        showFieldError('loginCorpName', 'Please enter your company name');
-        valid = false;
-      }
     }
 
     return valid;
@@ -1385,10 +1344,8 @@ body {
       return;
     }
 
-    var acctType = (window._loginMode === 'staff') ? '' : document.getElementById('accountType').value;
     var emailVal = document.getElementById('loginEmail').value.trim();
     var passwordVal = document.getElementById('loginPassword').value;
-    var corpName = document.getElementById('loginCorpName') ? document.getElementById('loginCorpName').value.trim() : '';
 
     setLoginLoading(true);
     hideLoginError();
@@ -1418,11 +1375,9 @@ body {
           shakeCard();
         })
         .handleAuthRequest({
-          action:        'login',
-          email:         emailVal,
-          password:      passwordVal,
-          accountType:   acctType,
-          corporateName: corpName
+          action:   'login',
+          email:    emailVal,
+          password: passwordVal
         });
     } catch (e) {
       setLoginLoading(false);
@@ -1462,7 +1417,7 @@ body {
   };
 
   /* ── Clear field errors on input ── */
-  ['accountType', 'loginEmail', 'loginPassword', 'loginCorpName'].forEach(function(id) {
+  ['loginEmail', 'loginPassword'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', function() { clearFieldError(id); });
@@ -2001,20 +1956,17 @@ body {
     // Show the overlay
     overlay.style.display = 'flex';
 
-    // Animate progress bar — 8 second linger while data loads
+    // Animate progress bar — extended by 600ms so redirect happens at 8600ms without a staging splash
     setTimeout(function() { bar.style.width='25%';  statusEl.textContent='Signing you in...'; },        800);
     setTimeout(function() { bar.style.width='50%';  statusEl.textContent='Loading your workspace...'; },2500);
     setTimeout(function() { bar.style.width='72%';  statusEl.textContent='Fetching your data...'; },    4500);
     setTimeout(function() { bar.style.width='88%';  statusEl.textContent='Almost ready...'; },           6500);
-    setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  7500);
+    setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  8000);
 
-    // Exit wave and redirect at 8 seconds
+    // Redirect directly to the portal URL — no intermediate staging screen
     setTimeout(function() {
-      overlay.classList.add('lt-exit');
-      setTimeout(function() {
-        window.location.href = result.redirectUrl;
-      }, 500);
-    }, 8000);
+      window.location.href = result.redirectUrl;
+    }, 8600);
   };
 
 })();
