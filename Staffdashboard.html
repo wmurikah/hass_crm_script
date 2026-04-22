@@ -1635,7 +1635,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
             <!-- SALES Upload -->
             <div class="upload-section">
-              <h3>SALES File Upload</h3>
+              <h3>SALES File Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Finance Approval &amp; Loading Authority SLA)</span></h3>
               <p class="upload-desc">Oracle EBS order approval data. Export from Oracle using the SALES report for any affiliate and any period.</p>
               <div class="upload-schema">
                 <div class="schema-header">Required columns in your SALES file:</div>
@@ -1669,12 +1669,13 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
                 <input type="file" id="salesFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handleSalesFile(this)">
                 <div class="upload-file-name" id="salesFileName"></div>
               </div>
+              <div id='salesProgressWrap' style='display:none;margin-top:10px;'><div style='font-size:12px;color:#64748b;margin-bottom:4px;' id='salesProgressLabel'>Processing...</div><div style='background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;'><div id='salesProgressBar' style='background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;'></div></div></div>
               <button class="btn-process-upload" id="btnProcessSales" onclick="processSalesUpload()" disabled>Process SALES File</button>
             </div>
 
             <!-- PUR Upload -->
             <div class="upload-section">
-              <h3>PUR File Upload (Purchase Orders)</h3>
+              <h3>PUR File Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Purchase Order Approval Chain SLA)</span></h3>
               <p class="upload-desc">Oracle EBS purchase order approval data. Export from Oracle using the PUR report. Supports multi-sheet files (Product, LPG, Lubes, Local, Export).</p>
               <div class="upload-schema">
                 <div class="schema-header">Required columns in your PUR file:</div>
@@ -1723,6 +1724,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
                 <input type="file" id="purFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handlePurFile(this)">
                 <div class="upload-file-name" id="purFileName"></div>
               </div>
+              <div id='purProgressWrap' style='display:none;margin-top:10px;'><div style='font-size:12px;color:#64748b;margin-bottom:4px;' id='purProgressLabel'>Processing...</div><div style='background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;'><div id='purProgressBar' style='background:#FF6F00;height:100%;width:0%;transition:width 0.3s;border-radius:6px;'></div></div></div>
               <button class="btn-process-upload" id="btnProcessPur" onclick="processPurUpload()" disabled>Process PUR File</button>
             </div>
 
@@ -4089,63 +4091,108 @@ function handleSalesFile(input) {
   window._salesFile = file;
 }
 
+function extractCountryFromFilename(filename) {
+  if (!filename) return '';
+  var clean = filename.replace(/\.(xls|xlsx|csv)$/i, '');
+  var parts = clean.split('-');
+  return parts[parts.length - 1].trim().toUpperCase() || '';
+}
+
+function showProgressBar(barId, wrapId, labelId, pct, label) {
+  var wrap = document.getElementById(wrapId);
+  var bar = document.getElementById(barId);
+  var lbl = document.getElementById(labelId);
+  if (wrap) wrap.style.display = 'block';
+  if (bar) bar.style.width = Math.min(100, pct) + '%';
+  if (lbl && label) lbl.textContent = label;
+}
+
 function processSalesUpload() {
   if (!window._salesFile) return;
   var btn = document.getElementById('btnProcessSales');
   btn.disabled = true;
-  btn.textContent = 'Parsing file...';
+  btn.textContent = 'Parsing...';
   showUploadLog();
-  logUpload('Reading file: ' + window._salesFile.name);
+  document.getElementById('uploadSummary').style.display = 'none';
+
+  var filename = window._salesFile.name;
+  var countryCode = extractCountryFromFilename(filename);
+  logUpload('File: ' + filename + ' | Country detected: ' + (countryCode || 'UNKNOWN'));
+
+  // Validate prefix
+  if (!filename.toUpperCase().startsWith('SALES')) {
+    logUpload('WARNING: File does not start with SALES. This upload slot is for LA/Finance data.');
+  }
 
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
-      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var wb = XLSX.read(e.target.result, { type:'binary', cellDates:true });
       var allRows = [];
-      wb.SheetNames.forEach(function(name) {
-        var ws = wb.Sheets[name];
-        var json = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
-        logUpload('Sheet \'' + name + '\': ' + json.length + ' rows');
-        json.forEach(function(r) { r._sheet = name; });
+      wb.SheetNames.forEach(function(sheetName) {
+        var ws = wb.Sheets[sheetName];
+        var json = XLSX.utils.sheet_to_json(ws, { raw:false, dateNF:'yyyy-mm-dd hh:mm:ss' });
+        logUpload('Sheet \'' + sheetName + '\': ' + json.length + ' rows');
         allRows = allRows.concat(json);
       });
+      logUpload('Total rows: ' + allRows.length);
 
-      logUpload('Total rows parsed: ' + allRows.length);
-      logUpload('Validating required columns...');
-
-      var required = ['DOCUMENT_NUMBER','CUSTOMER_NAME','CREATE_DATE_TIME','APPROVAL_DATE_TIME','FINANCE_VARIANCE','LOADING_AUTHORITY_VARIANCE'];
+      // Validate required columns
+      var required = ['DOCUMENT_NUMBER','CREATE_DATE_TIME','APPROVAL_DATE_TIME','FINANCE_VARIANCE','APPROVER','APPROVAL_STATUS','LOADING_AUTHORITY_DATE','LOADING_AUTHORITY_VARIANCE'];
       var firstRow = allRows[0] || {};
-      var missing = required.filter(function(c) { return !(c in firstRow); });
-      if (missing.length > 0) {
-        logUpload('ERROR: Missing required columns: ' + missing.join(', '));
+      var missing = required.filter(function(c){ return !(c in firstRow); });
+      if (missing.length) {
+        logUpload('ERROR: Missing columns: ' + missing.join(', '));
         btn.disabled = false; btn.textContent = 'Process SALES File';
         return;
       }
-      logUpload('Validation passed. Sending to server...');
 
+      // Filter to APPROVE only
+      var approveRows = allRows.filter(function(r){ return String(r['APPROVAL_STATUS']||'').trim().toUpperCase() === 'APPROVE'; });
+      logUpload('APPROVE rows to import: ' + approveRows.length + ' (skipping ' + (allRows.length - approveRows.length) + ' non-approved)');
+
+      if (!approveRows.length) {
+        logUpload('No APPROVE rows found. Nothing to import.');
+        btn.disabled = false; btn.textContent = 'Process SALES File';
+        return;
+      }
+
+      // Batch send
       var BATCH = 50;
       var batches = [];
-      for (var i = 0; i < allRows.length; i += BATCH) batches.push(allRows.slice(i, i + BATCH));
+      for (var i = 0; i < approveRows.length; i += BATCH) batches.push(approveRows.slice(i, i + BATCH));
+      var totalImported = 0, totalSkipped = 0;
 
-      var processed = 0;
       function sendBatch(idx) {
         if (idx >= batches.length) {
-          logUpload('All batches processed. Total: ' + processed + ' rows imported.');
+          showProgressBar('salesProgressBar','salesProgressWrap','salesProgressLabel', 100, 'Complete');
+          logUpload('Import complete: ' + totalImported + ' new records, ' + totalSkipped + ' duplicates skipped.');
           var summary = document.getElementById('uploadSummary');
-          summary.textContent = 'Import complete: ' + processed + ' SALES records processed.';
+          summary.textContent = '✅ SALES import complete: ' + totalImported + ' Finance/LA records added to SLAData.';
           summary.style.display = 'block';
           btn.textContent = 'Process SALES File'; btn.disabled = false;
           return;
         }
-        btn.textContent = 'Processing batch ' + (idx + 1) + '/' + batches.length + '...';
+        var pct = Math.round((idx / batches.length) * 100);
+        showProgressBar('salesProgressBar','salesProgressWrap','salesProgressLabel', pct, 'Batch ' + (idx+1) + ' of ' + batches.length + '...');
+        btn.textContent = 'Importing ' + pct + '%...';
+
         google.script.run
           .withSuccessHandler(function(r) {
-            if (r.success) { processed += r.imported; logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' imported, ' + r.skipped + ' skipped'); }
-            else { logUpload('Batch ' + (idx+1) + ' ERROR: ' + r.error); }
+            if (r.success) {
+              totalImported += r.imported || 0;
+              totalSkipped += r.skipped || 0;
+              logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' imported, ' + r.skipped + ' skipped');
+            } else {
+              logUpload('Batch ' + (idx+1) + ' ERROR: ' + (r.error||'unknown'));
+            }
             sendBatch(idx + 1);
           })
-          .withFailureHandler(function(e) { logUpload('Server error: ' + e.message); sendBatch(idx + 1); })
-          .handleDataUploadRequest({ action: 'importSalesRows', rows: batches[idx] });
+          .withFailureHandler(function(e) {
+            logUpload('Server error on batch ' + (idx+1) + ': ' + e.message);
+            sendBatch(idx + 1);
+          })
+          .handleDataUploadRequest({ action:'importSalesRows', rows: batches[idx], affiliateCountryCode: countryCode });
       }
       sendBatch(0);
 
@@ -4170,59 +4217,91 @@ function processPurUpload() {
   if (!window._purFile) return;
   var btn = document.getElementById('btnProcessPur');
   btn.disabled = true;
-  btn.textContent = 'Parsing file...';
+  btn.textContent = 'Parsing...';
   showUploadLog();
-  logUpload('Reading file: ' + window._purFile.name);
+  document.getElementById('uploadSummary').style.display = 'none';
+
+  var filename = window._purFile.name;
+  // Primary: extract from filename. Secondary: use the affiliate select.
+  var countryCode = extractCountryFromFilename(filename);
+  if (!countryCode) {
+    countryCode = document.getElementById('purAffiliate') ? document.getElementById('purAffiliate').value : '';
+  }
+  logUpload('File: ' + filename + ' | Country detected: ' + (countryCode || 'UNKNOWN'));
+
+  if (!filename.toUpperCase().startsWith('PUR')) {
+    logUpload('WARNING: File does not start with PUR. This upload slot is for PO approval data.');
+  }
 
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
-      var wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      var wb = XLSX.read(e.target.result, { type:'binary', cellDates:true });
       var allRows = [];
-      wb.SheetNames.forEach(function(name) {
-        var ws = wb.Sheets[name];
-        var json = XLSX.utils.sheet_to_json(ws, { raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
-        logUpload('Sheet \'' + name + '\': ' + json.length + ' rows');
-        json.forEach(function(r) { r._sheet = name; });
+      wb.SheetNames.forEach(function(sheetName) {
+        var ws = wb.Sheets[sheetName];
+        var json = XLSX.utils.sheet_to_json(ws, { raw:false, dateNF:'yyyy-mm-dd hh:mm:ss' });
+        logUpload('Sheet \'' + sheetName + '\': ' + json.length + ' rows');
         allRows = allRows.concat(json);
       });
+      logUpload('Total rows: ' + allRows.length);
 
-      logUpload('Total rows parsed: ' + allRows.length);
-      logUpload('Validating required columns...');
-
-      var required = ['purchase Number','ORIGINAL_CREATION_DATE','SUBMISSION_FOR_APPROVAL_DATE','TIME_DIFF_RAISEPO_TOAPROVALSUBMIT','FIRST_APPROVAL_DATE','FIRST_APPROVER','AUTHORIZATION_STATUS'];
+      // Validate required columns
+      var required = ['purchase Number','ORIGINAL_CREATION_DATE','FIRST_APPROVAL_DATE','FIRST_APPROVER','FIRST_APPROVALS_VARIANCE','AUTHORIZATION_STATUS'];
       var firstRow = allRows[0] || {};
-      var missing = required.filter(function(c) { return !(c in firstRow); });
-      if (missing.length > 0) {
-        logUpload('ERROR: Missing required columns: ' + missing.join(', '));
+      var missing = required.filter(function(c){ return !(c in firstRow); });
+      if (missing.length) {
+        logUpload('ERROR: Missing columns: ' + missing.join(', '));
         btn.disabled = false; btn.textContent = 'Process PUR File';
         return;
       }
-      logUpload('Validation passed. Sending to server...');
 
-      var BATCH = 50;
+      // Filter to APPROVED only
+      var approvedRows = allRows.filter(function(r){ return String(r['AUTHORIZATION_STATUS']||'').trim().toUpperCase() === 'APPROVED'; });
+      logUpload('APPROVED rows: ' + approvedRows.length + ' (skipping ' + (allRows.length - approvedRows.length) + ' non-approved)');
+
+      if (!approvedRows.length) {
+        logUpload('No APPROVED rows found. Nothing to import.');
+        btn.disabled = false; btn.textContent = 'Process PUR File';
+        return;
+      }
+
+      // Batch send
+      var BATCH = 30; // smaller batches because each row unpivots to up to 7 rows
       var batches = [];
-      for (var i = 0; i < allRows.length; i += BATCH) batches.push(allRows.slice(i, i + BATCH));
+      for (var i = 0; i < approvedRows.length; i += BATCH) batches.push(approvedRows.slice(i, i + BATCH));
+      var totalImported = 0, totalSkipped = 0;
 
-      var processed = 0;
       function sendBatch(idx) {
         if (idx >= batches.length) {
-          logUpload('All batches processed. Total: ' + processed + ' rows imported.');
+          showProgressBar('purProgressBar','purProgressWrap','purProgressLabel', 100, 'Complete');
+          logUpload('Import complete: ' + totalImported + ' approval step records, ' + totalSkipped + ' duplicates skipped.');
           var summary = document.getElementById('uploadSummary');
-          summary.textContent = 'Import complete: ' + processed + ' PUR records processed.';
+          summary.textContent = '✅ PUR import complete: ' + totalImported + ' PO approval steps added to POApprovals.';
           summary.style.display = 'block';
           btn.textContent = 'Process PUR File'; btn.disabled = false;
           return;
         }
-        btn.textContent = 'Processing batch ' + (idx + 1) + '/' + batches.length + '...';
+        var pct = Math.round((idx / batches.length) * 100);
+        showProgressBar('purProgressBar','purProgressWrap','purProgressLabel', pct, 'Batch ' + (idx+1) + ' of ' + batches.length + '...');
+        btn.textContent = 'Importing ' + pct + '%...';
+
         google.script.run
           .withSuccessHandler(function(r) {
-            if (r.success) { processed += r.imported; logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' imported, ' + r.skipped + ' skipped'); }
-            else { logUpload('Batch ' + (idx+1) + ' ERROR: ' + r.error); }
+            if (r.success) {
+              totalImported += r.imported || 0;
+              totalSkipped += r.skipped || 0;
+              logUpload('Batch ' + (idx+1) + '/' + batches.length + ': ' + r.imported + ' steps imported, ' + r.skipped + ' skipped');
+            } else {
+              logUpload('Batch ' + (idx+1) + ' ERROR: ' + (r.error||'unknown'));
+            }
             sendBatch(idx + 1);
           })
-          .withFailureHandler(function(e) { logUpload('Server error: ' + e.message); sendBatch(idx + 1); })
-          .handleDataUploadRequest({ action: 'importPurRows', rows: batches[idx], affiliateCountryCode: document.getElementById('purAffiliate').value || 'UNKNOWN' });
+          .withFailureHandler(function(e) {
+            logUpload('Server error on batch ' + (idx+1) + ': ' + e.message);
+            sendBatch(idx + 1);
+          })
+          .handleDataUploadRequest({ action:'importPurRows', rows: batches[idx], affiliateCountryCode: countryCode });
       }
       sendBatch(0);
 

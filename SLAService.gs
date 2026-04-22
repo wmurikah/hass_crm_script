@@ -97,99 +97,73 @@ function getStaffList() {
 
 function getSLAAnalytics(filters, affiliateFilter) {
   var ss      = getSpreadsheet();
-  var orders  = sheetToObjects(ss.getSheetByName('Orders'));
+  var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
   var f       = parseFilters(filters, affiliateFilter);
 
-  // Merge uploaded Oracle SLAData — these have direct finance/LA variance from Oracle
-  var slaDataSheet = ss.getSheetByName('SLAData');
-  var oracleVarMap = {}; // document_number -> { finance_variance_min, la_variance_min }
-  if (slaDataSheet) {
-    var slaRows = sheetToObjects(slaDataSheet);
-    slaRows.forEach(function(sr) {
-      if (sr.source_type === 'SALES' && sr.document_number) {
-        oracleVarMap[String(sr.document_number).trim()] = {
-          finance_variance_min: parseFloat(sr.finance_variance_min) || 0,
-          la_variance_min: parseFloat(sr.la_variance_min) || 0,
-          oracle_approver: sr.oracle_approver || '',
-          affiliate: sr.affiliate || '',
-          created_at: sr.created_at || '',
-          approved_at: sr.approved_at || '',
-          dispatched_at: sr.dispatched_at || ''
-        };
-      }
-    });
-  }
-
-  // Filter delivered orders in date range
-  var filtered = orders.filter(function(o){
-    if (!['DELIVERED','IN_TRANSIT'].includes(o.status)) return false;
-    var created = new Date(o.created_at);
-    if (isNaN(created)) return false;
+  // Filter SLAData rows by date range and affiliate
+  var filtered = slaData.filter(function(r){
+    if (!r.oracle_document_number) return false;
+    var created = r.created_at_oracle ? new Date(r.created_at_oracle) : null;
+    if (!created || isNaN(created)) return false;
     if (created < f.startDate || created > f.endDate) return false;
-    if (f.affiliate !== 'ALL' && o.country_code !== f.affiliate) return false;
+    if (f.affiliate !== 'ALL' && String(r.country_code) !== f.affiliate) return false;
     return true;
   });
 
-  // Apply staff filter
+  // Apply staff filter (matches finance_approver username)
   if (f.staffId !== 'ALL') {
-    filtered = filtered.filter(function(o){ return o.approved_by === f.staffId; });
+    var staffUser = sheetToObjects(ss.getSheetByName('Users')).find(function(u){ return u.user_id === f.staffId; });
+    if (staffUser) {
+      var uname = ((staffUser.first_name||'') + '.' + (staffUser.last_name||'')).toUpperCase().trim();
+      filtered = filtered.filter(function(r){
+        return String(r.finance_approver||'').toUpperCase().trim() === uname;
+      });
+    } else {
+      filtered = filtered.filter(function(r){
+        return String(r.finance_approver||'').toUpperCase().trim() === String(f.staffId).toUpperCase();
+      });
+    }
   }
 
-  // Apply department filter
+  // Apply department filter via Users lookup
   if (f.department !== 'ALL') {
-    var users = sheetToObjects(ss.getSheetByName('Users'));
-    var deptUsers = users.filter(function(u){ return u.department === f.department; }).map(function(u){ return u.user_id; });
-    filtered = filtered.filter(function(o){ return deptUsers.includes(o.approved_by); });
+    var allUsers = sheetToObjects(ss.getSheetByName('Users'));
+    var deptUsernames = allUsers
+      .filter(function(u){ return u.department === f.department; })
+      .map(function(u){ return ((u.first_name||'') + '.' + (u.last_name||'')).toUpperCase().trim(); });
+    filtered = filtered.filter(function(r){
+      return deptUsernames.indexOf(String(r.finance_approver||'').toUpperCase().trim()) >= 0;
+    });
   }
 
   // Map country_code to affiliate label
-  var affMap = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC' };
+  var affMap = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC', MW:'HPM', SO:'HSO' };
 
-  // Group by affiliate
+  function isTrue(v) {
+    if (v === true) return true;
+    var s = String(v||'').toLowerCase().trim();
+    return s === 'true' || s === 'yes' || s === '1';
+  }
+
+  // Group by affiliate (country_code)
   var groups = {};
-  filtered.forEach(function(o){
-    var aff = affMap[o.country_code] || o.country_code || 'OTHER';
-    // Use order_number to check if it is an HTW order
-    if (String(o.order_number||'').includes('HTW')) aff = 'HTW';
-    if (!groups[aff]) groups[aff] = { affiliate:aff, orders:0, totalFinance:0, totalLA:0, financeOk:0, laOk:0, delivOk:0 };
+  filtered.forEach(function(r){
+    var code = String(r.country_code||'OTHER');
+    var aff = affMap[code] || code;
+    if (!groups[aff]) groups[aff] = { affiliate:aff, orders:0, totalFinance:0, totalLA:0, financeOk:0, laOk:0, bothOk:0 };
     var g = groups[aff];
     g.orders++;
 
-    // Check if Oracle SLAData has direct variance values for this order
-    var oracleKey = String(o.oracle_order_id || '').trim();
-    var oracleVar = oracleKey ? oracleVarMap[oracleKey] : null;
+    var fMin = parseFloat(r.finance_variance_min) || 0;
+    var lMin = parseFloat(r.la_variance_min) || 0;
+    g.totalFinance += fMin;
+    g.totalLA += lMin;
 
-    // Finance variance: use Oracle data if available, otherwise compute from timestamps
-    if (oracleVar && oracleVar.finance_variance_min > 0) {
-      var fMin = oracleVar.finance_variance_min;
-      g.totalFinance += fMin;
-      if (fMin <= 60) g.financeOk++;
-    } else if (o.submitted_at && o.approved_at) {
-      var fMin = (new Date(o.approved_at) - new Date(o.submitted_at)) / 60000;
-      if (!isNaN(fMin) && fMin > 0) {
-        g.totalFinance += fMin;
-        if (fMin <= 60) g.financeOk++;
-      }
-    }
-
-    // LA variance: use Oracle data if available, otherwise compute from timestamps
-    if (oracleVar && oracleVar.la_variance_min > 0) {
-      var lMin = oracleVar.la_variance_min;
-      g.totalLA += lMin;
-      if (lMin <= 120) g.laOk++;
-    } else if (o.approved_at && o.dispatched_at) {
-      var lMin = (new Date(o.dispatched_at) - new Date(o.approved_at)) / 60000;
-      if (!isNaN(lMin) && lMin > 0) {
-        g.totalLA += lMin;
-        if (lMin <= 120) g.laOk++;
-      }
-    }
-
-    // On-time delivery: submitted_at to delivered_at <= 48 hours
-    if (o.submitted_at && o.delivered_at) {
-      var dHrs = (new Date(o.delivered_at) - new Date(o.submitted_at)) / 3600000;
-      if (!isNaN(dHrs) && dHrs > 0 && dHrs <= 48) g.delivOk++;
-    }
+    var fOk = isTrue(r.finance_within_sla);
+    var lOk = isTrue(r.la_within_sla);
+    if (fOk) g.financeOk++;
+    if (lOk) g.laOk++;
+    if (fOk && lOk) g.bothOk++;
   });
 
   var byAffiliate = Object.values(groups).map(function(g){
@@ -200,30 +174,31 @@ function getSLAAnalytics(filters, affiliateFilter) {
       financeSLAPct:g.orders > 0 ? Math.round(g.financeOk / g.orders * 100) : 0,
       avgLA:        g.orders > 0 ? Math.round(g.totalLA / g.orders) : 0,
       laSLAPct:     g.orders > 0 ? Math.round(g.laOk / g.orders * 100) : 0,
-      onTimePct:    g.orders > 0 ? Math.round(g.delivOk / g.orders * 100) : 0
+      onTimePct:    g.orders > 0 ? Math.round(g.bothOk / g.orders * 100) : 0
     };
   });
 
-  // Overall KPIs
+  // Overall KPIs — weighted by actual row counts across all filtered records
   var totalOrders = filtered.length;
-  var sumFinance = byAffiliate.reduce(function(s,a){return s+a.avgFinance;},0);
-  var sumLA      = byAffiliate.reduce(function(s,a){return s+a.avgLA;},0);
-  var n = byAffiliate.length || 1;
-  var onTimePct  = byAffiliate.length > 0 ? Math.round(byAffiliate.reduce(function(s,a){return s+a.onTimePct;},0)/n) : 0;
+  var grandFinance = 0, grandLA = 0, grandBothOk = 0;
+  filtered.forEach(function(r){
+    grandFinance += parseFloat(r.finance_variance_min) || 0;
+    grandLA      += parseFloat(r.la_variance_min) || 0;
+    if (isTrue(r.finance_within_sla) && isTrue(r.la_within_sla)) grandBothOk++;
+  });
+  var avgFinanceAll = totalOrders > 0 ? Math.round(grandFinance / totalOrders) : 0;
+  var avgLAAll      = totalOrders > 0 ? Math.round(grandLA / totalOrders) : 0;
+  var onTimePct     = totalOrders > 0 ? Math.round(grandBothOk / totalOrders * 100) : 0;
 
-  // Monthly trend
+  // Monthly trend — group by YYYY-MM of created_at_oracle
   var monthMap = {};
-  filtered.forEach(function(o){
-    var mk = new Date(o.created_at).toISOString().slice(0,7);
+  filtered.forEach(function(r){
+    var d = new Date(r.created_at_oracle);
+    if (isNaN(d)) return;
+    var mk = d.toISOString().slice(0,7);
     if (!monthMap[mk]) monthMap[mk] = { month:mk, totalFinance:0, totalLA:0, count:0 };
-    if (o.submitted_at && o.approved_at) {
-      var fMin = (new Date(o.approved_at)-new Date(o.submitted_at))/60000;
-      if (!isNaN(fMin)&&fMin>0) monthMap[mk].totalFinance+=fMin;
-    }
-    if (o.approved_at && o.dispatched_at) {
-      var lMin = (new Date(o.dispatched_at)-new Date(o.approved_at))/60000;
-      if (!isNaN(lMin)&&lMin>0) monthMap[mk].totalLA+=lMin;
-    }
+    monthMap[mk].totalFinance += parseFloat(r.finance_variance_min) || 0;
+    monthMap[mk].totalLA      += parseFloat(r.la_variance_min) || 0;
     monthMap[mk].count++;
   });
   var monthlyTrend = Object.values(monthMap)
@@ -237,30 +212,26 @@ function getSLAAnalytics(filters, affiliateFilter) {
       return { month:label, avgFinance:m.count>0?Math.round(m.totalFinance/m.count):0, avgLA:m.count>0?Math.round(m.totalLA/m.count):0 };
     });
 
-  // Approver performance leaderboard
-  var users = sheetToObjects(ss.getSheetByName('Users'));
+  // Approver performance leaderboard — grouped by finance_approver username
   var approverMap = {};
-  filtered.forEach(function(o) {
-    var approver = o.approved_by;
+  filtered.forEach(function(r) {
+    var approver = String(r.finance_approver || '').trim();
     if (!approver) return;
-    if (!approverMap[approver]) approverMap[approver] = { id:approver, count:0, total:0, fastest:Infinity, slowest:0, withinSLA:0 };
+    if (!approverMap[approver]) approverMap[approver] = { name:approver, count:0, total:0, fastest:Infinity, slowest:0, withinSLA:0 };
     var g = approverMap[approver];
-    if (o.submitted_at && o.approved_at) {
-      var fMin = (new Date(o.approved_at) - new Date(o.submitted_at)) / 60000;
-      if (!isNaN(fMin) && fMin > 0) {
-        g.count++;
-        g.total += fMin;
-        if (fMin < g.fastest) g.fastest = fMin;
-        if (fMin > g.slowest) g.slowest = fMin;
-        if (fMin <= 60) g.withinSLA++;
-      }
+    var fMin = parseFloat(r.finance_variance_min) || 0;
+    if (fMin > 0) {
+      g.count++;
+      g.total += fMin;
+      if (fMin < g.fastest) g.fastest = fMin;
+      if (fMin > g.slowest) g.slowest = fMin;
+      if (isTrue(r.finance_within_sla)) g.withinSLA++;
     }
   });
   var approverStats = Object.values(approverMap).map(function(g) {
-    var user = users.find(function(u){ return u.user_id === g.id; });
-    var name = user ? ((user.first_name||'') + ' ' + (user.last_name||'')).trim() : g.id;
     return {
-      name: name, count: g.count,
+      name: g.name,
+      count: g.count,
       avg: g.count > 0 ? g.total / g.count : 0,
       fastest: g.fastest === Infinity ? 0 : g.fastest,
       slowest: g.slowest,
@@ -270,7 +241,7 @@ function getSLAAnalytics(filters, affiliateFilter) {
 
   return {
     success:true,
-    kpis:{ avgFinance:Math.round(sumFinance/n), avgLA:Math.round(sumLA/n), onTimePct:onTimePct, totalOrders:totalOrders },
+    kpis:{ avgFinance:avgFinanceAll, avgLA:avgLAAll, onTimePct:onTimePct, totalOrders:totalOrders },
     byAffiliate:byAffiliate,
     monthlyTrend:monthlyTrend,
     approverStats:approverStats
