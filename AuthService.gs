@@ -210,31 +210,80 @@ function signupCustomer(params) {
   var name  = String(params.name  || '').trim();
   var phone = String(params.phone || '').trim();
   var password = String(params.password || '').trim();
+  var accountType = String(params.accountType || params.account_type || '').trim();
+  var companyName = String(params.companyName || params.company_name || '').trim();
   if (!email)    return { success: false, error: 'Email is required.' };
   if (!name)     return { success: false, error: 'Full name is required.' };
   if (!password) return { success: false, error: 'Password is required.' };
   if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters.' };
   var existing = findCustomerByEmail(email, '');
   if (existing.found) return { success: false, error: 'An account with this email already exists. Please sign in.' };
+
   var ss = getSpreadsheet();
-  var sheet = ss.getSheetByName('Contacts');
-  if (!sheet) return { success: false, error: 'System error. Please contact support.' };
-  var contactId = 'CON' + Utilities.getUuid().replace(/-/g,'').substring(0,9).toUpperCase();
-  var hashed = hashPassword(password);
+  var reqSheet = ss.getSheetByName('SignupRequests');
+  if (!reqSheet) {
+    reqSheet = ss.insertSheet('SignupRequests');
+    reqSheet.appendRow([
+      'request_id','company_name','first_name','email','account_type','customer_id',
+      'submitted_at','status','approved_by','approved_at','rejection_reason','rejected_at'
+    ]);
+  }
+
+  var parts = name.split(' ');
+  var firstName = parts[0] || name;
+  var requestId = 'SRQ' + Utilities.getUuid().replace(/-/g,'').substring(0,12).toUpperCase();
   var now = new Date().toISOString();
-  var parts = name.split(' '), firstName = parts[0] || name, lastName = parts.slice(1).join(' ') || '';
-  sheet.appendRow([
-    contactId, String(params.verifiedCustomerId || ''), firstName, lastName, email, phone,
-    '', String(params.jobTitle || ''), '', 'PRIMARY', false, true, 'OWNER', hashed,
-    'LOCAL', '', false, '', true, true, false, false, 'en', '', 0, '', '', '', 'ACTIVE', now, now
+  var pendingCheck = reqSheet.getDataRange().getValues();
+  if (pendingCheck.length > 1) {
+    var headers = pendingCheck[0].map(function(h){ return String(h||'').toLowerCase().trim(); });
+    var emailCol = headers.indexOf('email');
+    var statusCol = headers.indexOf('status');
+    for (var r = 1; r < pendingCheck.length; r++) {
+      if (String(pendingCheck[r][emailCol]||'').trim().toLowerCase() === email
+          && String(pendingCheck[r][statusCol]||'').toUpperCase() === 'PENDING_APPROVAL') {
+        return { success: false, error: 'A signup request for this email is already pending approval.' };
+      }
+    }
+  }
+
+  reqSheet.appendRow([
+    requestId, companyName, firstName, email, accountType, String(params.verifiedCustomerId || ''),
+    now, 'PENDING_APPROVAL', '', '', '', ''
   ]);
   SpreadsheetApp.flush();
+
+  PropertiesService.getScriptProperties().setProperty('PENDING_SIGNUP_' + requestId,
+    JSON.stringify({ password_hash: hashPassword(password), phone: phone, name: name }));
+
   try {
-    MailApp.sendEmail({ to: email, subject: 'Welcome to the Hass Petroleum Customer Portal',
-      body: 'Hello ' + firstName + ',\n\nYour portal account has been created.\n\nSign in at: ' +
-        getScriptUrl() + '\n\nHass Petroleum Group' });
-  } catch(e) { Logger.log('Welcome email failed: ' + e.message); }
-  return { success: true, message: 'Account created. You can now sign in.' };
+    var adminEmail = PropertiesService.getScriptProperties().getProperty('SUPER_ADMIN_EMAIL');
+    if (adminEmail) {
+      MailApp.sendEmail({
+        to: adminEmail,
+        subject: 'New Customer Portal Signup — Pending Approval',
+        body: 'A new customer portal signup request has been submitted.\n\n'
+          + 'Company: ' + (companyName || '(not provided)') + '\n'
+          + 'Name: ' + name + '\n'
+          + 'Email: ' + email + '\n'
+          + 'Account Type: ' + (accountType || '(not provided)') + '\n\n'
+          + 'Review and approve in the Staff Portal under Users & Roles > Pending Signups.\n\n'
+          + 'Hass Petroleum Group'
+      });
+    }
+  } catch(e) { Logger.log('Super Admin notification failed: ' + e.message); }
+
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: 'Hass Petroleum Portal — Signup Received',
+      body: 'Hello ' + firstName + ',\n\n'
+        + 'Your portal signup request has been received and is pending approval by our team.\n'
+        + 'You will receive an email once your account has been reviewed.\n\n'
+        + 'Hass Petroleum Group'
+    });
+  } catch(e) { Logger.log('Signup ack email failed: ' + e.message); }
+
+  return { success: true, message: 'Signup request submitted. You will receive an email once approved.' };
 }
 
 function verifyCustomerAccount(params) {

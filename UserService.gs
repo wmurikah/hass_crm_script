@@ -29,6 +29,12 @@ function handleUserRequest(params) {
         return getCustomerContacts(params.customerId);
       case 'setContactPortalAccess':
         return setContactPortalAccess(params.contactId, params.hasAccess);
+      case 'getPendingSignups':
+        return getPendingSignups();
+      case 'approveSignup':
+        return approveSignup(params.requestId, params.approvedBy);
+      case 'rejectSignup':
+        return rejectSignup(params.requestId, params.reason);
       default:
         return { success: false, error: 'Unknown user action: ' + action };
     }
@@ -371,6 +377,132 @@ function setContactPortalAccess(contactId, hasAccess) {
   }
 
   return { success: false, error: 'Contact not found' };
+}
+
+/**
+ * Ensures the SignupRequests sheet exists with the expected columns.
+ */
+function ensureSignupRequestsSheet_() {
+  var ss = getSpreadsheetUS_();
+  var sheet = ss.getSheetByName('SignupRequests');
+  if (!sheet) {
+    sheet = ss.insertSheet('SignupRequests');
+    sheet.appendRow([
+      'request_id','company_name','first_name','email','account_type','customer_id',
+      'submitted_at','status','approved_by','approved_at','rejection_reason','rejected_at'
+    ]);
+  }
+  return sheet;
+}
+
+/**
+ * Returns pending signup requests for Super Admin review.
+ */
+function getPendingSignups() {
+  try {
+    ensureSignupRequestsSheet_();
+    var rows = getSheetData('SignupRequests') || [];
+    var pending = rows.filter(function(r) {
+      return String(r.status || '').toUpperCase() === 'PENDING_APPROVAL';
+    });
+    return { success: true, requests: pending };
+  } catch (e) {
+    Logger.log('getPendingSignups error: ' + e.message);
+    return { success: false, error: e.message, requests: [] };
+  }
+}
+
+/**
+ * Approves a signup request: creates Contact + Users records, emails credentials.
+ */
+function approveSignup(requestId, approvedBy) {
+  try {
+    ensureSignupRequestsSheet_();
+    var rows = getSheetData('SignupRequests') || [];
+    var req = rows.find(function(r) { return r.request_id === requestId; });
+    if (!req) return { success: false, error: 'Request not found' };
+
+    var contactId = generateId('CON');
+    appendRow('Contacts', {
+      contact_id: contactId,
+      customer_id: req.customer_id || '',
+      first_name: req.first_name || req.company_name,
+      last_name: '',
+      email: req.email,
+      contact_type: 'PRIMARY',
+      is_portal_user: true,
+      status: 'ACTIVE',
+      created_at: new Date()
+    });
+
+    var tempPassword = generateTempPassword();
+    appendRow('Users', {
+      user_id: contactId,
+      email: req.email,
+      password_hash: hashPassword(tempPassword),
+      role: 'CUSTOMER',
+      user_type: 'CUSTOMER',
+      status: 'ACTIVE',
+      created_at: new Date()
+    });
+
+    updateRow('SignupRequests', 'request_id', requestId, {
+      status: 'APPROVED',
+      approved_by: approvedBy,
+      approved_at: new Date()
+    });
+
+    try {
+      MailApp.sendEmail(req.email, 'Your Hass Petroleum Portal Access',
+        'Dear ' + (req.first_name || req.company_name) + ',\n\n'
+        + 'Your portal access has been approved.\n\n'
+        + 'Email: ' + req.email + '\n'
+        + 'Temporary Password: ' + tempPassword + '\n\n'
+        + 'Please log in and change your password.\n\n'
+        + 'Hass Petroleum Group');
+    } catch (me) { Logger.log('approveSignup email error: ' + me.message); }
+
+    clearSheetCache('SignupRequests');
+    clearSheetCache('Contacts');
+    clearSheetCache('Users');
+    return { success: true, message: 'Signup approved and credentials sent' };
+  } catch (e) {
+    Logger.log('approveSignup error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Rejects a signup request and optionally emails the applicant.
+ */
+function rejectSignup(requestId, reason) {
+  try {
+    ensureSignupRequestsSheet_();
+    var rows = getSheetData('SignupRequests') || [];
+    var req = rows.find(function(r) { return r.request_id === requestId; });
+    if (!req) return { success: false, error: 'Request not found' };
+
+    updateRow('SignupRequests', 'request_id', requestId, {
+      status: 'REJECTED',
+      rejection_reason: reason || '',
+      rejected_at: new Date()
+    });
+
+    try {
+      MailApp.sendEmail(req.email, 'Hass Petroleum Portal — Application Update',
+        'Dear ' + (req.first_name || req.company_name) + ',\n\n'
+        + 'We have reviewed your portal access request. Unfortunately we are unable to approve it at this time.'
+        + (reason ? '\n\nReason: ' + reason : '')
+        + '\n\nFor queries contact support@hasspetroleum.com\n\n'
+        + 'Hass Petroleum Group');
+    } catch (me) { Logger.log('rejectSignup email error: ' + me.message); }
+
+    clearSheetCache('SignupRequests');
+    return { success: true, message: 'Signup rejected' };
+  } catch (e) {
+    Logger.log('rejectSignup error: ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**
