@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hass Petroleum - Customer Portal</title>
+<title>Hass Petroleum - Sign In</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -562,10 +562,6 @@ body {
 }
 
 /* ── Login mode toggle ── */
-.login-toggle { display:flex; background:#f1f5f9; border-radius:10px; padding:4px; gap:4px; margin-bottom:24px; }
-.toggle-btn { flex:1; padding:9px 12px; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:transparent; color:#64748b; transition:all 0.2s; font-family:inherit; }
-.toggle-btn:hover { color:#1A237E; }
-.toggle-btn.active { background:#1A237E; color:#fff; box-shadow:0 2px 8px rgba(26,35,126,0.25); }
 
 
 /* ── Privacy notice ── */
@@ -756,14 +752,7 @@ body {
     <div class="auth-view" id="login-view">
 
       <h1 class="auth-heading">Hass Petroleum Group</h1>
-      <p class="auth-subheading">Customer Portal</p>
-
-      <!-- Staff / Customer toggle -->
-      <div class="login-toggle" id="loginModeToggle">
-        <button class="toggle-btn active" id="toggleCustomer" onclick="setLoginMode('customer')">Customer Portal</button>
-        <button class="toggle-btn" id="toggleStaff" onclick="setLoginMode('staff')">Staff Login</button>
-      </div>
-
+      <p class="auth-subheading">Sign in to your account</p>
 
       <form id="loginForm" autocomplete="on" novalidate>
 
@@ -1194,46 +1183,6 @@ body {
       eyeIcon.style.display = 'block';
       eyeOffIcon.style.display = 'none';
     }
-  };
-
-  /* ── Login mode toggle (Staff / Customer) ── */
-  window._loginMode = 'customer';
-
-  window.setLoginMode = function(mode) {
-    window._loginMode = mode;
-    var isStaff = mode === 'staff';
-
-    document.getElementById('toggleCustomer').classList.toggle('active', !isStaff);
-    document.getElementById('toggleStaff').classList.toggle('active', isStaff);
-
-    var els = {
-      accountTypeRow:   document.getElementById('accountTypeRow'),
-      companyNameField: document.getElementById('corporateNameField'),
-      signupPrompt:     document.getElementById('loginSignupPrompt'),
-      ssoSection:       document.getElementById('ssoSection'),
-      emailLabel:       document.getElementById('loginEmailLabel')
-    };
-
-    // Safety-net: if account type or company name fields exist (e.g. legacy DOM or signup view
-    // left mounted), hide them in staff mode. On the login form these are removed entirely,
-    // so these lookups are usually null.
-    if (els.accountTypeRow)   els.accountTypeRow.style.display   = isStaff ? 'none' : 'block';
-    if (els.companyNameField) els.companyNameField.style.display = isStaff ? 'none' : els.companyNameField.style.display;
-    if (els.signupPrompt)     els.signupPrompt.style.display     = isStaff ? 'none' : 'block';
-    if (els.ssoSection)       els.ssoSection.style.display       = isStaff ? 'none' : 'block';
-    if (els.emailLabel)       els.emailLabel.innerHTML           = (isStaff ? 'Staff Email' : 'Email') + ' <span style="color:var(--error)">*</span>';
-
-    // Card height fix — customer mode is taller, so make it more compact
-    var authCard = document.getElementById('authCard');
-    if (authCard) {
-      authCard.style.paddingTop    = isStaff ? '28px' : '36px';
-      authCard.style.paddingBottom = isStaff ? '24px' : '28px';
-    }
-
-    if (els.ssoSection) els.ssoSection.style.marginBottom = isStaff ? '0' : '4px';
-
-    var remForgot = document.querySelector('.remember-forgot');
-    if (remForgot) remForgot.style.marginBottom = '14px';
   };
 
   /* ── Privacy modal ── */
