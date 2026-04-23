@@ -1,25 +1,32 @@
 /**
- * HASS CMS — DataUploadService.gs FIXES
- * =====================================================================
- * WHAT THIS FILE CONTAINS:
- *
- * 1. importSalesRows()   — fixed column names to match actual SLAData sheet
- * 2. importPurRows()     — unchanged (POApprovals has different schema)
- * 3. extractCountryFromFilename() — handles HPK/HPT/HPU codes too
- * 4. backfillSLADataAffiliates() — ONE-TIME repair of the 185 blank rows
- *
- * HOW TO APPLY:
- *   Step 1: Replace your existing importSalesRows() with the one below.
- *   Step 2: Replace your existing extractCountryFromFilename() with the one below.
- *   Step 3: Run backfillSLADataAffiliates() ONCE to repair existing blank rows.
- *   Step 4: Future uploads will write correct columns automatically.
+ * HASS CMS — DataUploadService.gs
  * =====================================================================
  */
 
 
 // ============================================================================
-// 1. FIXED importSalesRows — writes to actual SLAData column names
-//    Sheet headers confirmed: source_type | affiliate | document_number |
+// ROUTER — called by google.script.run from the upload UI
+// ============================================================================
+function handleDataUploadRequest(params) {
+  try {
+    switch(params.action) {
+      case 'importSalesRows':
+        return importSalesRows(params.rows, params.affiliateCountryCode);
+      case 'importPurRows':
+        return importPurRows(params.rows, params.affiliateCountryCode);
+      default:
+        return { success: false, error: 'Unknown upload action: ' + params.action };
+    }
+  } catch(e) {
+    Logger.log('handleDataUploadRequest error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+
+// ============================================================================
+// 1. importSalesRows — writes to SLAData using actual sheet column names
+//    Confirmed headers: source_type | affiliate | document_number |
 //    customer_name | oracle_approver | finance_variance_min | la_variance_min |
 //    created_at | approved_at | dispatched_at | ordered_item | upload_batch_id
 // ============================================================================
@@ -89,7 +96,11 @@ function importSalesRows(rows, affiliateCountryCode) {
 
 
 // ============================================================================
-// 2. importPurRows — writes to POApprovals (schema unchanged)
+// 2. importPurRows — writes to POApprovals using actual sheet column names
+//    Confirmed headers: po_number | description | nature | affiliate |
+//    created_by | original_creation_date | submission_date |
+//    submission_variance_min | first_approver | first_approval_date |
+//    first_variance_min | ... seventh_... | authorization_status | upload_batch_id
 // ============================================================================
 function importPurRows(rows, affiliateCountryCode) {
   try {
@@ -125,12 +136,12 @@ function importPurRows(rows, affiliateCountryCode) {
 
       var record = {
         po_number:               poNum,
-        description:             String(row['Req Description']                    || ''),
-        nature:                  String(row['NATURE']                             || 'PRODUCT'),
+        description:             String(row['Req Description']                     || ''),
+        nature:                  String(row['NATURE']                              || 'PRODUCT'),
         affiliate:               affName,
-        created_by:              String(row['PURCHASE_ORDER_CREATED_BY']          || ''),
-        original_creation_date:  String(row['ORIGINAL_CREATION_DATE']            || ''),
-        submission_date:         String(row['SUBMISSION_FOR_APPROVAL_DATE']      || ''),
+        created_by:              String(row['PURCHASE_ORDER_CREATED_BY']           || ''),
+        original_creation_date:  String(row['ORIGINAL_CREATION_DATE']             || ''),
+        submission_date:         String(row['SUBMISSION_FOR_APPROVAL_DATE']       || ''),
         submission_variance_min: parseFloat(row['TIME_DIFF_RAISEPO_TOAPROVALSUBMIT']) || 0,
         authorization_status:    'APPROVED',
         upload_batch_id:         batchId
@@ -162,21 +173,21 @@ function importPurRows(rows, affiliateCountryCode) {
 
 
 // ============================================================================
-// 3. ROBUST extractCountryFromFilename
+// 3. extractCountryFromFilename
 //    Handles: ZM, DRC, HPK, HPT, Kenya, Congo etc in any position/separator
 // ============================================================================
 function extractCountryFromFilename(filename) {
   if (!filename) return '';
 
-  var CODES   = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','NG','ET'];
-  var BADGES  = { HPK:'KE',HPU:'UG',HPT:'TZ',HPR:'RW',HSS:'SS',HPZ:'ZM',HPC:'DRC',HSO:'SO',HPM:'MW' };
+  var CODES    = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','NG','ET'];
+  var BADGES   = { HPK:'KE',HPU:'UG',HPT:'TZ',HPR:'RW',HSS:'SS',HPZ:'ZM',HPC:'DRC',HSO:'SO',HPM:'MW' };
   var KEYWORDS = { KENYA:'KE',UGANDA:'UG',TANZANIA:'TZ',RWANDA:'RW','SOUTH SUDAN':'SS',
                    ZAMBIA:'ZM',CONGO:'DRC',MALAWI:'MW',SOMALIA:'SO' };
 
   var clean = filename.replace(/\.(xls|xlsx|csv)$/i, '').trim();
   var upper = clean.toUpperCase();
 
-  // Check segments split by - and _
+  // Segments split by - and _
   var segs = upper.replace(/_/g, '-').split('-').map(function(s){ return s.trim(); });
   for (var i = segs.length - 1; i >= 0; i--) {
     if (CODES.indexOf(segs[i]) > -1) return segs[i];
@@ -208,9 +219,7 @@ function extractCountryFromFilename(filename) {
 
 
 // ============================================================================
-// 4. ONE-TIME BACKFILL — run this ONCE to fix the 185 blank rows already in
-//    SLAData that have empty affiliate and document_number.
-//    Safe to run multiple times — skips rows that already have an affiliate.
+// 4. backfillSLADataAffiliates — ONE-TIME repair for blank affiliate rows
 // ============================================================================
 function backfillSLADataAffiliates() {
   var ss    = getSpreadsheet();
@@ -229,20 +238,15 @@ function backfillSLADataAffiliates() {
   var docCol     = colIdx['document_number'];
   var custCol    = colIdx['customer_name'];
   var finCol     = colIdx['finance_variance_min'];
-  var laCol      = colIdx['la_variance_min'];
   var createdCol = colIdx['created_at'];
 
   var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
 
-  // Build a lookup from the seeded rows (rows 2-4 in your sheet) that have
-  // proper affiliate + document_number, keyed by customer_name + finance_variance
-  // to match the blank rows that were written without those fields
   var seedLookup = {};
   data.forEach(function(row) {
     var aff    = String(row[affCol] || '').trim();
     var docNum = String(row[docCol] || '').trim();
     if (aff && docNum) {
-      // This row is complete — store its affiliate for matching
       var custKey = String(row[custCol] || '').trim().toLowerCase()
                   + '_' + Math.round(parseFloat(row[finCol]) || 0);
       seedLookup[custKey] = aff;
@@ -251,29 +255,16 @@ function backfillSLADataAffiliates() {
 
   Logger.log('Seed lookup entries: ' + Object.keys(seedLookup).length);
 
-  // For blank rows, determine affiliate from context:
-  // - Rows 5-21 (April 22 07:51) = Zambia upload (same customer names as seed)
-  // - Rows 22-31 (April 22 11:18) = DRC upload (La Grande Cimenterie Du Katanga is DRC)
-  // We detect by created_at timestamp batch grouping
-
-  // Find the two upload batches by their first timestamps
-  var ZM_BATCH_TS  = '2026-04-22T07:51';  // Zambia upload
-  var DRC_BATCH_TS = '2026-04-22T11:18';  // DRC upload
-
-  var CC_TO_AFFILIATE = {
-    ZM: 'Hass Petroleum Zambia',
-    DRC: 'Hass Petroleum Congo'
-  };
+  var ZM_BATCH_TS  = '2026-04-22T07:51';
+  var DRC_BATCH_TS = '2026-04-22T11:18';
+  var CC_TO_AFFILIATE = { ZM:'Hass Petroleum Zambia', DRC:'Hass Petroleum Congo' };
 
   var updates = 0;
-  var docCounter = { ZM: 90000090000, DRC: 71000000000 }; // synthetic doc numbers for backfill
 
   data.forEach(function(row, i) {
-    var rowNum = i + 2; // 1-indexed, +1 for header
+    var rowNum = i + 2;
     var aff    = String(row[affCol] || '').trim();
     var docNum = String(row[docCol] || '').trim();
-
-    // Skip rows that are already complete
     if (aff && docNum) return;
 
     var createdAt = String(row[createdCol] || '').trim();
@@ -281,56 +272,39 @@ function backfillSLADataAffiliates() {
     var countryCode   = '';
 
     if (createdAt.indexOf(ZM_BATCH_TS) === 0) {
-      affiliateName = CC_TO_AFFILIATE['ZM'];
-      countryCode   = 'ZM';
+      affiliateName = CC_TO_AFFILIATE['ZM']; countryCode = 'ZM';
     } else if (createdAt.indexOf(DRC_BATCH_TS) === 0) {
-      affiliateName = CC_TO_AFFILIATE['DRC'];
-      countryCode   = 'DRC';
+      affiliateName = CC_TO_AFFILIATE['DRC']; countryCode = 'DRC';
     } else {
-      // Unknown batch — try seed lookup
       var custKey = String(row[custCol] || '').trim().toLowerCase()
                   + '_' + Math.round(parseFloat(row[finCol]) || 0);
       affiliateName = seedLookup[custKey] || 'Unknown';
     }
 
-    // Write affiliate
-    if (affCol !== undefined) {
-      sheet.getRange(rowNum, affCol + 1).setValue(affiliateName);
-    }
-
-    // Write a synthetic document_number if missing (to allow dedup on future uploads)
+    if (affCol !== undefined) sheet.getRange(rowNum, affCol + 1).setValue(affiliateName);
     if (docCol !== undefined && !docNum) {
-      var synthDoc = 'BACKFILL_' + countryCode + '_' + rowNum;
-      sheet.getRange(rowNum, docCol + 1).setValue(synthDoc);
+      sheet.getRange(rowNum, docCol + 1).setValue('BACKFILL_' + countryCode + '_' + rowNum);
     }
-
     updates++;
   });
 
   clearSheetCache('SLAData');
   Logger.log('Backfill complete. Updated ' + updates + ' rows.');
-
-  // Verify
-  var result = getSLAAnalytics({ period: 'custom', customFrom: '2020-01', customTo: '2030-12' }, 'ALL');
-  Logger.log('After backfill — totalOrders: ' + (result.kpis && result.kpis.totalOrders));
-  Logger.log('byAffiliate: ' + JSON.stringify(result.byAffiliate || []));
 }
 
 
 // ============================================================================
-// 5. Verification — run after backfill to confirm dashboard will show data
+// 5. verifyAfterUpload — run after any upload to confirm data landed
 // ============================================================================
-function verifyAfterBackfill() {
-  var r = getSLAAnalytics({ year: '2026', period: 'all' }, 'ALL');
-  Logger.log('=== 2026 ===');
-  Logger.log('totalOrders: ' + r.kpis.totalOrders);
-  Logger.log('avgFinance: '  + r.kpis.avgFinance + ' min');
-  Logger.log('avgLA: '       + r.kpis.avgLA + ' min');
-  Logger.log('onTimePct: '   + r.kpis.onTimePct + '%');
-  Logger.log('byAffiliate: ' + JSON.stringify(r.byAffiliate));
-
-  var r2 = getSLAAnalytics({ year: '2025', period: 'all' }, 'ALL');
-  Logger.log('=== 2025 ===');
-  Logger.log('totalOrders: ' + r2.kpis.totalOrders);
-  Logger.log('byAffiliate: ' + JSON.stringify(r2.byAffiliate));
+function verifyAfterUpload() {
+  var r = getSLAAnalytics({ year: String(new Date().getFullYear()), period: 'all' }, 'ALL');
+  Logger.log('=== VERIFY AFTER UPLOAD ===');
+  Logger.log('SLAData rows: ' + (r._meta && r._meta.rowsInSheet));
+  Logger.log('POApprovals rows: ' + (r._meta && r._meta.poRowsInSheet));
+  Logger.log('totalOrders: ' + (r.kpis && r.kpis.totalOrders));
+  Logger.log('avgFinance: ' + (r.kpis && r.kpis.avgFinance) + ' min');
+  Logger.log('avgLA: ' + (r.kpis && r.kpis.avgLA) + ' min');
+  Logger.log('byAffiliate: ' + JSON.stringify(r.byAffiliate || []));
+  Logger.log('financeApprovers: ' + JSON.stringify(r.approverStats || []));
+  Logger.log('poApprovers: ' + JSON.stringify(r.poApproverStats || []));
 }
