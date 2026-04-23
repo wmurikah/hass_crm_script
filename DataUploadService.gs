@@ -27,73 +27,54 @@ function importSalesRows(rows, affiliateCountryCode) {
   try {
     if (!rows || !rows.length) return { success: true, imported: 0, skipped: 0 };
 
-    var AFFILIATE_MAP = {
-      'Hass Petroleum Kenya':    'KE',
-      'Hass Petroleum Uganda':   'UG',
-      'Hass Petroleum Tanzania': 'TZ',
-      'Hass Petroleum Rwanda':   'RW',
-      'Hass Petroleum Congo':    'DRC',
-      'Hass Petroleum Zambia':   'ZM',
-      'Hass South Sudan':        'SS',
-      'Hass Petroleum Somalia':  'SO'
-    };
-
-    // Reverse map: country code → full affiliate name for the sheet
-    var CC_TO_AFFILIATE = {
-      KE:'Hass Petroleum Kenya', UG:'Hass Petroleum Uganda',
+    var CC_TO_NAME = {
+      KE:'Hass Petroleum Kenya',   UG:'Hass Petroleum Uganda',
       TZ:'Hass Petroleum Tanzania', RW:'Hass Petroleum Rwanda',
-      DRC:'Hass Petroleum Congo', ZM:'Hass Petroleum Zambia',
-      SS:'Hass South Sudan', SO:'Hass Petroleum Somalia',
-      CD:'Hass Petroleum Congo', MW:'Hass Petroleum Malawi'
+      DRC:'Hass Petroleum Congo',  ZM:'Hass Petroleum Zambia',
+      SS:'Hass South Sudan',       SO:'Hass Petroleum Somalia',
+      CD:'Hass Petroleum Congo',   MW:'Hass Petroleum Malawi'
     };
 
-    // Load existing rows for dedup on document_number
     var existing = getSheetData('SLAData') || [];
-    var existingDocs = {};
+    var seen = {};
     existing.forEach(function(r) {
-      var doc = String(r.document_number || '').trim();
-      if (doc) existingDocs[doc] = true;
+      var d = String(r.document_number || '').trim();
+      if (d) seen[d] = true;
     });
 
-    var batchId = 'SALES_' + affiliateCountryCode + '_' + new Date().toISOString().slice(0, 10);
+    var batchId  = 'SALES_' + (affiliateCountryCode || 'XX') + '_' + new Date().toISOString().slice(0, 10);
     var imported = 0, skipped = 0;
 
     rows.forEach(function(row) {
-      // Only import APPROVE rows
-      var status = String(row['APPROVAL_STATUS'] || '').trim().toUpperCase();
-      if (status !== 'APPROVE') { skipped++; return; }
-
+      if (String(row['APPROVAL_STATUS'] || '').trim().toUpperCase() !== 'APPROVE') {
+        skipped++; return;
+      }
       var docNum = String(row['DOCUMENT_NUMBER'] || '').trim();
-      if (!docNum || docNum === 'nan' || docNum === '') { skipped++; return; }
+      if (!docNum || docNum === 'nan') { skipped++; return; }
+      if (seen[docNum])               { skipped++; return; }
 
-      // Dedup
-      if (existingDocs[docNum]) { skipped++; return; }
+      var affInFile = String(row['AFFILIATE'] || '').trim();
+      var affName   = affInFile || CC_TO_NAME[affiliateCountryCode] || affiliateCountryCode || 'Unknown';
 
-      // Resolve affiliate name — prefer AFFILIATE column in file, fall back to filename code
-      var affiliateInFile = String(row['AFFILIATE'] || '').trim();
-      var affiliateName = affiliateInFile || CC_TO_AFFILIATE[affiliateCountryCode] || affiliateCountryCode || 'Unknown';
+      var finMin = parseFloat(row['FINANCE_VARIANCE'])           || 0;
+      var laMin  = parseFloat(row['LOADING_AUTHORITY_VARIANCE']) || 0;
 
-      var financeVar = parseFloat(row['FINANCE_VARIANCE']) || 0;
-      var laVar      = parseFloat(row['LOADING_AUTHORITY_VARIANCE']) || 0;
-
-      // Write using ACTUAL sheet column names
-      var record = {
+      appendRow('SLAData', {
         source_type:          'SALES',
-        affiliate:            affiliateName,            // ← sheet col: affiliate
-        document_number:      docNum,                  // ← sheet col: document_number
-        customer_name:        String(row['CUSTOMER_NAME'] || ''),
-        oracle_approver:      String(row['APPROVER'] || ''),       // ← sheet col: oracle_approver
-        finance_variance_min: financeVar,
-        la_variance_min:      laVar,
-        created_at:           String(row['CREATE_DATE_TIME'] || ''),  // ← sheet col: created_at
-        approved_at:          String(row['APPROVAL_DATE_TIME'] || ''),
+        affiliate:            affName,
+        document_number:      docNum,
+        customer_name:        String(row['CUSTOMER_NAME']          || ''),
+        oracle_approver:      String(row['APPROVER']               || ''),
+        finance_variance_min: finMin,
+        la_variance_min:      laMin,
+        created_at:           String(row['CREATE_DATE_TIME']       || ''),
+        approved_at:          String(row['APPROVAL_DATE_TIME']     || ''),
         dispatched_at:        String(row['LOADING_AUTHORITY_DATE'] || ''),
-        ordered_item:         String(row['ORDERED_ITEM'] || ''),
+        ordered_item:         String(row['ORDERED_ITEM']           || ''),
         upload_batch_id:      batchId
-      };
+      });
 
-      appendRow('SLAData', record);
-      existingDocs[docNum] = true;
+      seen[docNum] = true;
       imported++;
     });
 
@@ -114,86 +95,59 @@ function importPurRows(rows, affiliateCountryCode) {
   try {
     if (!rows || !rows.length) return { success: true, imported: 0, skipped: 0 };
 
-    var existing = getSheetData('POApprovals') || [];
-    var existingKeys = {};
-    existing.forEach(function(r) {
-      // POApprovals stores wide format — dedup on po_number
-      var k = String(r.po_number || '').trim();
-      if (k) existingKeys[k] = true;
-    });
-
-    var CC_TO_AFFILIATE = {
-      KE:'Hass Petroleum Kenya', UG:'Hass Petroleum Uganda',
+    var CC_TO_NAME = {
+      KE:'Hass Petroleum Kenya',   UG:'Hass Petroleum Uganda',
       TZ:'Hass Petroleum Tanzania', RW:'Hass Petroleum Rwanda',
-      DRC:'Hass Petroleum Congo', ZM:'Hass Petroleum Zambia',
-      SS:'Hass South Sudan', SO:'Hass Petroleum Somalia'
+      DRC:'Hass Petroleum Congo',  ZM:'Hass Petroleum Zambia',
+      SS:'Hass South Sudan',       SO:'Hass Petroleum Somalia'
     };
 
-    var batchId = 'PUR_' + affiliateCountryCode + '_' + new Date().toISOString().slice(0, 10);
+    var existing = getSheetData('POApprovals') || [];
+    var seen = {};
+    existing.forEach(function(r) {
+      var p = String(r.po_number || '').trim();
+      if (p) seen[p] = true;
+    });
+
+    var batchId  = 'PUR_' + (affiliateCountryCode || 'XX') + '_' + new Date().toISOString().slice(0, 10);
     var imported = 0, skipped = 0;
-    var STEPS = ['FIRST','SECOND','THIRD','FOURTH','FIFTH','SIXTH','SEVENTH'];
+    var STEPS    = ['FIRST','SECOND','THIRD','FOURTH','FIFTH','SIXTH','SEVENTH'];
 
     rows.forEach(function(row) {
-      var status = String(row['AUTHORIZATION_STATUS'] || '').trim().toUpperCase();
-      if (status !== 'APPROVED') { skipped++; return; }
-
+      if (String(row['AUTHORIZATION_STATUS'] || '').trim().toUpperCase() !== 'APPROVED') {
+        skipped++; return;
+      }
       var poNum = String(row['purchase Number'] || '').trim();
-      if (!poNum || poNum === 'nan' || poNum === '') { skipped++; return; }
+      if (!poNum || poNum === 'nan') { skipped++; return; }
+      if (seen[poNum])               { skipped++; return; }
 
-      if (existingKeys[poNum]) { skipped++; return; }
+      var affName = CC_TO_NAME[affiliateCountryCode] || affiliateCountryCode || 'Unknown';
 
-      var affiliateName = CC_TO_AFFILIATE[affiliateCountryCode] || affiliateCountryCode || 'Unknown';
-
-      // Build step variance arrays
-      var stepVariances = STEPS.map(function(s) {
-        return parseFloat(row[s + '_APPROVALS_VARIANCE']) || null;
-      });
-      var stepApprovers = STEPS.map(function(s) {
-        var v = row[s + '_APPROVER'];
-        return (!v || String(v) === 'nan') ? null : String(v);
-      });
-      var stepDates = STEPS.map(function(s) {
-        var v = row[s + '_APPROVAL_DATE'];
-        return (!v || String(v) === 'nan') ? null : String(v);
-      });
-
-      // POApprovals keeps wide format (one row per PO, all steps as columns)
       var record = {
-        po_number:                 poNum,
-        description:               String(row['Req Description'] || ''),
-        nature:                    String(row['NATURE'] || 'PRODUCT'),
-        affiliate:                 affiliateName,
-        created_by:                String(row['PURCHASE_ORDER_CREATED_BY'] || ''),
-        original_creation_date:    String(row['ORIGINAL_CREATION_DATE'] || ''),
-        submission_date:           String(row['SUBMISSION_FOR_APPROVAL_DATE'] || ''),
-        submission_variance_min:   parseFloat(row['TIME_DIFF_RAISEPO_TOAPROVALSUBMIT']) || 0,
-        first_approver:            stepApprovers[0],
-        first_approval_date:       stepDates[0],
-        first_variance_min:        stepVariances[0],
-        second_approver:           stepApprovers[1],
-        second_approval_date:      stepDates[1],
-        second_variance_min:       stepVariances[1],
-        third_approver:            stepApprovers[2],
-        third_approval_date:       stepDates[2],
-        third_variance_min:        stepVariances[2],
-        fourth_approver:           stepApprovers[3],
-        fourth_approval_date:      stepDates[3],
-        fourth_variance_min:       stepVariances[3],
-        fifth_approver:            stepApprovers[4],
-        fifth_approval_date:       stepDates[4],
-        fifth_variance_min:        stepVariances[4],
-        sixth_approver:            stepApprovers[5],
-        sixth_approval_date:       stepDates[5],
-        sixth_variance_min:        stepVariances[5],
-        seventh_approver:          stepApprovers[6],
-        seventh_approval_date:     stepDates[6],
-        seventh_variance_min:      stepVariances[6],
-        authorization_status:      'APPROVED',
-        upload_batch_id:           batchId
+        po_number:               poNum,
+        description:             String(row['Req Description']                    || ''),
+        nature:                  String(row['NATURE']                             || 'PRODUCT'),
+        affiliate:               affName,
+        created_by:              String(row['PURCHASE_ORDER_CREATED_BY']          || ''),
+        original_creation_date:  String(row['ORIGINAL_CREATION_DATE']            || ''),
+        submission_date:         String(row['SUBMISSION_FOR_APPROVAL_DATE']      || ''),
+        submission_variance_min: parseFloat(row['TIME_DIFF_RAISEPO_TOAPROVALSUBMIT']) || 0,
+        authorization_status:    'APPROVED',
+        upload_batch_id:         batchId
       };
 
+      STEPS.forEach(function(step) {
+        var lower    = step.toLowerCase();
+        var approver = row[step + '_APPROVER'];
+        var date     = row[step + '_APPROVAL_DATE'];
+        var variance = row[step + '_APPROVALS_VARIANCE'];
+        record[lower + '_approver']      = (!approver || String(approver) === 'nan') ? '' : String(approver);
+        record[lower + '_approval_date'] = (!date     || String(date)     === 'nan') ? '' : String(date);
+        record[lower + '_variance_min']  = (!variance || String(variance) === 'nan') ? null : parseFloat(variance);
+      });
+
       appendRow('POApprovals', record);
-      existingKeys[poNum] = true;
+      seen[poNum] = true;
       imported++;
     });
 
@@ -214,56 +168,42 @@ function importPurRows(rows, affiliateCountryCode) {
 function extractCountryFromFilename(filename) {
   if (!filename) return '';
 
-  // Short country codes used in Hass filenames
-  var KNOWN_CODES = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','NG','ET'];
-
-  // Affiliate badge codes → country code
-  var BADGE_TO_CC = {
-    'HPK':'KE','HPU':'UG','HPT':'TZ','HPR':'RW',
-    'HSS':'SS','HPZ':'ZM','HPC':'DRC','HSO':'SO','HPM':'MW'
-  };
-
-  // Country name keywords → country code
-  var KEYWORD_TO_CC = {
-    'KENYA':'KE','UGANDA':'UG','TANZANIA':'TZ','RWANDA':'RW',
-    'SOUTH SUDAN':'SS','SUDAN':'SS','ZAMBIA':'ZM',
-    'CONGO':'DRC','DRC':'DRC','MALAWI':'MW','SOMALIA':'SO'
-  };
+  var CODES   = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','NG','ET'];
+  var BADGES  = { HPK:'KE',HPU:'UG',HPT:'TZ',HPR:'RW',HSS:'SS',HPZ:'ZM',HPC:'DRC',HSO:'SO',HPM:'MW' };
+  var KEYWORDS = { KENYA:'KE',UGANDA:'UG',TANZANIA:'TZ',RWANDA:'RW','SOUTH SUDAN':'SS',
+                   ZAMBIA:'ZM',CONGO:'DRC',MALAWI:'MW',SOMALIA:'SO' };
 
   var clean = filename.replace(/\.(xls|xlsx|csv)$/i, '').trim();
   var upper = clean.toUpperCase();
 
-  // Strategy 1: Split on hyphens and underscores, check each segment
-  var segments = upper.replace(/_/g, '-').split('-').map(function(s){ return s.trim(); });
-
-  // Check last segment first (most common: FILE-DATE-DATE-ZM)
-  for (var i = segments.length - 1; i >= 0; i--) {
-    var seg = segments[i];
-    if (KNOWN_CODES.indexOf(seg) > -1) return seg;
-    if (BADGE_TO_CC[seg]) return BADGE_TO_CC[seg];
+  // Check segments split by - and _
+  var segs = upper.replace(/_/g, '-').split('-').map(function(s){ return s.trim(); });
+  for (var i = segs.length - 1; i >= 0; i--) {
+    if (CODES.indexOf(segs[i]) > -1) return segs[i];
+    if (BADGES[segs[i]])             return BADGES[segs[i]];
   }
 
-  // Strategy 2: Check space-separated tokens
-  var tokens = upper.split(/\s+/);
-  for (var j = tokens.length - 1; j >= 0; j--) {
-    var tok = tokens[j].replace(/[^A-Z]/g, '');
-    if (KNOWN_CODES.indexOf(tok) > -1) return tok;
-    if (BADGE_TO_CC[tok]) return BADGE_TO_CC[tok];
+  // Space-separated tokens
+  var toks = upper.split(/\s+/);
+  for (var j = toks.length - 1; j >= 0; j--) {
+    var t = toks[j].replace(/[^A-Z]/g, '');
+    if (CODES.indexOf(t) > -1) return t;
+    if (BADGES[t])             return BADGES[t];
   }
 
-  // Strategy 3: Multi-word country name keywords
-  for (var keyword in KEYWORD_TO_CC) {
-    if (upper.indexOf(keyword) > -1) return KEYWORD_TO_CC[keyword];
+  // Multi-word keywords
+  for (var kw in KEYWORDS) {
+    if (upper.indexOf(kw) > -1) return KEYWORDS[kw];
   }
 
-  // Strategy 4: Scan all alphanumeric tokens (catches embedded codes)
-  var allTokens = upper.match(/[A-Z]+/g) || [];
-  for (var k = allTokens.length - 1; k >= 0; k--) {
-    if (KNOWN_CODES.indexOf(allTokens[k]) > -1) return allTokens[k];
-    if (BADGE_TO_CC[allTokens[k]]) return BADGE_TO_CC[allTokens[k]];
+  // Scan all alpha tokens
+  var all = upper.match(/[A-Z]+/g) || [];
+  for (var k = all.length - 1; k >= 0; k--) {
+    if (CODES.indexOf(all[k]) > -1) return all[k];
+    if (BADGES[all[k]])             return BADGES[all[k]];
   }
 
-  return ''; // fall back to UI select
+  return '';
 }
 
 
