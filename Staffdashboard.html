@@ -555,6 +555,28 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .upload-log-header h4 { margin:0; font-size:14px; font-weight:700; color:#0D1442; }
 .upload-log-body { font-family:'Space Mono',monospace; font-size:11px; color:#374151; max-height:280px; overflow-y:auto; background:#f8fafc; border-radius:8px; padding:12px; line-height:1.8; white-space:pre-wrap; }
 .upload-summary { margin-top:12px; padding:12px; background:#dcfce7; border-radius:8px; font-size:13px; font-weight:600; color:#15803d; display:none; }
+
+/* ── SLA Drill-Down Modal ── */
+.drill-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin:18px 0 10px;}
+.drill-table{width:100%;border-collapse:collapse;font-size:13px;}
+.drill-table th{background:#f8fafc;font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;padding:9px 12px;text-align:left;border-bottom:2px solid #e2e8f0;white-space:nowrap;}
+.drill-table td{padding:9px 12px;border-bottom:1px solid #f1f5f9;color:#1e293b;vertical-align:top;}
+.drill-table tr:hover td{background:#f8fafc;}
+.sla-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+.sla-ok{background:#dcfce7;color:#15803d;}
+.sla-warn{background:#fef3c7;color:#92400e;}
+.sla-bad{background:#fee2e2;color:#dc2626;}
+.po-chain{display:flex;flex-direction:column;gap:0;}
+.po-step{display:flex;align-items:stretch;gap:12px;}
+.po-step-line{display:flex;flex-direction:column;align-items:center;width:24px;flex-shrink:0;}
+.po-step-dot{width:14px;height:14px;border-radius:50%;border:2.5px solid #1A237E;background:#fff;flex-shrink:0;margin-top:3px;}
+.po-step-dot.ok{background:#16a34a;border-color:#16a34a;}
+.po-step-dot.bad{background:#dc2626;border-color:#dc2626;}
+.po-step-connector{width:2px;flex:1;background:#e2e8f0;margin:2px 0;}
+.po-step-content{flex:1;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;}
+.po-step-name{font-size:13px;font-weight:600;color:#1e293b;}
+.po-step-meta{font-size:11px;color:#64748b;margin-top:2px;}
+.credit-hold-banner{background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;display:flex;align-items:flex-start;gap:8px;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -1868,6 +1890,22 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <div id="settingsToast" class="settings-toast" style="display:none"></div>
     </div>
 
+    <!-- SLA Drill-Down Modal -->
+    <div id="slaDrillModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:500;align-items:flex-start;justify-content:flex-end;">
+      <div id="slaDrillDrawer" style="background:#fff;width:min(760px,95vw);height:100vh;overflow-y:auto;box-shadow:-8px 0 40px rgba(0,0,0,0.15);display:flex;flex-direction:column;">
+        <div style="padding:18px 22px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:10;">
+          <div>
+            <div id="drillTitle" style="font-size:17px;font-weight:700;color:#0D1442;"></div>
+            <div id="drillSubtitle" style="font-size:12px;color:#64748b;margin-top:2px;"></div>
+          </div>
+          <button onclick="closeDrillModal()" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1;padding:0 4px;">&times;</button>
+        </div>
+        <div id="drillBody" style="padding:20px 22px;flex:1;">
+          <div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>
+        </div>
+      </div>
+    </div>
+
   </main>
 
 </div>
@@ -2280,7 +2318,9 @@ function renderSLAData(data) {
   // Table
   var tbody = document.getElementById('slaTableBody');
   tbody.innerHTML = data.byAffiliate.map(function(a){
-    return '<tr><td><strong>'+a.affiliate+'</strong></td><td>'+a.orders+'</td><td>'+Math.round(a.avgFinance)+'</td><td><span class="pct-badge '+(a.financeSLAPct>=80?'pct-good':a.financeSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.financeSLAPct+'%</span></td><td>'+Math.round(a.avgLA)+'</td><td><span class="pct-badge '+(a.laSLAPct>=80?'pct-good':a.laSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.laSLAPct+'%</span></td><td><span class="pct-badge '+(a.onTimePct>=80?'pct-good':a.onTimePct>=60?'pct-warn':'pct-bad')+'">'+a.onTimePct+'%</span></td></tr>';
+    var safeAff = String(a.affiliate||'').replace(/'/g, "\\'");
+    var nameCell = '<a href="#" onclick="openAffiliateDrill(\''+safeAff+'\');return false;" style="color:#1A237E;font-weight:700;text-decoration:none;">'+a.affiliate+'</a>';
+    return '<tr><td>'+nameCell+'</td><td>'+a.orders+'</td><td>'+Math.round(a.avgFinance)+'</td><td><span class="pct-badge '+(a.financeSLAPct>=80?'pct-good':a.financeSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.financeSLAPct+'%</span></td><td>'+Math.round(a.avgLA)+'</td><td><span class="pct-badge '+(a.laSLAPct>=80?'pct-good':a.laSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.laSLAPct+'%</span></td><td><span class="pct-badge '+(a.onTimePct>=80?'pct-good':a.onTimePct>=60?'pct-warn':'pct-bad')+'">'+a.onTimePct+'%</span></td></tr>';
   }).join('');
 
   // Approver leaderboard
@@ -2307,8 +2347,199 @@ function renderApproverLeaderboard(data) {
   tbody.innerHTML = data.approverStats.map(function(a, idx) {
     var medal = idx===0?'&#127947;':idx===1?'&#129352;':idx===2?'&#129353;':String(idx+1);
     var rowClass = idx===0 ? ' class="leaderboard-row-1st"' : '';
-    return '<tr'+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+a.name+'</td><td>'+a.count+'</td><td>'+Math.round(a.avg)+'min</td><td>'+Math.round(a.fastest)+'min</td><td>'+Math.round(a.slowest)+'min</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span><div class="leaderboard-bar"><div class="leaderboard-bar-fill" style="width:'+a.withinSLAPct+'%"></div></div></td></tr>';
+    var safeName = String(a.name||'').replace(/'/g, "\\'");
+    var nameCell = '<a href="#" onclick="openFinanceApproverDrill(\''+safeName+'\');return false;" style="color:#1A237E;font-weight:600;text-decoration:none;">'+a.name+'</a>';
+    return '<tr'+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+nameCell+'</td><td>'+a.count+'</td><td>'+Math.round(a.avg)+'min</td><td>'+Math.round(a.fastest)+'min</td><td>'+Math.round(a.slowest)+'min</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span><div class="leaderboard-bar"><div class="leaderboard-bar-fill" style="width:'+a.withinSLAPct+'%"></div></div></td></tr>';
   }).join('');
+
+  var poTbody = document.getElementById('poApproverBody');
+  if (poTbody && data.poApproverStats) {
+    poTbody.innerHTML = data.poApproverStats.map(function(a, idx) {
+      var medal = idx===0?'&#127947;':idx===1?'&#129352;':idx===2?'&#129353;':String(idx+1);
+      var rowClass = idx===0 ? ' class="leaderboard-row-1st"' : '';
+      var safeName = String(a.name||'').replace(/'/g, "\\'");
+      var nameCell = '<a href="#" onclick="openPOApproverDrill(\''+safeName+'\');return false;" style="color:#1A237E;font-weight:600;text-decoration:none;">'+a.name+'</a>';
+      return '<tr'+rowClass+'><td><span class="leaderboard-medal">'+medal+'</span></td><td>'+nameCell+'</td><td>'+a.count+'</td><td>'+Math.round(a.avg)+'min</td><td>'+Math.round(a.fastest)+'min</td><td>'+Math.round(a.slowest)+'min</td><td><span class="pct-badge '+(a.withinSLAPct>=80?'pct-good':a.withinSLAPct>=60?'pct-warn':'pct-bad')+'">'+a.withinSLAPct+'%</span><div class="leaderboard-bar"><div class="leaderboard-bar-fill" style="width:'+a.withinSLAPct+'%"></div></div></td></tr>';
+    }).join('');
+  }
+}
+
+/* ── SLA Drill-Down Modal ── */
+function openFinanceApproverDrill(approverName) {
+  document.getElementById('drillTitle').textContent = approverName;
+  document.getElementById('drillSubtitle').textContent = 'Finance Approver — individual order detail';
+  document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
+  document.getElementById('slaDrillModal').style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">Failed to load detail: ' + ((r&&r.error)||'unknown') + '</div>';
+        return;
+      }
+      renderFinanceApproverDrill(approverName, r.rows || []);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
+    })
+    .handleSLARequest({ action:'getFinanceApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+}
+
+function renderFinanceApproverDrill(approverName, rows) {
+  var finTarget = 60, laTarget = 120;
+  function pill(val, target) {
+    if (!val || val <= 0) return '<span class="sla-pill sla-warn">N/A</span>';
+    var ok = val <= target;
+    return '<span class="sla-pill ' + (ok?'sla-ok':'sla-bad') + '">' + (ok?'&#10003;':'&#10007;') + ' ' + Math.round(val) + ' min</span>';
+  }
+  function fmt(d) { if(!d) return '&mdash;'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
+
+  var withinFin = rows.filter(function(r){ return r.finance_variance_min > 0 && r.finance_variance_min <= finTarget; }).length;
+  var withinLA  = rows.filter(function(r){ return r.la_variance_min > 0 && r.la_variance_min <= laTarget; }).length;
+  var avgFin    = rows.length ? Math.round(rows.reduce(function(s,r){ return s + (r.finance_variance_min||0); }, 0) / rows.length) : 0;
+  var avgLA     = rows.length ? Math.round(rows.reduce(function(s,r){ return s + (r.la_variance_min||0); }, 0) / rows.length) : 0;
+
+  var html = '';
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;">';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + rows.length + '</div><div class="dash-stat-label">Orders Approved</div></div>';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + avgFin + 'min</div><div class="dash-stat-label">Avg Finance</div></div>';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + Math.round(withinFin/Math.max(rows.length,1)*100) + '%</div><div class="dash-stat-label">Finance SLA</div></div>';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + Math.round(withinLA/Math.max(rows.length,1)*100) + '%</div><div class="dash-stat-label">LA SLA</div></div>';
+  html += '</div>';
+
+  html += '<div class="drill-section-label">Order Detail</div>';
+  html += '<div style="overflow-x:auto;"><table class="drill-table"><thead><tr>';
+  html += '<th>Doc #</th><th>Customer</th><th>Product</th><th>Order Date</th><th>Finance</th><th>LA</th><th>Credit Hold</th>';
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(function(r) {
+    var hasCreditHold = r.credit_hold_duration_min && r.credit_hold_duration_min > 0;
+    var creditCell = hasCreditHold
+      ? '<span class="sla-pill sla-bad">&#9208; ' + Math.round(r.credit_hold_duration_min/60) + 'h hold</span>'
+      : '<span style="color:#94a3b8;font-size:11px;">None</span>';
+    html += '<tr>';
+    html += '<td style="font-weight:600;font-family:monospace;font-size:12px;">' + (r.document_number||'') + '</td>';
+    html += '<td>' + (r.customer_name||'') + '</td>';
+    html += '<td>' + (r.ordered_item||'') + '</td>';
+    html += '<td style="font-size:12px;white-space:nowrap;">' + fmt(r.created_at) + '</td>';
+    html += '<td>' + pill(r.finance_variance_min, finTarget) + '</td>';
+    html += '<td>' + pill(r.la_variance_min, laTarget) + '</td>';
+    html += '<td>' + creditCell + '</td>';
+    html += '</tr>';
+  });
+
+  if (!rows.length) {
+    html += '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:30px;">No orders found for this approver in the selected period.</td></tr>';
+  }
+
+  html += '</tbody></table></div>';
+  document.getElementById('drillBody').innerHTML = html;
+}
+
+function openPOApproverDrill(approverName) {
+  document.getElementById('drillTitle').textContent = approverName;
+  document.getElementById('drillSubtitle').textContent = 'PO Approver — full approval chain detail';
+  document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
+  document.getElementById('slaDrillModal').style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + ((r&&r.error)||'Failed') + '</div>';
+        return;
+      }
+      renderPOApproverDrill(approverName, r.pos || []);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
+    })
+    .handleSLARequest({ action:'getPOApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+}
+
+function renderPOApproverDrill(approverName, pos) {
+  var STEPS = ['first','second','third','fourth','fifth','sixth','seventh'];
+  var SLA_PO = 120;
+  function fmt(d) { if(!d) return '&mdash;'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
+  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var totalSteps = 0, withinSLA = 0;
+  pos.forEach(function(po) {
+    STEPS.forEach(function(s) {
+      var v = parseFloat(po[s+'_variance_min']);
+      if (!isNaN(v) && v > 0) { totalSteps++; if(v<=SLA_PO) withinSLA++; }
+    });
+  });
+
+  var html = '';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;">';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + pos.length + '</div><div class="dash-stat-label">POs Involved</div></div>';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + totalSteps + '</div><div class="dash-stat-label">Steps Approved</div></div>';
+  html += '<div class="dash-stat-card"><div class="dash-stat-val">' + (totalSteps?Math.round(withinSLA/totalSteps*100):0) + '%</div><div class="dash-stat-label">Within 120min</div></div>';
+  html += '</div>';
+
+  pos.forEach(function(po) {
+    html += '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;margin-bottom:14px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">';
+    html += '<div><div style="font-size:14px;font-weight:700;color:#0D1442;">PO #' + escHtml(po.po_number) + '</div>';
+    html += '<div style="font-size:12px;color:#64748b;margin-top:2px;">' + escHtml(po.description) + ' &nbsp;&middot;&nbsp; ' + escHtml(po.nature) + ' &nbsp;&middot;&nbsp; ' + escHtml(po.affiliate) + '</div></div>';
+    html += '<div style="font-size:11px;color:#94a3b8;white-space:nowrap;">' + fmt(po.original_creation_date) + '</div>';
+    html += '</div>';
+
+    html += '<div class="po-chain">';
+    var hasSteps = false;
+    STEPS.forEach(function(step, idx) {
+      var name     = po[step+'_approver'];
+      var date     = po[step+'_approval_date'];
+      var variance = parseFloat(po[step+'_variance_min']);
+      if (!name) return;
+      hasSteps = true;
+      var ok      = !isNaN(variance) && variance > 0 && variance <= SLA_PO;
+      var bad     = !isNaN(variance) && variance > SLA_PO;
+      var isThis  = String(name).trim().toLowerCase() === String(approverName).trim().toLowerCase();
+      var dotCls  = ok ? 'ok' : (bad ? 'bad' : '');
+      var varText = (!isNaN(variance) && variance > 0) ? Math.round(variance) + ' min' : 'pending';
+      var pillCls = ok ? 'sla-ok' : (bad ? 'sla-bad' : 'sla-warn');
+      var stepStyle = isThis ? ' style="border-color:#1A237E;background:#f0f4ff;"' : '';
+      var youBadge  = isThis ? ' <span style="font-size:10px;background:#1A237E;color:#fff;padding:1px 6px;border-radius:10px;font-weight:600;">YOU</span>' : '';
+
+      html += '<div class="po-step">';
+      html += '<div class="po-step-line"><div class="po-step-dot ' + dotCls + '"></div>' + (idx < 6 ? '<div class="po-step-connector"></div>' : '') + '</div>';
+      html += '<div class="po-step-content"' + stepStyle + '>';
+      html += '<div class="po-step-name">' + (idx+1) + '. ' + escHtml(name) + youBadge + '</div>';
+      html += '<div class="po-step-meta">' + fmt(date) + ' &nbsp;&middot;&nbsp; <span class="sla-pill ' + pillCls + '">' + varText + '</span></div>';
+      html += '</div></div>';
+    });
+    if (!hasSteps) html += '<div style="font-size:12px;color:#94a3b8;padding:8px 0;">No approval steps recorded</div>';
+    html += '</div></div>';
+  });
+
+  if (!pos.length) html = '<div style="text-align:center;color:#94a3b8;padding:40px;">No POs found for this approver in the selected period.</div>';
+  document.getElementById('drillBody').innerHTML = html;
+}
+
+function openAffiliateDrill(affiliateLabel) {
+  document.getElementById('drillTitle').textContent = affiliateLabel + ' — Order Detail';
+  document.getElementById('drillSubtitle').textContent = 'All orders in selected period';
+  document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
+  document.getElementById('slaDrillModal').style.display = 'flex';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + ((r&&r.error)||'Failed') + '</div>';
+        return;
+      }
+      renderFinanceApproverDrill(affiliateLabel, r.rows || []);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
+    })
+    .handleSLARequest({ action:'getAffiliateDetail', affiliateLabel: affiliateLabel, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: affiliateLabel });
+}
+
+function closeDrillModal() {
+  document.getElementById('slaDrillModal').style.display = 'none';
+  document.getElementById('drillBody').innerHTML = '';
 }
 
 /* ── External SLA Analytics ── */

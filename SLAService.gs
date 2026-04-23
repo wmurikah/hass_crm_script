@@ -23,6 +23,12 @@ function handleSLARequest(params) {
       case 'getSLAAnalytics': return getSLAAnalytics(params.filters || params.period, params.affiliate);
       case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters || params.period, params.affiliate);
       case 'getStaffList': return getStaffList();
+      case 'getFinanceApproverDetail':
+        return getFinanceApproverDetail(params.approverName, params.filters, params.affiliate);
+      case 'getPOApproverDetail':
+        return getPOApproverDetail(params.approverName, params.filters, params.affiliate);
+      case 'getAffiliateDetail':
+        return getAffiliateDetail(params.affiliateLabel, params.filters);
       default: return { success:false, error:'Unknown SLA action' };
     }
   } catch(e) {
@@ -508,4 +514,150 @@ function debugExternalSLA() {
     Logger.log('fulfilment points: ' + result.fulfilment.length);
   }
   if (result.error) Logger.log('ERROR: ' + result.error);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * SLA DRILL-DOWN DETAIL ENDPOINTS
+ * ══════════════════════════════════════════════════════════════════════ */
+
+function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
+  try {
+    var ss      = getSpreadsheet();
+    var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
+    var f       = parseFilters(filters, affiliateFilter);
+
+    var NAME_TO_CC = {
+      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
+      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
+      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+    };
+    var CC_TO_LABEL = {KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',CD:'HPC',MW:'HPM',SO:'HSO'};
+    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
+
+    var rows = slaData.filter(function(r) {
+      if (!r.document_number || String(r.document_number).indexOf('BACKFILL') === 0) return false;
+      var approver = String(r.oracle_approver || '').trim().toUpperCase();
+      if (approver !== String(approverName || '').trim().toUpperCase()) return false;
+      if (f.affiliate !== 'ALL' && resolveCC(r.affiliate) !== f.affiliate) return false;
+      var ds = r.created_at || '';
+      if (ds) { var d=new Date(ds); if(!isNaN(d.getTime())&&(d<f.startDate||d>f.endDate)) return false; }
+      return true;
+    }).map(function(r) {
+      var la = parseFloat(r.la_variance_min) || 0;
+      var creditHoldEstimate = la > 120 ? Math.max(0, la - 120) : 0;
+      return {
+        document_number:      r.document_number,
+        customer_name:        r.customer_name,
+        ordered_item:         r.ordered_item,
+        affiliate:            CC_TO_LABEL[resolveCC(r.affiliate)] || r.affiliate,
+        created_at:           r.created_at,
+        approved_at:          r.approved_at,
+        dispatched_at:        r.dispatched_at,
+        finance_variance_min: parseFloat(r.finance_variance_min) || 0,
+        la_variance_min:      parseFloat(r.la_variance_min)      || 0,
+        credit_hold_duration_min: creditHoldEstimate
+      };
+    }).sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+
+    return { success: true, rows: rows, count: rows.length };
+  } catch(e) {
+    Logger.log('getFinanceApproverDetail error: ' + e.message);
+    return { success: false, error: e.message, rows: [] };
+  }
+}
+
+function getPOApproverDetail(approverName, filters, affiliateFilter) {
+  try {
+    var ss     = getSpreadsheet();
+    var poData = sheetToObjects(ss.getSheetByName('POApprovals')) || [];
+    var f      = parseFilters(filters, affiliateFilter);
+
+    var NAME_TO_CC = {
+      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
+      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
+      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+    };
+    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
+
+    var STEPS = ['first','second','third','fourth','fifth','sixth','seventh'];
+    var targetName = String(approverName || '').trim().toLowerCase();
+
+    var pos = poData.filter(function(r) {
+      var ds = r.original_creation_date || '';
+      if (ds) { var d=new Date(ds); if(!isNaN(d.getTime())&&(d<f.startDate||d>f.endDate)) return false; }
+      if (f.affiliate !== 'ALL' && resolveCC(r.affiliate) !== f.affiliate) return false;
+      return STEPS.some(function(step) {
+        return String(r[step+'_approver']||'').trim().toLowerCase() === targetName;
+      });
+    }).map(function(r) {
+      var out = {
+        po_number:             r.po_number,
+        description:           r.description,
+        nature:                r.nature,
+        affiliate:             r.affiliate,
+        created_by:            r.created_by,
+        original_creation_date:r.original_creation_date,
+        submission_date:       r.submission_date,
+        submission_variance_min: parseFloat(r.submission_variance_min)||0
+      };
+      STEPS.forEach(function(step) {
+        out[step+'_approver']      = r[step+'_approver']      || '';
+        out[step+'_approval_date'] = r[step+'_approval_date'] || '';
+        out[step+'_variance_min']  = parseFloat(r[step+'_variance_min']) || null;
+      });
+      return out;
+    }).sort(function(a,b){ return new Date(b.original_creation_date)-new Date(a.original_creation_date); });
+
+    return { success: true, pos: pos, count: pos.length };
+  } catch(e) {
+    Logger.log('getPOApproverDetail error: ' + e.message);
+    return { success: false, error: e.message, pos: [] };
+  }
+}
+
+function getAffiliateDetail(affiliateLabel, filters) {
+  try {
+    var ss      = getSpreadsheet();
+    var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
+    var f       = parseFilters(filters, 'ALL');
+
+    var CC_TO_LABEL = {KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',CD:'HPC',MW:'HPM',SO:'HSO'};
+    var NAME_TO_CC  = {
+      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
+      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
+      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+    };
+    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
+    function toLabel(cc) { return CC_TO_LABEL[cc]||cc; }
+
+    var rows = slaData.filter(function(r) {
+      if (!r.document_number || String(r.document_number).indexOf('BACKFILL') === 0) return false;
+      if (toLabel(resolveCC(r.affiliate)) !== affiliateLabel) return false;
+      var ds = r.created_at || '';
+      if (ds) { var d=new Date(ds); if(!isNaN(d.getTime())&&(d<f.startDate||d>f.endDate)) return false; }
+      return true;
+    }).map(function(r) {
+      var la = parseFloat(r.la_variance_min)||0;
+      return {
+        document_number:      r.document_number,
+        customer_name:        r.customer_name,
+        ordered_item:         r.ordered_item,
+        affiliate:            affiliateLabel,
+        created_at:           r.created_at,
+        approved_at:          r.approved_at,
+        dispatched_at:        r.dispatched_at,
+        finance_variance_min: parseFloat(r.finance_variance_min)||0,
+        la_variance_min:      la,
+        credit_hold_duration_min: la > 120 ? Math.max(0, la-120) : 0
+      };
+    }).sort(function(a,b){ return new Date(b.created_at)-new Date(a.created_at); });
+
+    return { success: true, rows: rows, count: rows.length };
+  } catch(e) {
+    Logger.log('getAffiliateDetail error: ' + e.message);
+    return { success: false, error: e.message, rows: [] };
+  }
 }
