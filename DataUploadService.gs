@@ -39,6 +39,7 @@ function importSalesRows(rows, affiliateCountryCode) {
       TZ:'Hass Petroleum Tanzania', RW:'Hass Petroleum Rwanda',
       DRC:'Hass Petroleum Congo',  ZM:'Hass Petroleum Zambia',
       SS:'Hass South Sudan',       SO:'Hass Petroleum Somalia',
+      HTW:'Hass Terminal Limited',
       CD:'Hass Petroleum Congo',   MW:'Hass Petroleum Malawi'
     };
 
@@ -110,7 +111,8 @@ function importPurRows(rows, affiliateCountryCode) {
       KE:'Hass Petroleum Kenya',   UG:'Hass Petroleum Uganda',
       TZ:'Hass Petroleum Tanzania', RW:'Hass Petroleum Rwanda',
       DRC:'Hass Petroleum Congo',  ZM:'Hass Petroleum Zambia',
-      SS:'Hass South Sudan',       SO:'Hass Petroleum Somalia'
+      SS:'Hass South Sudan',       SO:'Hass Petroleum Somalia',
+      HTW:'Hass Terminal Limited'
     };
 
     var existing = getSheetData('POApprovals') || [];
@@ -179,8 +181,8 @@ function importPurRows(rows, affiliateCountryCode) {
 function extractCountryFromFilename(filename) {
   if (!filename) return '';
 
-  var CODES    = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','NG','ET'];
-  var BADGES   = { HPK:'KE',HPU:'UG',HPT:'TZ',HPR:'RW',HSS:'SS',HPZ:'ZM',HPC:'DRC',HSO:'SO',HPM:'MW' };
+  var CODES    = ['KE','UG','TZ','RW','SS','ZM','DRC','CD','MW','SO','HTW','NG','ET'];
+  var BADGES   = { HPK:'KE',HPU:'UG',HPT:'TZ',HPR:'RW',HSS:'SS',HPZ:'ZM',HPC:'DRC',HSO:'SO',HPM:'MW',HTW:'HTW' };
   var KEYWORDS = { KENYA:'KE',UGANDA:'UG',TANZANIA:'TZ',RWANDA:'RW','SOUTH SUDAN':'SS',
                    ZAMBIA:'ZM',CONGO:'DRC',MALAWI:'MW',SOMALIA:'SO' };
 

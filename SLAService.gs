@@ -126,11 +126,12 @@ function getSLAAnalytics(filters, affiliateFilter) {
     'Hass Petroleum Tanzania':'TZ', 'Hass Petroleum Rwanda':'RW',
     'Hass Petroleum Congo':'DRC',  'Hass Petroleum Zambia':'ZM',
     'Hass South Sudan':'SS',       'Hass Petroleum Somalia':'SO',
-    'Hass Petroleum Malawi':'MW'
+    'Hass Petroleum Malawi':'MW',    'Hass Terminal Limited':'HTW',
+    'Hass Petroleum Terminal':'HTW', 'HTW':'HTW'
   };
   var CC_TO_LABEL = {
     KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR',
-    SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC', MW:'HPM', SO:'HSO'
+    SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC', MW:'HPM', SO:'HSO', HTW:'HTW'
   };
 
   function resolveCC(affiliateStr) {
@@ -530,7 +531,9 @@ function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
       'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
       'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
       'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
+      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
+      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
     };
     var CC_TO_LABEL = {KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',CD:'HPC',MW:'HPM',SO:'HSO'};
     function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
@@ -577,7 +580,9 @@ function getPOApproverDetail(approverName, filters, affiliateFilter) {
       'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
       'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
       'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
+      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
+      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
     };
     function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
 
@@ -628,7 +633,9 @@ function getAffiliateDetail(affiliateLabel, filters) {
       'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
       'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
       'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO'
+      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
+      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
+      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
     };
     function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
     function toLabel(cc) { return CC_TO_LABEL[cc]||cc; }
