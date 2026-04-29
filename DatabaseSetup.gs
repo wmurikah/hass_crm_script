@@ -199,12 +199,20 @@ function appendRow(sheetName, rowData) {
 
 function bulkInsert(sheetName, rowsData) {
   if (!rowsData || rowsData.length === 0) return 0;
-  var count = 0;
-  for (var i = 0; i < rowsData.length; i++) {
-    appendRow(sheetName, rowsData[i]);
-    count++;
+  // Delegate to the batch engine (single setValues call instead of N appendRow calls).
+  // Falls back to appendRow on error so existing callers are unaffected.
+  try {
+    var result = batchInsertRows(sheetName, rowsData);
+    return result.inserted;
+  } catch (e) {
+    Logger.log('[DatabaseSetup] bulkInsert batch fallback (' + sheetName + '): ' + e.message);
+    var count = 0;
+    for (var i = 0; i < rowsData.length; i++) {
+      appendRow(sheetName, rowsData[i]);
+      count++;
+    }
+    return count;
   }
-  return count;
 }
 
 function findRow(sheetName, columnName, value) {
@@ -250,13 +258,16 @@ function updateRow(sheetName, idColumn, idValue, updates) {
 
     for (var r = 1; r < data.length; r++) {
       if (String(data[r][colIndex]) === String(idValue)) {
+        // Patch fields in-memory, then write the entire row back in one
+        // setValues() call.  Old approach: N setValue() calls (one per field).
+        // New approach: 1 setValues([row]) call regardless of field count.
         for (var key in updates) {
           if (!updates.hasOwnProperty(key)) continue;
           var ci = headers.indexOf(key);
-          if (ci !== -1) {
-            sheet.getRange(r + 1, ci + 1).setValue(updates[key]);
-          }
+          if (ci !== -1) data[r][ci] = updates[key];
         }
+        sheet.getRange(r + 1, 1, 1, headers.length).setValues([data[r]]);
+        clearSheetCache(sheetName);
         return true;
       }
     }
