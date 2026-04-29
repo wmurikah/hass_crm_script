@@ -43,7 +43,7 @@ var ENCRYPTED_KEYS = [
  * Reads Config sheet, returns values with passwords masked
  */
 function getSettings() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName('Config');
   if (!sheet) return { success: true, settings: {} };
 
@@ -82,7 +82,7 @@ function saveSettings(settings) {
     return { success: false, error: 'No settings provided' };
   }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName('Config');
   if (!sheet) {
     sheet = ss.insertSheet('Config');
@@ -331,7 +331,7 @@ function testEmail() {
  * Helper: reads multiple config keys from Config sheet
  */
 function getConfigValues(keys) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getSpreadsheet();
   var sheet = ss.getSheetByName('Config');
   if (!sheet) return {};
 

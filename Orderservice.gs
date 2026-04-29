@@ -822,38 +822,36 @@ function confirmDelivery(orderId, deliveryData, context) {
     
     // Get order lines
     const lines = findWhere('OrderLines', { order_id: orderId }).data || [];
-    
-    // Check for partial delivery
+
+    // Build batch update map — one batchUpdateRows() call instead of N updateRow() calls.
     let isPartial = false;
-    
+    const lineUpdatesMap = {};
+
     if (deliveryData.deliveredQuantities) {
       for (const line of lines) {
         const delivered = deliveryData.deliveredQuantities[line.line_id];
         if (delivered !== undefined) {
-          // Update delivered quantity
-          updateRow('OrderLines', 'line_id', line.line_id, {
+          lineUpdatesMap[line.line_id] = {
             delivered_quantity: delivered,
-            delivery_variance_reason: delivered < line.quantity ? 
-              (deliveryData.varianceReasons?.[line.line_id] || 'Partial delivery') : '',
-          });
-          
-          if (delivered < line.quantity) {
-            isPartial = true;
-          }
+            delivery_variance_reason: delivered < line.quantity
+              ? (deliveryData.varianceReasons && deliveryData.varianceReasons[line.line_id]
+                  ? deliveryData.varianceReasons[line.line_id]
+                  : 'Partial delivery')
+              : '',
+          };
+          if (delivered < line.quantity) isPartial = true;
         } else {
-          // Assume full delivery if not specified
-          updateRow('OrderLines', 'line_id', line.line_id, {
-            delivered_quantity: line.quantity,
-          });
+          lineUpdatesMap[line.line_id] = { delivered_quantity: line.quantity };
         }
       }
     } else {
-      // Mark all as fully delivered
       for (const line of lines) {
-        updateRow('OrderLines', 'line_id', line.line_id, {
-          delivered_quantity: line.quantity,
-        });
+        lineUpdatesMap[line.line_id] = { delivered_quantity: line.quantity };
       }
+    }
+
+    if (Object.keys(lineUpdatesMap).length > 0) {
+      batchUpdateRows('OrderLines', 'line_id', lineUpdatesMap);
     }
     
     const newStatus = isPartial ? 'PARTIALLY_DELIVERED' : 'DELIVERED';
@@ -1432,7 +1430,7 @@ function parsePeriod(period) {
     const q = Math.floor(now.getMonth() / 3);
     startDate = new Date(now.getFullYear(), q * 3, 1);
   } else if (period === 'year') {
-    startDate = new Date(2025, 0, 1);
+    startDate = new Date(now.getFullYear(), 0, 1);
   } else if (period === 'ytm') {
     startDate = new Date(now.getFullYear(), 0, 1);
     endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
@@ -1464,11 +1462,11 @@ function getCustomerConsumptionAnalytics(customerId, period) {
       return created >= startDate && created <= endDate;
     });
 
-    // Pull order lines for matched orders
-    const orderIdSet = {};
-    orders.forEach(function(o) { orderIdSet[o.order_id] = true; });
+    // Build O(1)-lookup map from order_id → order then filter lines in one pass.
+    const orderMap = {};
+    orders.forEach(function(o) { orderMap[o.order_id] = o; });
     const allLines = getSheetData('OrderLines');
-    const lines = allLines.filter(function(l) { return orderIdSet[l.order_id]; });
+    const lines = allLines.filter(function(l) { return orderMap[l.order_id]; });
 
     // Build monthly trend map
     const monthMap = {};
@@ -1478,7 +1476,7 @@ function getCustomerConsumptionAnalytics(customerId, period) {
       monthMap[mk].spend += parseFloat(o.total_amount) || 0;
     });
     lines.forEach(function(l) {
-      const order = orders.find(function(o) { return o.order_id === l.order_id; });
+      const order = orderMap[l.order_id];
       if (!order) return;
       const mk = new Date(order.created_at).toISOString().slice(0, 7);
       if (!monthMap[mk]) return;
@@ -1519,7 +1517,7 @@ function getCustomerConsumptionAnalytics(customerId, period) {
       if (!locMap[lid].lastOrder || o.created_at > locMap[lid].lastOrder) locMap[lid].lastOrder = o.created_at;
     });
     lines.forEach(function(l) {
-      const order = orders.find(function(o) { return o.order_id === l.order_id; });
+      const order = orderMap[l.order_id];
       if (!order) return;
       const lid = order.delivery_location_id || 'UNKNOWN';
       if (locMap[lid]) locMap[lid].volume += parseFloat(l.quantity) || 0;

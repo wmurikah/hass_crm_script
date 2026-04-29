@@ -104,70 +104,65 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+// Services that require a valid session token before dispatch.
+// 'auth' is excluded so login/signup/reset flows remain unauthenticated.
+var AUTHENTICATED_SERVICES_ = [
+  'tickets', 'orders', 'customers', 'documents', 'knowledge',
+  'notifications', 'integrations', 'sla', 'chat', 'settings',
+  'upload', 'dashboard', 'users',
+];
+
 function doPost(e) {
   try {
-    const params = JSON.parse(e.postData.contents);
-    const service = params.service;
+    var params = JSON.parse(e.postData.contents);
+    var service = params.service;
 
-    let result;
+    // --- Authentication guard ---
+    // All services except 'auth' require a valid session token.
+    if (AUTHENTICATED_SERVICES_.indexOf(service) !== -1) {
+      var token = String(params.token || '').trim();
+      if (!token) {
+        return _jsonResponse_({ success: false, error: 'Authentication required.', code: 'UNAUTHENTICATED' });
+      }
+      var session = checkSession({ token: token });
+      if (!session.valid) {
+        return _jsonResponse_({ success: false, error: 'Session expired or invalid.', code: 'UNAUTHORIZED' });
+      }
+      // Attach validated session to params so handlers can use it without re-validating.
+      params._session = session;
+    }
 
+    var result;
     switch (service) {
-      case 'auth':
-        result = handleAuthRequest(params);
-        break;
-      case 'tickets':
-        result = handleTicketRequest(params);
-        break;
-      case 'orders':
-        result = handleOrderRequest(params);
-        break;
-      case 'customers':
-        result = handleCustomerRequest(params);
-        break;
-      case 'documents':
-        result = handleDocumentRequest(params);
-        break;
-      case 'knowledge':
-        result = handleKnowledgeRequest(params);
-        break;
-      case 'notifications':
-        result = handleNotificationRequest(params);
-        break;
-      case 'integrations':
-        result = handleIntegrationRequest(params);
-        break;
-      case 'sla':
-        result = handleSLARequest(params);
-        break;
-      case 'chat':
-        result = handleChatRequest(params);
-        break;
-      case 'settings':
-        result = handleSettingsRequest(params);
-        break;
-      case 'upload':
-        result = handleDataUploadRequest(params);
-        break;
-      case 'dashboard':
-        result = handleDashboardRequest(params);
-        break;
-      case 'users':
-        result = handleUserRequest(params);
-        break;
+      case 'auth':         result = handleAuthRequest(params);         break;
+      case 'tickets':      result = handleTicketRequest(params);       break;
+      case 'orders':       result = handleOrderRequest(params);        break;
+      case 'customers':    result = handleCustomerRequest(params);     break;
+      case 'documents':    result = handleDocumentRequest(params);     break;
+      case 'knowledge':    result = handleKnowledgeRequest(params);    break;
+      case 'notifications':result = handleNotificationRequest(params); break;
+      case 'integrations': result = handleIntegrationRequest(params);  break;
+      case 'sla':          result = handleSLARequest(params);          break;
+      case 'chat':         result = handleChatRequest(params);         break;
+      case 'settings':     result = handleSettingsRequest(params);     break;
+      case 'upload':       result = handleDataUploadRequest(params);   break;
+      case 'dashboard':    result = handleDashboardRequest(params);    break;
+      case 'users':        result = handleUserRequest(params);         break;
       default:
         result = { success: false, error: 'Unknown service: ' + service };
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+    return _jsonResponse_(result);
 
   } catch (error) {
     Logger.log('[Code] doPost error: ' + error.message);
-    return ContentService.createTextOutput(JSON.stringify({
-      success: false,
-      error: error.message
-    })).setMimeType(ContentService.MimeType.JSON);
+    return _jsonResponse_({ success: false, error: error.message });
   }
+}
+
+function _jsonResponse_(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**

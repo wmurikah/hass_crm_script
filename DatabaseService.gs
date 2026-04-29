@@ -193,7 +193,6 @@ function softDeleteRecord(sheetName, id, context) {
 }
 
 function hardDeleteRecord(sheetName, id, context) {
-  // Log the intent and perform the delete
   var lock = LockService.getScriptLock();
   try {
     if (!lock.tryLock(DB_SERVICE_CONFIG.LOCK_TIMEOUT_MS)) {
@@ -204,14 +203,18 @@ function hardDeleteRecord(sheetName, id, context) {
     if (!current) {
       return { success: false, error: 'Record not found' };
     }
-    updateRow(sheetName, idField, id, { status: 'DELETED', updated_at: new Date().toISOString() });
-    clearSheetCache(sheetName);
     if (context) {
-      logAudit(sheetName, id, 'DELETE',
+      logAudit(sheetName, id, 'HARD_DELETE',
         context.actorType || 'SYSTEM', context.actorId || '', context.actorEmail || '',
         { deleted_record: sanitizeForAudit(current) },
         { countryCode: current.country_code || '' });
     }
+    // Actually removes the row from the sheet (not a status flag update).
+    var deleted = deleteRow(sheetName, idField, id, true);
+    if (!deleted) {
+      return { success: false, error: 'Failed to delete record' };
+    }
+    clearSheetCache(sheetName);
     return { success: true };
   } catch (e) {
     Logger.log('[DatabaseService] hardDeleteRecord error (' + sheetName + '): ' + e.message);
@@ -373,21 +376,23 @@ function bulkCreate(sheetName, records, context) {
     var now = new Date().toISOString();
     var ids = [];
     for (var i = 0; i < records.length; i++) {
-      var record = records[i];
-      var id = record[idField] || generateIdForSheet(sheetName);
+      var id = records[i][idField] || generateIdForSheet(sheetName);
       ids.push(id);
-      record[idField] = id;
-      record.created_at = now;
-      record.updated_at = now;
-      appendRow(sheetName, record);
+      records[i][idField]    = id;
+      records[i].created_at  = now;
+      records[i].updated_at  = now;
     }
-    clearSheetCache(sheetName);
+    // Single setValues() call via batch engine — ~10-100× faster than N appendRow() calls.
+    var result = batchInsertRows(sheetName, records);
+    if (result.errors && result.errors.length > 0) {
+      Logger.log('[DatabaseService] bulkCreate batch errors (' + sheetName + '): ' + result.errors.join(', '));
+    }
     if (context) {
       logAudit(sheetName, ids.join(','), 'BULK_CREATE',
         context.actorType || 'SYSTEM', context.actorId || '', context.actorEmail || '',
         { count: records.length }, {});
     }
-    return { success: true, created: records.length, ids: ids };
+    return { success: true, created: result.inserted, ids: ids };
   } catch (e) {
     Logger.log('[DatabaseService] bulkCreate error (' + sheetName + '): ' + e.message);
     return { success: false, error: 'Bulk create failed' };

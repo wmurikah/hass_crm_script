@@ -132,20 +132,23 @@ function findCustomerByEmail(email, hashed) {
 }
 
 function createSession(userId, userType, role, hoursValid) {
-  var ss = getSpreadsheet();
-  var sheet = ss.getSheetByName('Sessions');
-  if (!sheet) throw new Error('Sessions sheet missing.');
   var rawToken  = Utilities.getUuid() + Utilities.getUuid().replace(/-/g,'');
   var tokenHash = hashPassword(rawToken);
   var now       = new Date();
   var expiresAt = new Date(now.getTime() + hoursValid * 3600000);
-  var sessionId = 'SES' + Utilities.getUuid().replace(/-/g,'').substring(0,16).toUpperCase();
-  // role stored in role column (was device_type)
-  sheet.appendRow([
-    sessionId, userType, userId, tokenHash, '', '', role, '', true,
-    expiresAt.toISOString(), now.toISOString(), now.toISOString()
-  ]);
-  SpreadsheetApp.flush();
+  var sessionId = 'SES' + Utilities.getUuid().replace(/-/g,'').substring(0, 16).toUpperCase();
+  // Object-based appendRow so column reordering in the sheet never silently corrupts data.
+  appendRow('Sessions', {
+    session_id:  sessionId,
+    user_type:   userType,
+    user_id:     userId,
+    token_hash:  tokenHash,
+    role:        role,
+    is_active:   true,
+    expires_at:  expiresAt.toISOString(),
+    created_at:  now.toISOString(),
+    updated_at:  now.toISOString(),
+  });
   return rawToken;
 }
 

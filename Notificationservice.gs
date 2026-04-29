@@ -611,21 +611,16 @@ function markNotificationRead(notificationId, userId) {
 function markAllNotificationsRead(recipientType, recipientId) {
   try {
     const unread = getUnreadNotifications(recipientType, recipientId, { limit: 500 });
-    const now = new Date();
-    let count = 0;
-    
-    for (const notification of unread.data || []) {
-      updateRow('Notifications', 'notification_id', notification.notification_id, {
-        in_app_read: true,
-        in_app_read_at: now,
-      });
-      count++;
-    }
-    
-    clearSheetCache('Notifications');
-    
-    return { success: true, marked: count };
-    
+    const ids = (unread.data || []).map(function(n) { return n.notification_id; });
+    if (ids.length === 0) return { success: true, marked: 0 };
+
+    // Single batch write instead of N individual updateRow() calls.
+    const result = bulkSetFields('Notifications', 'notification_id', ids, {
+      in_app_read: true,
+      in_app_read_at: new Date(),
+    });
+    cacheInvalidate('Notifications');
+    return { success: true, marked: result.updated };
   } catch (e) {
     Logger.log('markAllNotificationsRead error: ' + e.message);
     return { success: false, error: 'Failed to mark all as read' };
@@ -1045,22 +1040,18 @@ function cleanupExpiredNotifications() {
   try {
     const now = new Date();
     const notifications = getSheetData('Notifications');
-    let deletedCount = 0;
-    
-    for (const notification of notifications) {
-      if (notification.expires_at && new Date(notification.expires_at) < now) {
-        deleteRow('Notifications', 'notification_id', notification.notification_id, true);
-        deletedCount++;
-      }
-    }
-    
-    if (deletedCount > 0) {
-      clearSheetCache('Notifications');
-    }
-    
+    const expired = notifications.filter(function(n) {
+      return n.expires_at && new Date(n.expires_at) < now;
+    });
+    if (expired.length === 0) return { success: true, deletedCount: 0 };
+
+    // Soft-expire in one batch write rather than N deleteRow() calls.
+    const ids = expired.map(function(n) { return n.notification_id; });
+    const result = bulkSetFields('Notifications', 'notification_id', ids, { status: 'EXPIRED' });
+    cacheInvalidate('Notifications');
     return {
       success: true,
-      deletedCount: deletedCount,
+      deletedCount: result.updated,
     };
     
   } catch (e) {
