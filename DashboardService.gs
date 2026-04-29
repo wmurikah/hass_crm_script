@@ -12,11 +12,9 @@ function handleDashboardRequest(params) {
 
 function getDashboardSummary(affiliateFilter) {
   try {
-    var ss = getSpreadsheet();
-
-    var tickets = sheetToObjects(ss.getSheetByName('Tickets'));
-    var orders  = sheetToObjects(ss.getSheetByName('Orders'));
-    var msgs    = ss.getSheetByName('StaffMessages');
+    var tickets = getSheetData('Tickets');
+    var orders  = getSheetData('Orders');
+    var msgs    = getSpreadsheet().getSheetByName('StaffMessages');
 
     var openStatuses = ['NEW','OPEN','IN_PROGRESS','ESCALATED'];
     var openTickets  = tickets.filter(function(t){ return openStatuses.includes(t.status); });
@@ -31,7 +29,7 @@ function getDashboardSummary(affiliateFilter) {
 
     var unreadMessages = 0;
     if (msgs) {
-      var msgRows = sheetToObjects(msgs);
+      var msgRows = msgs.getLastRow() > 1 ? sheetToObjects(msgs) : [];
       unreadMessages = msgRows.filter(function(m){
         return !String(m.read_by||'').includes('ALL');
       }).length;

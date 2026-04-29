@@ -17,6 +17,47 @@
  *   (they are not stored in the sheet)
  */
 
+// ============================================================================
+// MODULE-LEVEL AFFILIATE MAPPINGS  (single source of truth for this file)
+// ============================================================================
+
+var SLA_NAME_TO_CC_ = {
+  'Hass Petroleum Kenya':    'KE',
+  'Hass Petroleum Uganda':   'UG',
+  'Hass Petroleum Tanzania': 'TZ',
+  'Hass Petroleum Rwanda':   'RW',
+  'Hass Petroleum Congo':    'DRC',
+  'Hass Petroleum Zambia':   'ZM',
+  'Hass South Sudan':        'SS',
+  'Hass Petroleum Somalia':  'SO',
+  'Hass Petroleum Malawi':   'MW',
+  'Hass Terminal Limited':   'HTW',
+  'Hass Petroleum Terminal': 'HTW',
+  'HTW':                     'HTW',
+};
+
+var SLA_CC_TO_LABEL_ = {
+  KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR',
+  SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC',
+  MW:'HPM', SO:'HSO', HTW:'HTW',
+};
+
+function slaResolveCC_(affiliateStr) {
+  var aff = String(affiliateStr || '').trim();
+  if (SLA_NAME_TO_CC_[aff]) return SLA_NAME_TO_CC_[aff];
+  if (aff.length <= 3 && /^[A-Z]+$/.test(aff)) return aff;
+  for (var k in SLA_NAME_TO_CC_) {
+    if (aff.toLowerCase().indexOf(k.toLowerCase()) !== -1) return SLA_NAME_TO_CC_[k];
+  }
+  return 'OTHER';
+}
+
+function slaToLabel_(cc) {
+  return SLA_CC_TO_LABEL_[cc] || cc;
+}
+
+// ============================================================================
+
 function handleSLARequest(params) {
   try {
     switch(params.action) {
@@ -121,29 +162,8 @@ function getSLAAnalytics(filters, affiliateFilter) {
   var poData  = sheetToObjects(ss.getSheetByName('POApprovals')) || [];
   var f       = parseFilters(filters, affiliateFilter);
 
-  var NAME_TO_CC = {
-    'Hass Petroleum Kenya':'KE',   'Hass Petroleum Uganda':'UG',
-    'Hass Petroleum Tanzania':'TZ', 'Hass Petroleum Rwanda':'RW',
-    'Hass Petroleum Congo':'DRC',  'Hass Petroleum Zambia':'ZM',
-    'Hass South Sudan':'SS',       'Hass Petroleum Somalia':'SO',
-    'Hass Petroleum Malawi':'MW',    'Hass Terminal Limited':'HTW',
-    'Hass Petroleum Terminal':'HTW', 'HTW':'HTW'
-  };
-  var CC_TO_LABEL = {
-    KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR',
-    SS:'HSS', ZM:'HPZ', DRC:'HPC', CD:'HPC', MW:'HPM', SO:'HSO', HTW:'HTW'
-  };
-
-  function resolveCC(affiliateStr) {
-    var aff = String(affiliateStr || '').trim();
-    if (NAME_TO_CC[aff]) return NAME_TO_CC[aff];
-    if (aff.length <= 3 && /^[A-Z]+$/.test(aff)) return aff;
-    for (var k in NAME_TO_CC) {
-      if (aff.toLowerCase().indexOf(k.toLowerCase()) > -1) return NAME_TO_CC[k];
-    }
-    return 'OTHER';
-  }
-  function toLabel(cc) { return CC_TO_LABEL[cc] || cc; }
+  var resolveCC = slaResolveCC_;
+  var toLabel   = slaToLabel_;
 
   // Filter SLAData
   var filtered = slaData.filter(function(r) {
@@ -527,17 +547,6 @@ function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
     var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
     var f       = parseFilters(filters, affiliateFilter);
 
-    var NAME_TO_CC = {
-      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
-      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
-      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
-      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
-      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
-    };
-    var CC_TO_LABEL = {KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',CD:'HPC',MW:'HPM',SO:'HSO'};
-    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
-
     var rows = slaData.filter(function(r) {
       if (!r.document_number || String(r.document_number).indexOf('BACKFILL') === 0) return false;
       var approver = String(r.oracle_approver || '').trim().toUpperCase();
@@ -553,7 +562,7 @@ function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
         document_number:      r.document_number,
         customer_name:        r.customer_name,
         ordered_item:         r.ordered_item,
-        affiliate:            CC_TO_LABEL[resolveCC(r.affiliate)] || r.affiliate,
+        affiliate:            slaToLabel_(slaResolveCC_(r.affiliate)),
         created_at:           r.created_at,
         approved_at:          r.approved_at,
         dispatched_at:        r.dispatched_at,
@@ -576,23 +585,13 @@ function getPOApproverDetail(approverName, filters, affiliateFilter) {
     var poData = sheetToObjects(ss.getSheetByName('POApprovals')) || [];
     var f      = parseFilters(filters, affiliateFilter);
 
-    var NAME_TO_CC = {
-      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
-      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
-      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
-      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
-      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
-    };
-    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
-
     var STEPS = ['first','second','third','fourth','fifth','sixth','seventh'];
     var targetName = String(approverName || '').trim().toLowerCase();
 
     var pos = poData.filter(function(r) {
       var ds = r.original_creation_date || '';
       if (ds) { var d=new Date(ds); if(!isNaN(d.getTime())&&(d<f.startDate||d>f.endDate)) return false; }
-      if (f.affiliate !== 'ALL' && resolveCC(r.affiliate) !== f.affiliate) return false;
+      if (f.affiliate !== 'ALL' && slaResolveCC_(r.affiliate) !== f.affiliate) return false;
       return STEPS.some(function(step) {
         return String(r[step+'_approver']||'').trim().toLowerCase() === targetName;
       });
@@ -628,21 +627,9 @@ function getAffiliateDetail(affiliateLabel, filters) {
     var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
     var f       = parseFilters(filters, 'ALL');
 
-    var CC_TO_LABEL = {KE:'HPK',UG:'HPU',TZ:'HPT',RW:'HPR',SS:'HSS',ZM:'HPZ',DRC:'HPC',CD:'HPC',MW:'HPM',SO:'HSO'};
-    var NAME_TO_CC  = {
-      'Hass Petroleum Kenya':'KE','Hass Petroleum Uganda':'UG',
-      'Hass Petroleum Tanzania':'TZ','Hass Petroleum Rwanda':'RW',
-      'Hass Petroleum Congo':'DRC','Hass Petroleum Zambia':'ZM',
-      'Hass South Sudan':'SS','Hass Petroleum Somalia':'SO',
-      'Hass Petroleum Malawi':'MW','Hass Terminal Limited':'HTW',
-      'Hass Petroleum Terminal':'HTW','HTW':'HTW'
-    };
-    function resolveCC(aff) { var a=String(aff||'').trim(); if(NAME_TO_CC[a]) return NAME_TO_CC[a]; if(a.length<=3&&/^[A-Z]+$/.test(a)) return a; return 'OTHER'; }
-    function toLabel(cc) { return CC_TO_LABEL[cc]||cc; }
-
     var rows = slaData.filter(function(r) {
       if (!r.document_number || String(r.document_number).indexOf('BACKFILL') === 0) return false;
-      if (toLabel(resolveCC(r.affiliate)) !== affiliateLabel) return false;
+      if (slaToLabel_(slaResolveCC_(r.affiliate)) !== affiliateLabel) return false;
       var ds = r.created_at || '';
       if (ds) { var d=new Date(ds); if(!isNaN(d.getTime())&&(d<f.startDate||d>f.endDate)) return false; }
       return true;

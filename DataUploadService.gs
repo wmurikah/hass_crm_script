@@ -51,7 +51,8 @@ function importSalesRows(rows, affiliateCountryCode) {
     });
 
     var batchId  = 'SALES_' + (affiliateCountryCode || 'XX') + '_' + new Date().toISOString().slice(0, 10);
-    var imported = 0, skipped = 0;
+    var skipped  = 0;
+    var batch    = [];
 
     rows.forEach(function(row) {
       if (String(row['APPROVAL_STATUS'] || '').trim().toUpperCase() !== 'APPROVE') {
@@ -64,30 +65,26 @@ function importSalesRows(rows, affiliateCountryCode) {
       var affInFile = String(row['AFFILIATE'] || '').trim();
       var affName   = affInFile || CC_TO_NAME[affiliateCountryCode] || affiliateCountryCode || 'Unknown';
 
-      var finMin = parseFloat(row['FINANCE_VARIANCE'])           || 0;
-      var laMin  = parseFloat(row['LOADING_AUTHORITY_VARIANCE']) || 0;
-
-      appendRow('SLAData', {
+      batch.push({
         source_type:          'SALES',
         affiliate:            affName,
         document_number:      docNum,
         customer_name:        String(row['CUSTOMER_NAME']          || ''),
         oracle_approver:      String(row['APPROVER']               || ''),
-        finance_variance_min: finMin,
-        la_variance_min:      laMin,
+        finance_variance_min: parseFloat(row['FINANCE_VARIANCE'])           || 0,
+        la_variance_min:      parseFloat(row['LOADING_AUTHORITY_VARIANCE']) || 0,
         created_at:           String(row['CREATE_DATE_TIME']       || ''),
         approved_at:          String(row['APPROVAL_DATE_TIME']     || ''),
         dispatched_at:        String(row['LOADING_AUTHORITY_DATE'] || ''),
         ordered_item:         String(row['ORDERED_ITEM']           || ''),
-        upload_batch_id:      batchId
+        upload_batch_id:      batchId,
       });
-
       seen[docNum] = true;
-      imported++;
     });
 
-    if (imported > 0) clearSheetCache('SLAData');
-    return { success: true, imported: imported, skipped: skipped };
+    // Single setValues() call for the whole batch.
+    var result = batchInsertRows('SLAData', batch);
+    return { success: true, imported: result.inserted, skipped: skipped };
 
   } catch(e) {
     Logger.log('importSalesRows error: ' + e.message);
@@ -123,7 +120,8 @@ function importPurRows(rows, affiliateCountryCode) {
     });
 
     var batchId  = 'PUR_' + (affiliateCountryCode || 'XX') + '_' + new Date().toISOString().slice(0, 10);
-    var imported = 0, skipped = 0;
+    var skipped  = 0;
+    var batch    = [];
     var STEPS    = ['FIRST','SECOND','THIRD','FOURTH','FIFTH','SIXTH','SEVENTH'];
 
     rows.forEach(function(row) {
@@ -146,7 +144,7 @@ function importPurRows(rows, affiliateCountryCode) {
         submission_date:         String(row['SUBMISSION_FOR_APPROVAL_DATE']       || ''),
         submission_variance_min: parseFloat(row['TIME_DIFF_RAISEPO_TOAPROVALSUBMIT']) || 0,
         authorization_status:    'APPROVED',
-        upload_batch_id:         batchId
+        upload_batch_id:         batchId,
       };
 
       STEPS.forEach(function(step) {
@@ -159,13 +157,13 @@ function importPurRows(rows, affiliateCountryCode) {
         record[lower + '_variance_min']  = (!variance || String(variance) === 'nan') ? null : parseFloat(variance);
       });
 
-      appendRow('POApprovals', record);
+      batch.push(record);
       seen[poNum] = true;
-      imported++;
     });
 
-    if (imported > 0) clearSheetCache('POApprovals');
-    return { success: true, imported: imported, skipped: skipped };
+    // Single setValues() call for the whole batch.
+    var result = batchInsertRows('POApprovals', batch);
+    return { success: true, imported: result.inserted, skipped: skipped };
 
   } catch(e) {
     Logger.log('importPurRows error: ' + e.message);

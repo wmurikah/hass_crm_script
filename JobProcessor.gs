@@ -196,32 +196,32 @@ function _jobSlaCheck_(p) {
 function _jobSessionClean_() {
   var sessions = getSheetData('Sessions');
   var now      = new Date();
-  var removed  = 0;
-  // Iterate in reverse so row deletion doesn't shift indices
   var expired  = sessions.filter(function(s) {
     return !s.is_active || (s.expires_at && new Date(s.expires_at) < now);
   });
-  for (var i = 0; i < expired.length; i++) {
-    deleteRow('Sessions', 'session_id', expired[i].session_id, true);
-    removed++;
-  }
-  if (removed > 0) cacheInvalidate('Sessions');
-  Logger.log('[JobProcessor] Session cleanup: removed ' + removed);
-  return { removed: removed };
+  if (expired.length === 0) return { removed: 0 };
+
+  // Mark as inactive in a single batch write instead of N individual deleteRow calls.
+  var ids = expired.map(function(s) { return s.session_id; });
+  var result = bulkSetFields('Sessions', 'session_id', ids, { is_active: false });
+  cacheInvalidate('Sessions');
+  Logger.log('[JobProcessor] Session cleanup: deactivated ' + result.updated);
+  return { removed: result.updated };
 }
 
 function _jobAuditClean_() {
   var cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
   var logs   = getSheetData('AuditLog');
   var old    = logs.filter(function(l) { return l.created_at && new Date(l.created_at) < cutoff; });
-  var removed = 0;
-  for (var i = 0; i < old.length; i++) {
-    deleteRow('AuditLog', 'log_id', old[i].log_id, true);
-    removed++;
-  }
-  if (removed > 0) cacheInvalidate('AuditLog');
-  Logger.log('[JobProcessor] Audit cleanup: removed ' + removed);
-  return { removed: removed };
+  if (old.length === 0) return { removed: 0 };
+
+  // Soft-delete old audit rows in a single batch write (status = 'DELETED').
+  // AuditLog rows don't have physical delete semantics; status flag is sufficient.
+  var ids = old.map(function(l) { return l.log_id; });
+  var result = bulkSetFields('AuditLog', 'log_id', ids, { status: 'DELETED' });
+  cacheInvalidate('AuditLog');
+  Logger.log('[JobProcessor] Audit cleanup: archived ' + result.updated);
+  return { removed: result.updated };
 }
 
 function _jobOracleSync_(p) {
