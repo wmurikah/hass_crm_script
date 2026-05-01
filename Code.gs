@@ -8,6 +8,7 @@ function doGet(e) {
   var params = e && e.parameter ? e.parameter : {};
   var page   = String(params.page  || '').trim();
   var token  = String(params.token || '').trim();
+  Logger.log('[Code] doGet page=' + page + ' tokenLen=' + token.length);
 
   // No token and not explicitly requesting login — go to login
   if (!token && page !== 'login') return serveLoginPage('');
@@ -15,6 +16,7 @@ function doGet(e) {
   // Validate token if present
   if (token) {
     var session = checkSession({ token: token });
+    Logger.log('[Code] doGet checkSession valid=' + session.valid + ' userType=' + session.userType + ' role=' + session.role);
     if (!session.valid) return serveLoginPage('Your session has expired. Please sign in again.');
     if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
     if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
@@ -39,56 +41,86 @@ function serveLoginPage(errorMessage) {
 }
 
 function serveStaffDashboard(session, token) {
-  var tmpl = HtmlService.createTemplateFromFile('Staffdashboard');
-  var scriptUrl = ScriptApp.getService().getUrl();
-  tmpl.SESSION = JSON.stringify({
-    userId:    session.userId,
-    userType:  'STAFF',
-    role:      session.role,
-    token:     token,
-    name:      '',
-    scriptUrl: scriptUrl
-  });
-  tmpl.scriptUrl = scriptUrl;
-  return tmpl.evaluate()
-    .setTitle('Hass Petroleum — Staff Portal')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  try {
+    Logger.log('[Code] serveStaffDashboard userId=' + session.userId + ' role=' + session.role);
+    var tmpl = HtmlService.createTemplateFromFile('Staffdashboard');
+    var scriptUrl = ScriptApp.getService().getUrl();
+    tmpl.SESSION = JSON.stringify({
+      userId:    session.userId,
+      userType:  'STAFF',
+      role:      session.role,
+      token:     token,
+      name:      '',
+      scriptUrl: scriptUrl
+    });
+    tmpl.scriptUrl = scriptUrl;
+    var output = tmpl.evaluate()
+      .setTitle('Hass Petroleum — Staff Portal')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    Logger.log('[Code] serveStaffDashboard rendered ' + output.getContent().length + ' chars');
+    return output;
+  } catch (err) {
+    Logger.log('[Code] serveStaffDashboard ERROR: ' + err.message + '\n' + err.stack);
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:48px;text-align:center;max-width:640px;margin:auto">' +
+      '<h2 style="color:#1A237E">Staff Portal could not load</h2>' +
+      '<p>The dashboard template failed to render. Please contact your administrator.</p>' +
+      '<pre style="text-align:left;background:#f5f5f5;padding:12px;border-radius:6px;font-size:11px;color:#555;overflow:auto">' +
+      String(err.message).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>' +
+      '</div>'
+    ).setTitle('Staff Portal Error');
+  }
 }
 
 function serveCustomerPortal(session, token) {
-  var customerId = '';
   try {
-    var contact = findRow('Contacts', 'contact_id', session.userId);
-    if (contact) {
-      customerId   = String(contact.customer_id || '').trim();
-      session.name = (String(contact.first_name || '').trim() + ' ' + String(contact.last_name || '').trim()).trim();
+    Logger.log('[Code] serveCustomerPortal userId=' + session.userId);
+    var customerId = '';
+    try {
+      var contact = findRow('Contacts', 'contact_id', session.userId);
+      if (contact) {
+        customerId   = String(contact.customer_id || '').trim();
+        session.name = (String(contact.first_name || '').trim() + ' ' + String(contact.last_name || '').trim()).trim();
+      }
+    } catch(e) { Logger.log('[Code] serveCustomerPortal lookup: ' + e.message); }
+
+    if (!customerId) {
+      return HtmlService.createHtmlOutput(
+        '<div style="font-family:sans-serif;padding:40px;text-align:center">' +
+        '<h2>Account Not Linked</h2>' +
+        '<p>Your portal account is not linked to a customer record. ' +
+        'Please contact support@hasspetroleum.com</p></div>'
+      ).setTitle('Account Error');
     }
-  } catch(e) { Logger.log('serveCustomerPortal: ' + e.message); }
 
-  if (!customerId) {
+    var tmpl = HtmlService.createTemplateFromFile('Customerportal');
+    tmpl.SESSION = JSON.stringify({
+      contactId:  session.userId,
+      customerId: customerId,
+      userType:   'CUSTOMER',
+      role:       'CUSTOMER',
+      token:      token,
+      name:       session.name || ''
+    });
+    tmpl.scriptUrl = ScriptApp.getService().getUrl();
+    var output = tmpl.evaluate()
+      .setTitle('Hass Petroleum — Customer Portal')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    Logger.log('[Code] serveCustomerPortal rendered ' + output.getContent().length + ' chars');
+    return output;
+  } catch (err) {
+    Logger.log('[Code] serveCustomerPortal ERROR: ' + err.message + '\n' + err.stack);
     return HtmlService.createHtmlOutput(
-      '<div style="font-family:sans-serif;padding:40px;text-align:center">' +
-      '<h2>Account Not Linked</h2>' +
-      '<p>Your portal account is not linked to a customer record. ' +
-      'Please contact support@hasspetroleum.com</p></div>'
-    ).setTitle('Account Error');
+      '<div style="font-family:sans-serif;padding:48px;text-align:center;max-width:640px;margin:auto">' +
+      '<h2 style="color:#1A237E">Customer Portal could not load</h2>' +
+      '<p>The portal template failed to render. Please contact support.</p>' +
+      '<pre style="text-align:left;background:#f5f5f5;padding:12px;border-radius:6px;font-size:11px;color:#555;overflow:auto">' +
+      String(err.message).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>' +
+      '</div>'
+    ).setTitle('Customer Portal Error');
   }
-
-  var tmpl = HtmlService.createTemplateFromFile('Customerportal');
-  tmpl.SESSION = JSON.stringify({
-    contactId:  session.userId,
-    customerId: customerId,
-    userType:   'CUSTOMER',
-    role:       'CUSTOMER',
-    token:      token,
-    name:       session.name || ''
-  });
-  tmpl.scriptUrl = ScriptApp.getService().getUrl();
-  return tmpl.evaluate()
-    .setTitle('Hass Petroleum — Customer Portal')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function include(filename) {

@@ -1960,11 +1960,26 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 </div>
 
 <script>
-/* ── Session Bootstrap ── */
+/* ── Session Bootstrap ──
+ * IMPORTANT: We use the force-printing scriptlet `<?!= SESSION ?>` so the
+ * server-side JSON string is emitted as a raw JS object literal. The escaping
+ * scriptlet `<?= ?>` would HTML-encode the quotes inside the JSON, but HTML
+ * entities are NOT decoded inside <script> blocks, so JSON.parse would fail
+ * and the page would silently redirect to a blank URL.
+ */
 var SESSION = (function(){
-  try { return JSON.parse('<?= SESSION ?>'); } catch(e) { return {}; }
+  try {
+    var s = <?!= SESSION ?>;
+    return (typeof s === 'string') ? JSON.parse(s) : (s || {});
+  } catch(e) {
+    if (window.console) console.error('[SESSION] bootstrap failed:', e);
+    return {};
+  }
 })();
-if (!SESSION || !SESSION.token) { window.location.href = window.location.href.split('?')[0]; }
+if (!SESSION || !SESSION.token) {
+  if (window.console) console.warn('[SESSION] no token — returning to login');
+  window.location.href = window.location.href.split('?')[0];
+}
 
 /* ── State ── */
 var currentPage = 'dashboard';
