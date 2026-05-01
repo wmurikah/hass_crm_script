@@ -14,7 +14,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const INTEGRATION_CONFIG = {
+var INTEGRATION_CONFIG = {
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY_MS: 2000,
   TIMEOUT_MS: 30000,

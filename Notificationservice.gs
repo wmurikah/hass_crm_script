@@ -16,7 +16,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const NOTIFICATION_CONFIG = {
+var NOTIFICATION_CONFIG = {
   DEFAULT_SENDER_EMAIL: 'noreply@hasspetroleum.com',
   DEFAULT_SENDER_NAME: 'Hass Petroleum',
   SMS_API_URL: '', // Set via Script Properties

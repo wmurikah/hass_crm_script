@@ -15,7 +15,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const DB_SERVICE_CONFIG = {
+var DB_SERVICE_CONFIG = {
   CACHE_TTL_SECONDS: 300,
   CACHE_MAX_SIZE: 100000,
   BATCH_SIZE: 500,
@@ -28,7 +28,7 @@ const DB_SERVICE_CONFIG = {
 // DB OBJECT (read-only helpers)
 // ============================================================================
 
-const DB = {
+var DB = {
   getById: function(sheetName, id) {
     var idField = getIdField(sheetName);
     if (!idField) return null;

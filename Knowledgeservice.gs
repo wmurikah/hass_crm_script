@@ -15,7 +15,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const KNOWLEDGE_CONFIG = {
+var KNOWLEDGE_CONFIG = {
   MAX_SEARCH_RESULTS: 50,
   EXCERPT_LENGTH: 200,
   MIN_SEARCH_LENGTH: 2,

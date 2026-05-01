@@ -16,7 +16,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const ORDER_CONFIG = {
+var ORDER_CONFIG = {
   CREDIT_CHECK_THRESHOLD: 0.9, // 90% credit utilization warning
   MAX_ORDER_LINES: 50,
   DRAFT_EXPIRY_DAYS: 30,
@@ -24,7 +24,7 @@ const ORDER_CONFIG = {
 };
 
 // Order status flow
-const ORDER_STATUS_FLOW = {
+var ORDER_STATUS_FLOW = {
   'DRAFT': ['SUBMITTED', 'CANCELLED'],
   'SUBMITTED': ['PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED'],
   'PENDING_APPROVAL': ['APPROVED', 'REJECTED', 'CANCELLED'],

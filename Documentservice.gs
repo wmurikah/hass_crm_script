@@ -14,7 +14,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const DOCUMENT_CONFIG = {
+var DOCUMENT_CONFIG = {
   MAX_FILE_SIZE_MB: 10,
   ALLOWED_MIME_TYPES: [
     'application/pdf',
@@ -31,7 +31,7 @@ const DOCUMENT_CONFIG = {
 /**
  * Document type definitions with required fields.
  */
-const DOCUMENT_TYPES = {
+var DOCUMENT_TYPES = {
   'KRA_PIN': {
     name: 'KRA PIN Certificate',
     countries: ['KE'],

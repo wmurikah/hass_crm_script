@@ -17,7 +17,7 @@
 // CONFIGURATION
 // ============================================================================
 
-const TICKET_CONFIG = {
+var TICKET_CONFIG = {
   AUTO_CLOSE_DAYS: 7, // Days after resolution to auto-close
   SATISFACTION_REQUEST_DAYS: 1, // Days after resolution to request satisfaction
   MAX_ATTACHMENTS_PER_TICKET: 20,
