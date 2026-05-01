@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!--
+  Template-tag fixes (cause of "SyntaxError: Unexpected token ';' at __GS_INTERNAL_evaluate:1:31"):
+    * In the Session Bootstrap doc comment (around line 1966): an empty force-print scriptlet
+      (open-bracket question-mark equals space close-question-bracket) generated invalid internal
+      JS like "output += ;" and crashed evaluate(). Replaced it with a no-op emitting an empty string.
+    * In the same doc comment (around line 1964): replaced the literal force-print SESSION scriptlet
+      with a no-op so the SESSION JSON isn't injected twice and can't accidentally close the comment
+      block if its contents ever contained the comment terminator.
+  Only one legitimate scriptlet remains in this file: the force-print SESSION emission inside the
+  IIFE in the Session Bootstrap script block.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1961,9 +1972,9 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
 <script>
 /* ── Session Bootstrap ──
- * IMPORTANT: We use the force-printing scriptlet `<?!= SESSION ?>` so the
+ * IMPORTANT: We use the force-printing scriptlet `<?= '' ?>` so the
  * server-side JSON string is emitted as a raw JS object literal. The escaping
- * scriptlet `<?= ?>` would HTML-encode the quotes inside the JSON, but HTML
+ * scriptlet `<?= '' ?>` would HTML-encode the quotes inside the JSON, but HTML
  * entities are NOT decoded inside <script> blocks, so JSON.parse would fail
  * and the page would silently redirect to a blank URL.
  */
