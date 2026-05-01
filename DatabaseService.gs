@@ -1,16 +1,14 @@
 /**
  * HASS PETROLEUM CMS - DATABASE SERVICE
- * Version: 2.0.0
- * Database: Google Sheets (SPREADSHEET_ID in Script Properties)
+ * Version: 3.0.0
  *
- * Advanced CRUD operations with:
- * - CacheService integration (5-minute TTL)
- * - Batch operations
- * - Query helpers (findWhere, search, pagination)
- * - Transaction-like operations with LockService
- * - DB object (read-only helpers)
+ * Advanced CRUD operations backed by Turso (libSQL).
+ * All data reads/writes go through Turso. Sheets is a backup only.
  *
- * Core Sheet functions are in DatabaseSetup.gs
+ * - findWhere / countWhere / searchRecords: native SQL queries against Turso
+ * - createRecord / updateRecord / deleteRecord: via DatabaseSetup CRUD helpers
+ * - Relationship queries (customer360, ticketDetail, orderDetail)
+ * - Aggregation helpers
  */
 
 // ============================================================================
@@ -230,49 +228,56 @@ function hardDeleteRecord(sheetName, id, context) {
 
 function findWhere(sheetName, conditions, options) {
   options = options || {};
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var useCache = DB_SERVICE_CONFIG.STATIC_SHEETS.indexOf(sheetName) !== -1;
-    var allData = useCache ? getCachedSheetData(sheetName) : getSheetData(sheetName);
+    var where = [];
+    var args  = [];
+    var filterKeys = Object.keys(conditions || {});
 
-    var filtered = allData.filter(function(row) {
-      if (!options.includeDeleted && row.status === 'DELETED') return false;
-      for (var field in conditions) {
-        if (!conditions.hasOwnProperty(field)) continue;
-        var condition = conditions[field];
-        var rowValue = row[field];
-        if (condition === null || condition === undefined) {
-          if (rowValue !== null && rowValue !== undefined && rowValue !== '') return false;
-        } else if (typeof condition === 'object' && condition.op) {
-          if (!evaluateCondition(rowValue, condition.op, condition.value)) return false;
-        } else if (Array.isArray(condition)) {
-          if (condition.indexOf(rowValue) === -1) return false;
-        } else {
-          if (rowValue !== condition) return false;
-        }
+    filterKeys.forEach(function(field) {
+      var condition = conditions[field];
+      if (condition === null || condition === undefined) {
+        where.push(field + ' IS NULL');
+      } else if (typeof condition === 'object' && condition.op) {
+        where.push(field + ' ' + condition.op + ' ?');
+        args.push(condition.value);
+      } else if (Array.isArray(condition)) {
+        where.push(field + ' IN (' + condition.map(function() { return '?'; }).join(',') + ')');
+        condition.forEach(function(v) { args.push(v); });
+      } else {
+        where.push(field + ' = ?');
+        args.push(condition);
       }
-      return true;
     });
 
-    var total = filtered.length;
-
-    if (options.sortBy) {
-      var sortOrder = options.sortOrder === 'desc' ? -1 : 1;
-      filtered.sort(function(a, b) {
-        var aVal = a[options.sortBy];
-        var bVal = b[options.sortBy];
-        if (typeof aVal === 'string' && typeof bVal === 'string') return aVal.localeCompare(bVal) * sortOrder;
-        if (aVal < bVal) return -1 * sortOrder;
-        if (aVal > bVal) return 1 * sortOrder;
-        return 0;
-      });
+    if (!options.includeDeleted) {
+      where.push("(status IS NULL OR status != 'DELETED')");
     }
 
-    var offset = options.offset || 0;
-    var limit = Math.min(options.limit || DB_SERVICE_CONFIG.MAX_QUERY_RESULTS, DB_SERVICE_CONFIG.MAX_QUERY_RESULTS);
-    var paginated = filtered.slice(offset, offset + limit);
+    var countArgs  = args.slice();
+    var countSql   = 'SELECT COUNT(*) AS cnt FROM ' + table;
+    if (where.length) countSql += ' WHERE ' + where.join(' AND ');
+    var countResult = tursoSelect(countSql, countArgs);
+    var total       = countResult.length ? parseInt(countResult[0].cnt || '0') : 0;
 
-    return { success: true, data: paginated, total: total, offset: offset, limit: limit, hasMore: offset + paginated.length < total };
-  } catch (e) {
+    var sql = 'SELECT * FROM ' + table;
+    if (where.length)     sql += ' WHERE '    + where.join(' AND ');
+    if (options.sortBy)   sql += ' ORDER BY ' + options.sortBy +
+                                 (options.sortOrder === 'desc' ? ' DESC' : ' ASC');
+    var limit  = Math.min(options.limit  || DB_SERVICE_CONFIG.MAX_QUERY_RESULTS, DB_SERVICE_CONFIG.MAX_QUERY_RESULTS);
+    var offset = options.offset || 0;
+    sql += ' LIMIT ' + limit + ' OFFSET ' + offset;
+
+    var data = tursoSelect(sql, args.slice());
+    return {
+      success: true,
+      data:    data,
+      total:   total,
+      offset:  offset,
+      limit:   limit,
+      hasMore: offset + data.length < total,
+    };
+  } catch(e) {
     Logger.log('[DatabaseService] findWhere error (' + sheetName + '): ' + e.message);
     return { success: false, error: 'Query failed', data: [], total: 0 };
   }
@@ -280,44 +285,39 @@ function findWhere(sheetName, conditions, options) {
 
 function searchRecords(sheetName, searchText, searchFields, additionalFilters, options) {
   additionalFilters = additionalFilters || {};
-  options = options || {};
+  options           = options           || {};
+  if (!searchText || searchText.trim().length < 2) {
+    return { success: false, error: 'Search text must be at least 2 characters', data: [], total: 0 };
+  }
+  var table       = TABLE_MAP[sheetName] || sheetName.toLowerCase();
+  var searchTerms = searchText.trim().toLowerCase().split(/\s+/);
   try {
-    if (!searchText || searchText.trim().length < 2) {
-      return { success: false, error: 'Search text must be at least 2 characters', data: [], total: 0 };
-    }
-    var searchLower = searchText.toLowerCase().trim();
-    var searchTerms = searchLower.split(/\s+/);
-    var allData = getSheetData(sheetName);
+    var where = [];
+    var args  = [];
 
-    var filtered = allData.filter(function(row) {
-      if (!options.includeDeleted && row.status === 'DELETED') return false;
-      for (var field in additionalFilters) {
-        if (row[field] !== additionalFilters[field]) return false;
-      }
-      for (var i = 0; i < searchFields.length; i++) {
-        var fieldValue = String(row[searchFields[i]] || '').toLowerCase();
-        var allTermsFound = searchTerms.every(function(term) { return fieldValue.indexOf(term) !== -1; });
-        if (allTermsFound) return true;
-      }
-      return false;
+    // Each term must match at least one search field
+    searchTerms.forEach(function(term) {
+      var fieldClauses = searchFields.map(function(f) {
+        args.push('%' + term + '%');
+        return 'LOWER(' + f + ') LIKE ?';
+      });
+      where.push('(' + fieldClauses.join(' OR ') + ')');
     });
 
-    var total = filtered.length;
-    filtered.sort(function(a, b) {
-      var aName = String(a[searchFields[0]] || '').toLowerCase();
-      var bName = String(b[searchFields[0]] || '').toLowerCase();
-      var aStarts = aName.indexOf(searchLower) === 0 ? 0 : 1;
-      var bStarts = bName.indexOf(searchLower) === 0 ? 0 : 1;
-      if (aStarts !== bStarts) return aStarts - bStarts;
-      return aName.localeCompare(bName);
+    // Additional exact-match filters
+    Object.keys(additionalFilters).forEach(function(field) {
+      where.push(field + ' = ?');
+      args.push(additionalFilters[field]);
     });
 
-    var offset = options.offset || 0;
+    var sql   = 'SELECT * FROM ' + table;
+    if (where.length) sql += ' WHERE ' + where.join(' AND ');
     var limit = Math.min(options.limit || 50, DB_SERVICE_CONFIG.MAX_QUERY_RESULTS);
-    var paginated = filtered.slice(offset, offset + limit);
+    sql += ' LIMIT ' + limit;
 
-    return { success: true, data: paginated, total: total, searchText: searchText, hasMore: offset + paginated.length < total };
-  } catch (e) {
+    var data = tursoSelect(sql, args);
+    return { success: true, data: data, total: data.length, searchText: searchText };
+  } catch(e) {
     Logger.log('[DatabaseService] searchRecords error (' + sheetName + '): ' + e.message);
     return { success: false, error: 'Search failed', data: [], total: 0 };
   }
@@ -326,11 +326,6 @@ function searchRecords(sheetName, searchText, searchFields, additionalFilters, o
 function getById(sheetName, id) {
   var idField = getIdField(sheetName);
   if (!idField) return null;
-  var useCache = DB_SERVICE_CONFIG.STATIC_SHEETS.indexOf(sheetName) !== -1;
-  if (useCache) {
-    var data = getCachedSheetData(sheetName);
-    return data.find(function(row) { return row[idField] === id; }) || null;
-  }
   return findRow(sheetName, idField, id);
 }
 
@@ -338,16 +333,40 @@ function getByIds(sheetName, ids) {
   if (!ids || ids.length === 0) return [];
   var idField = getIdField(sheetName);
   if (!idField) return [];
-  var data = getSheetData(sheetName);
-  var idSet = {};
-  for (var i = 0; i < ids.length; i++) idSet[ids[i]] = true;
-  return data.filter(function(row) { return idSet[row[idField]]; });
+  var table   = TABLE_MAP[sheetName] || sheetName.toLowerCase();
+  try {
+    var placeholders = ids.map(function() { return '?'; }).join(',');
+    return tursoSelect('SELECT * FROM ' + table + ' WHERE ' + idField + ' IN (' + placeholders + ')', ids);
+  } catch(e) {
+    Logger.log('[DatabaseService] getByIds error (' + sheetName + '): ' + e.message);
+    return [];
+  }
 }
 
 function countWhere(sheetName, conditions) {
   conditions = conditions || {};
-  var result = findWhere(sheetName, conditions, { limit: 1 });
-  return result.total || 0;
+  var table  = TABLE_MAP[sheetName] || sheetName.toLowerCase();
+  try {
+    var where = [];
+    var args  = [];
+    Object.keys(conditions).forEach(function(field) {
+      var val = conditions[field];
+      if (Array.isArray(val)) {
+        where.push(field + ' IN (' + val.map(function() { return '?'; }).join(',') + ')');
+        val.forEach(function(v) { args.push(v); });
+      } else {
+        where.push(field + ' = ?');
+        args.push(val);
+      }
+    });
+    var sql = 'SELECT COUNT(*) AS cnt FROM ' + table;
+    if (where.length) sql += ' WHERE ' + where.join(' AND ');
+    var rows = tursoSelect(sql, args);
+    return rows.length ? parseInt(rows[0].cnt || '0') : 0;
+  } catch(e) {
+    Logger.log('[DatabaseService] countWhere error (' + sheetName + '): ' + e.message);
+    return 0;
+  }
 }
 
 function exists(sheetName, field, value, excludeId) {
@@ -468,7 +487,7 @@ function getCustomer360(customerId) {
     var openTickets = findWhere('Tickets', { customer_id: customerId, status: ['NEW', 'OPEN', 'IN_PROGRESS', 'PENDING_CUSTOMER', 'PENDING_INTERNAL', 'ESCALATED'] }, { sortBy: 'created_at', sortOrder: 'desc', limit: 20 }).data || [];
     var closedTickets = findWhere('Tickets', { customer_id: customerId, status: ['RESOLVED', 'CLOSED'] }, { sortBy: 'resolved_at', sortOrder: 'desc', limit: 10 }).data || [];
     var segment = customer.segment_id ? getById('Segments', customer.segment_id) : null;
-    var country = customer.country_code ? getCachedSheetData('Countries').find(function(c) { return c.country_code === customer.country_code; }) : null;
+    var country = customer.country_code ? findRow('Countries', 'country_code', customer.country_code) : null;
     var relationshipOwner = customer.relationship_owner_id ? getById('Users', customer.relationship_owner_id) : null;
 
     var stats = {

@@ -1,28 +1,34 @@
 /**
- * HASS PETROLEUM CMS - DATABASE SETUP & CORE CRUD
- * Version: 2.0.0
- * Database: Google Sheets (SPREADSHEET_ID in Script Properties)
+ * HASS PETROLEUM CMS — DATABASE SETUP & CORE CRUD
+ * Version: 3.0.0
+ *
+ * ALL reads and writes go to Turso (libSQL).
+ * Google Sheets is a read-only backup sink — written only by BackupService.gs.
  *
  * Provides:
- * - Google Sheets CRUD helpers (get, list, create, update, delete)
- * - Collection name mapping (logical names -> Sheet tab names)
- * - CRUD operations used by all service files
- * - Schema definitions (reference only)
- * - Utility functions (ID generation, timestamps, audit logging)
+ * - Turso-backed CRUD helpers (getSheetData, appendRow, updateRow, deleteRow, findRow, findRows)
+ * - Collection name mapping (COLLECTION_MAP — logical names, kept for backward compat)
+ * - Schema definitions (SCHEMAS — reference / validation only)
+ * - Utility functions (ID generation, timestamps, audit logging, config)
+ * - getSpreadsheet() / sheetToObjects() / getHeaders_() — kept for BackupService only
  */
 
 // ============================================================================
-// GOOGLE SHEETS CONFIGURATION
+// RUNTIME CONFIGURATION
 // ============================================================================
 
 const CONFIG = {
   CACHE_TTL_SECONDS: 300,
-  LOCK_TIMEOUT_MS: 30000,
+  LOCK_TIMEOUT_MS:   30000,
 };
 
+// ============================================================================
+// SPREADSHEET ACCESS  (BackupService + bootstrapping only)
+// ============================================================================
+
 /**
- * Returns the CMS spreadsheet. The ID is stored in Script Properties
- * under the key SPREADSHEET_ID.
+ * Returns the CMS spreadsheet. Used ONLY by BackupService and schema init.
+ * Service code MUST NOT call this for data reads/writes.
  */
 function getSpreadsheet() {
   var id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
@@ -31,79 +37,8 @@ function getSpreadsheet() {
 }
 
 /**
- * Returns a sheet (tab) by its logical name. If a mapping exists in
- * COLLECTION_MAP the mapped name is used; otherwise the name is used as-is.
- */
-function getSheet_(sheetName) {
-  var tabName = COLLECTION_MAP[sheetName] || sheetName;
-  var sheet = getSpreadsheet().getSheetByName(tabName);
-  if (!sheet) throw new Error('Sheet not found: ' + tabName);
-  return sheet;
-}
-
-// ============================================================================
-// COLLECTION NAME MAPPING
-// ============================================================================
-
-const COLLECTION_MAP = {
-  'Customers': 'Customers',
-  'Contacts': 'Contacts',
-  'Users': 'Users',
-  'Teams': 'Teams',
-  'Tickets': 'Tickets',
-  'TicketComments': 'TicketComments',
-  'TicketAttachments': 'TicketAttachments',
-  'TicketHistory': 'TicketHistory',
-  'Orders': 'Orders',
-  'OrderLines': 'OrderLines',
-  'OrderStatusHistory': 'OrderStatusHistory',
-  'RecurringSchedule': 'RecurringSchedule',
-  'RecurringScheduleLines': 'RecurringScheduleLines',
-  'Products': 'Products',
-  'Depots': 'Depots',
-  'PriceList': 'PriceList',
-  'PriceListItems': 'PriceListItems',
-  'DeliveryLocations': 'DeliveryLocations',
-  'Documents': 'Documents',
-  'Vehicles': 'Vehicles',
-  'Drivers': 'Drivers',
-  'SLAConfig': 'SLAConfig',
-  'BusinessHours': 'BusinessHours',
-  'Holidays': 'Holidays',
-  'Notifications': 'Notifications',
-  'NotificationPreferences': 'NotificationPreferences',
-  'KnowledgeCategories': 'KnowledgeCategories',
-  'KnowledgeArticles': 'KnowledgeArticles',
-  'AuditLog': 'AuditLog',
-  'Sessions': 'Sessions',
-  'IntegrationLog': 'IntegrationLog',
-  'Config': 'Config',
-  'Countries': 'Countries',
-  'Segments': 'Segments',
-  'ChurnRiskFactors': 'ChurnRiskFactors',
-  'RetentionActivities': 'RetentionActivities',
-  'JobQueue': 'JobQueue',
-  'NotificationTemplates': 'NotificationTemplates',
-  'PasswordResets': 'PasswordResets',
-  'SLAData': 'SLAData',
-  'POApprovals': 'POApprovals',
-  'Invoices': 'Invoices',
-  'ApprovalWorkflows': 'ApprovalWorkflows',
-  'PaymentUploads': 'PaymentUploads',
-  'SignupRequests': 'SignupRequests',
-};
-
-function getCollectionName(sheetName) {
-  return COLLECTION_MAP[sheetName] || sheetName;
-}
-
-// ============================================================================
-// GOOGLE SHEETS HELPERS
-// ============================================================================
-
-/**
- * Reads all rows from a sheet and returns them as an array of objects.
- * Row 1 is the header row; data starts at row 2.
+ * Reads a sheet object into an array of plain objects.
+ * Used ONLY by BackupService for writing backup snapshots.
  */
 function sheetToObjects(sheet) {
   var data = sheet.getDataRange().getValues();
@@ -114,20 +49,17 @@ function sheetToObjects(sheet) {
     var obj = {};
     for (var c = 0; c < headers.length; c++) {
       var val = data[r][c];
-      // Convert Date objects to ISO strings for consistency
-      if (val instanceof Date) {
-        val = val.toISOString();
-      }
+      if (val instanceof Date) val = val.toISOString();
       obj[headers[c]] = val;
     }
-    obj._rowNumber = r + 1; // 1-based sheet row number
+    obj._rowNumber = r + 1;
     results.push(obj);
   }
   return results;
 }
 
 /**
- * Returns the header row for a given sheet as an array of strings.
+ * Returns the header row for a sheet. Used ONLY by BackupService.
  */
 function getHeaders_(sheet) {
   if (sheet.getLastRow() < 1) return [];
@@ -135,175 +67,197 @@ function getHeaders_(sheet) {
 }
 
 // ============================================================================
-// CACHING
+// COLLECTION NAME MAPPING  (kept for backward compatibility)
 // ============================================================================
 
+const COLLECTION_MAP = {
+  'Customers':              'Customers',
+  'Contacts':               'Contacts',
+  'Users':                  'Users',
+  'Teams':                  'Teams',
+  'Tickets':                'Tickets',
+  'TicketComments':         'TicketComments',
+  'TicketAttachments':      'TicketAttachments',
+  'TicketHistory':          'TicketHistory',
+  'Orders':                 'Orders',
+  'OrderLines':             'OrderLines',
+  'OrderStatusHistory':     'OrderStatusHistory',
+  'RecurringSchedule':      'RecurringSchedule',
+  'RecurringScheduleLines': 'RecurringScheduleLines',
+  'Products':               'Products',
+  'Depots':                 'Depots',
+  'PriceList':              'PriceList',
+  'PriceListItems':         'PriceListItems',
+  'DeliveryLocations':      'DeliveryLocations',
+  'Documents':              'Documents',
+  'Vehicles':               'Vehicles',
+  'Drivers':                'Drivers',
+  'SLAConfig':              'SLAConfig',
+  'BusinessHours':          'BusinessHours',
+  'Holidays':               'Holidays',
+  'Notifications':          'Notifications',
+  'NotificationPreferences':'NotificationPreferences',
+  'KnowledgeCategories':    'KnowledgeCategories',
+  'KnowledgeArticles':      'KnowledgeArticles',
+  'AuditLog':               'AuditLog',
+  'Sessions':               'Sessions',
+  'IntegrationLog':         'IntegrationLog',
+  'Config':                 'Config',
+  'Countries':              'Countries',
+  'Segments':               'Segments',
+  'ChurnRiskFactors':       'ChurnRiskFactors',
+  'RetentionActivities':    'RetentionActivities',
+  'JobQueue':               'JobQueue',
+  'NotificationTemplates':  'NotificationTemplates',
+  'PasswordResets':         'PasswordResets',
+  'SLAData':                'SLAData',
+  'POApprovals':            'POApprovals',
+  'Invoices':               'Invoices',
+  'ApprovalWorkflows':      'ApprovalWorkflows',
+  'PaymentUploads':         'PaymentUploads',
+  'SignupRequests':         'SignupRequests',
+  'StaffMessages':          'StaffMessages',
+};
+
+function getCollectionName(sheetName) {
+  return COLLECTION_MAP[sheetName] || sheetName;
+}
+
+// ============================================================================
+// CACHING  (delegates to CacheManager — now caches Turso results)
+// ============================================================================
+
+/**
+ * Returns Turso data for sheetName, served from the L1/L2 cache when possible.
+ * Drop-in replacement for the old sheet-backed getCachedSheetData().
+ */
 function getCachedSheetData(sheetName) {
-  var cacheKey = 'hass_cms_' + sheetName + '_all';
-  var cache = CacheService.getScriptCache();
-  var cached = cache.get(cacheKey);
-  if (cached) {
-    try {
-      return JSON.parse(cached);
-    } catch (e) { /* cache parse error, fetch fresh */ }
-  }
-  var data = getSheetData(sheetName);
-  try {
-    var jsonStr = JSON.stringify(data);
-    if (jsonStr.length < 100000) {
-      cache.put(cacheKey, jsonStr, CONFIG.CACHE_TTL_SECONDS);
-    }
-  } catch (e) { /* cache too large, skip */ }
-  return data;
+  return cachedGet(sheetName);
 }
 
 function clearSheetCache(sheetName) {
-  var cache = CacheService.getScriptCache();
-  cache.remove('hass_cms_' + sheetName + '_all');
+  try { cacheInvalidate(sheetName); } catch(e) {}
 }
 
 // ============================================================================
-// CRUD OPERATIONS
+// CORE CRUD — ALL READ/WRITE VIA TURSO
 // ============================================================================
 
+/**
+ * Returns all rows from a Turso table as an array of objects.
+ */
 function getSheetData(sheetName) {
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var sheet = getSheet_(sheetName);
-    return sheetToObjects(sheet);
-  } catch (e) {
-    Logger.log('[DatabaseSetup] getSheetData error (' + sheetName + '): ' + e.message);
+    return tursoSelect('SELECT * FROM ' + table);
+  } catch(e) {
+    Logger.log('[DB] getSheetData error (' + sheetName + '): ' + e.message);
     return [];
   }
 }
 
+/**
+ * Inserts a new row into Turso.
+ */
 function appendRow(sheetName, rowData) {
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var sheet = getSheet_(sheetName);
-    var headers = getHeaders_(sheet);
-
-    if (!rowData.created_at) rowData.created_at = new Date();
-    if (!rowData.updated_at) rowData.updated_at = new Date();
-
-    var row = [];
-    for (var i = 0; i < headers.length; i++) {
-      var val = rowData[headers[i]];
-      row.push(val !== undefined && val !== null ? val : '');
-    }
-    sheet.appendRow(row);
+    if (!rowData.created_at) rowData.created_at = new Date().toISOString();
+    if (!rowData.updated_at) rowData.updated_at = new Date().toISOString();
+    var stmt = _buildInsert(table, rowData);
+    tursoWrite(stmt.sql, stmt.args);
+    clearSheetCache(sheetName);
     return rowData;
-  } catch (e) {
-    Logger.log('[DatabaseSetup] appendRow error (' + sheetName + '): ' + e.message);
+  } catch(e) {
+    Logger.log('[DB] appendRow error (' + sheetName + '): ' + e.message);
     return rowData;
   }
 }
 
+/**
+ * Inserts multiple rows into Turso in a single HTTP request.
+ */
 function bulkInsert(sheetName, rowsData) {
   if (!rowsData || rowsData.length === 0) return 0;
-  // Delegate to the batch engine (single setValues call instead of N appendRow calls).
-  // Falls back to appendRow on error so existing callers are unaffected.
   try {
     var result = batchInsertRows(sheetName, rowsData);
     return result.inserted;
-  } catch (e) {
-    Logger.log('[DatabaseSetup] bulkInsert batch fallback (' + sheetName + '): ' + e.message);
-    var count = 0;
-    for (var i = 0; i < rowsData.length; i++) {
-      appendRow(sheetName, rowsData[i]);
-      count++;
-    }
-    return count;
+  } catch(e) {
+    Logger.log('[DB] bulkInsert error (' + sheetName + '): ' + e.message);
+    return 0;
   }
 }
 
+/**
+ * Finds the first row matching columnName = value.
+ */
 function findRow(sheetName, columnName, value) {
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var data = getSheetData(sheetName);
-    for (var i = 0; i < data.length; i++) {
-      if (String(data[i][columnName]) === String(value)) {
-        return data[i];
-      }
-    }
-    return null;
-  } catch (e) {
-    Logger.log('[DatabaseSetup] findRow error (' + sheetName + '): ' + e.message);
+    var rows = tursoSelect(
+      'SELECT * FROM ' + table + ' WHERE ' + columnName + ' = ? LIMIT 1',
+      [value]
+    );
+    return rows.length ? rows[0] : null;
+  } catch(e) {
+    Logger.log('[DB] findRow error (' + sheetName + '): ' + e.message);
     return null;
   }
 }
 
+/**
+ * Returns all rows matching columnName = value.
+ */
 function findRows(sheetName, columnName, value) {
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var data = getSheetData(sheetName);
-    return data.filter(function(row) {
-      return String(row[columnName]) === String(value);
-    });
-  } catch (e) {
-    Logger.log('[DatabaseSetup] findRows error (' + sheetName + '): ' + e.message);
+    return tursoSelect(
+      'SELECT * FROM ' + table + ' WHERE ' + columnName + ' = ?',
+      [value]
+    );
+  } catch(e) {
+    Logger.log('[DB] findRows error (' + sheetName + '): ' + e.message);
     return [];
   }
 }
 
+/**
+ * Updates a row in Turso identified by idColumn = idValue.
+ */
 function updateRow(sheetName, idColumn, idValue, updates) {
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
   try {
-    var sheet = getSheet_(sheetName);
-    var headers = getHeaders_(sheet);
-    var data = sheet.getDataRange().getValues();
-
-    var colIndex = headers.indexOf(idColumn);
-    if (colIndex === -1) {
-      Logger.log('[DatabaseSetup] updateRow: column not found: ' + idColumn);
-      return false;
-    }
-
-    updates.updated_at = new Date();
-
-    for (var r = 1; r < data.length; r++) {
-      if (String(data[r][colIndex]) === String(idValue)) {
-        // Patch fields in-memory, then write the entire row back in one
-        // setValues() call.  Old approach: N setValue() calls (one per field).
-        // New approach: 1 setValues([row]) call regardless of field count.
-        for (var key in updates) {
-          if (!updates.hasOwnProperty(key)) continue;
-          var ci = headers.indexOf(key);
-          if (ci !== -1) data[r][ci] = updates[key];
-        }
-        sheet.getRange(r + 1, 1, 1, headers.length).setValues([data[r]]);
-        clearSheetCache(sheetName);
-        return true;
-      }
-    }
-    return false;
-  } catch (e) {
-    Logger.log('[DatabaseSetup] updateRow error (' + sheetName + '): ' + e.message);
+    updates.updated_at = new Date().toISOString();
+    var stmt = _buildUpdate(table, idColumn, idValue, updates);
+    if (stmt) tursoWrite(stmt.sql, stmt.args);
+    clearSheetCache(sheetName);
+    return true;
+  } catch(e) {
+    Logger.log('[DB] updateRow error (' + sheetName + '): ' + e.message);
     return false;
   }
 }
 
+/**
+ * Soft-deletes (status = DELETED) or hard-deletes a row from Turso.
+ */
 function deleteRow(sheetName, idColumn, idValue, hardDelete) {
-  if (hardDelete) {
-    try {
-      var sheet = getSheet_(sheetName);
-      var headers = getHeaders_(sheet);
-      var data = sheet.getDataRange().getValues();
-      var colIndex = headers.indexOf(idColumn);
-      if (colIndex === -1) return false;
-
-      for (var r = data.length - 1; r >= 1; r--) {
-        if (String(data[r][colIndex]) === String(idValue)) {
-          sheet.deleteRow(r + 1);
-          return true;
-        }
-      }
-      return false;
-    } catch (e) {
-      Logger.log('[DatabaseSetup] deleteRow error (' + sheetName + '): ' + e.message);
-      return false;
+  var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
+  try {
+    if (hardDelete) {
+      tursoWrite('DELETE FROM ' + table + ' WHERE ' + idColumn + ' = ?', [idValue]);
+    } else {
+      tursoWrite(
+        'UPDATE ' + table + ' SET status = ?, updated_at = ? WHERE ' + idColumn + ' = ?',
+        ['DELETED', new Date().toISOString(), idValue]
+      );
     }
+    clearSheetCache(sheetName);
+    return true;
+  } catch(e) {
+    Logger.log('[DB] deleteRow error (' + sheetName + '): ' + e.message);
+    return false;
   }
-  // Soft delete: set status to DELETED
-  return updateRow(sheetName, idColumn, idValue, {
-    status: 'DELETED',
-    updated_at: new Date(),
-  });
 }
 
 // ============================================================================
@@ -311,53 +265,7 @@ function deleteRow(sheetName, idColumn, idValue, hardDelete) {
 // ============================================================================
 
 function getIdField(sheetName) {
-  var idFields = {
-    'Countries': 'country_code',
-    'Segments': 'segment_id',
-    'Customers': 'customer_id',
-    'Contacts': 'contact_id',
-    'Users': 'user_id',
-    'Teams': 'team_id',
-    'Tickets': 'ticket_id',
-    'TicketComments': 'comment_id',
-    'TicketAttachments': 'attachment_id',
-    'TicketHistory': 'history_id',
-    'Orders': 'order_id',
-    'OrderLines': 'line_id',
-    'OrderStatusHistory': 'history_id',
-    'RecurringSchedule': 'schedule_id',
-    'RecurringScheduleLines': 'line_id',
-    'Products': 'product_id',
-    'Depots': 'depot_id',
-    'PriceList': 'price_id',
-    'PriceListItems': 'item_id',
-    'DeliveryLocations': 'location_id',
-    'Documents': 'document_id',
-    'Vehicles': 'vehicle_id',
-    'Drivers': 'driver_id',
-    'SLAConfig': 'sla_id',
-    'BusinessHours': 'hours_id',
-    'Holidays': 'holiday_id',
-    'ChurnRiskFactors': 'factor_id',
-    'RetentionActivities': 'activity_id',
-    'Notifications': 'notification_id',
-    'NotificationPreferences': 'preference_id',
-    'KnowledgeCategories': 'category_id',
-    'KnowledgeArticles': 'article_id',
-    'AuditLog': 'log_id',
-    'Sessions': 'session_id',
-    'IntegrationLog': 'log_id',
-    'JobQueue': 'job_id',
-    'Config': 'config_key',
-    'NotificationTemplates': 'template_id',
-    'Invoices': 'invoice_id',
-    'ApprovalWorkflows': 'workflow_id',
-    'PaymentUploads': 'upload_id',
-    'SLAData': 'log_id',
-    'POApprovals': 'po_number',
-    'PasswordResets': 'email',
-  };
-  return idFields[sheetName] || null;
+  return PK_MAP[sheetName] || null;
 }
 
 // ============================================================================
@@ -380,6 +288,7 @@ function generateIdForSheet(sheetName) {
     'AuditLog': 'LOG', 'Sessions': 'SES', 'IntegrationLog': 'INT',
     'JobQueue': 'JOB',
     'Invoices': 'INV', 'ApprovalWorkflows': 'WF', 'PaymentUploads': 'PUP',
+    'SignupRequests': 'SRQ', 'StaffMessages': 'MSG',
   };
   var prefix = prefixes[sheetName] || 'REC';
   return generateId(prefix);
@@ -389,7 +298,7 @@ function generateUUID() { return Utilities.getUuid(); }
 
 function generateId(prefix) {
   var timestamp = Date.now().toString(36).toUpperCase();
-  var random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  var random    = Math.random().toString(36).substring(2, 8).toUpperCase();
   return prefix + timestamp + random;
 }
 
@@ -398,20 +307,20 @@ function generateId(prefix) {
 // ============================================================================
 
 function generateTicketNumber(countryCode) {
-  var year = new Date().getFullYear();
+  var year   = new Date().getFullYear();
   var prefix = 'TKT-' + countryCode + '-' + year;
-  var data = getSheetData('Tickets');
-  var count = data.filter(function(d) {
+  var data   = getSheetData('Tickets');
+  var count  = data.filter(function(d) {
     return d.ticket_number && String(d.ticket_number).indexOf(prefix) === 0;
   }).length;
   return prefix + '-' + String(count + 1).padStart(6, '0');
 }
 
 function generateOrderNumber(countryCode) {
-  var year = new Date().getFullYear();
+  var year   = new Date().getFullYear();
   var prefix = 'ORD-' + countryCode + '-' + year;
-  var data = getSheetData('Orders');
-  var count = data.filter(function(d) {
+  var data   = getSheetData('Orders');
+  var count  = data.filter(function(d) {
     return d.order_number && String(d.order_number).indexOf(prefix) === 0;
   }).length;
   return prefix + '-' + String(count + 1).padStart(6, '0');
@@ -419,8 +328,8 @@ function generateOrderNumber(countryCode) {
 
 function generateAccountNumber(countryCode) {
   var prefix = 'HASS-' + countryCode;
-  var data = getSheetData('Customers');
-  var count = data.filter(function(d) {
+  var data   = getSheetData('Customers');
+  var count  = data.filter(function(d) {
     return d.account_number && String(d.account_number).indexOf(prefix) === 0;
   }).length;
   return prefix + '-' + String(count + 1).padStart(6, '0');
@@ -431,7 +340,7 @@ function generateAccountNumber(countryCode) {
 // ============================================================================
 
 function getCurrentTimestamp() { return new Date(); }
-function getCurrentDate() { return new Date(); }
+function getCurrentDate()      { return new Date(); }
 
 // ============================================================================
 // AUDIT & CONFIG
@@ -440,44 +349,44 @@ function getCurrentDate() { return new Date(); }
 function logAudit(entityType, entityId, action, actorType, actorId, actorEmail, changes, metadata) {
   try {
     appendRow('AuditLog', {
-      log_id: generateUUID(),
-      entity_type: entityType,
-      entity_id: entityId,
-      action: action,
-      actor_type: actorType,
-      actor_id: actorId,
-      actor_email: actorEmail,
-      actor_ip: (metadata && metadata.ip) || '',
-      actor_user_agent: (metadata && metadata.userAgent) || '',
-      changes: JSON.stringify(changes || {}),
-      metadata: JSON.stringify(metadata || {}),
-      country_code: (metadata && metadata.countryCode) || '',
-      created_at: new Date(),
+      log_id:           generateUUID(),
+      entity_type:      entityType,
+      entity_id:        entityId,
+      action:           action,
+      actor_type:       actorType,
+      actor_id:         actorId,
+      actor_email:      actorEmail,
+      actor_ip:         (metadata && metadata.ip)          || '',
+      actor_user_agent: (metadata && metadata.userAgent)   || '',
+      changes:          JSON.stringify(changes  || {}),
+      metadata:         JSON.stringify(metadata || {}),
+      country_code:     (metadata && metadata.countryCode) || '',
+      created_at:       new Date().toISOString(),
     });
-  } catch (e) {
-    Logger.log('[DatabaseSetup] logAudit error: ' + e.message);
+  } catch(e) {
+    Logger.log('[DB] logAudit error: ' + e.message);
   }
 }
 
 function logIntegrationCall(integration, direction, endpoint, requestBody, responseBody, statusCode, durationMs) {
   try {
     appendRow('IntegrationLog', {
-      log_id: generateUUID(),
-      integration: integration,
-      direction: direction,
-      endpoint: endpoint,
-      method: '',
-      request_body: JSON.stringify(requestBody || {}),
+      log_id:        generateUUID(),
+      integration:   integration,
+      direction:     direction,
+      endpoint:      endpoint,
+      method:        '',
+      request_body:  JSON.stringify(requestBody  || {}),
       response_body: JSON.stringify(responseBody || {}),
-      status_code: statusCode,
+      status_code:   statusCode,
       error_message: '',
-      duration_ms: durationMs,
-      reference_type: '',
-      reference_id: '',
-      created_at: new Date(),
+      duration_ms:   durationMs,
+      reference_type:'',
+      reference_id:  '',
+      created_at:    new Date().toISOString(),
     });
-  } catch (e) {
-    Logger.log('[DatabaseSetup] logIntegrationCall error: ' + e.message);
+  } catch(e) {
+    Logger.log('[DB] logIntegrationCall error: ' + e.message);
   }
 }
 
@@ -497,20 +406,20 @@ function setConfig(key, value, updatedBy) {
   if (existing) {
     return updateRow('Config', 'config_key', key, {
       config_value: value,
-      updated_by: updatedBy || 'SYSTEM',
+      updated_by:   updatedBy || 'SYSTEM',
     });
   }
   appendRow('Config', {
-    config_key: key,
+    config_key:   key,
     config_value: value,
-    value_type: 'STRING',
-    updated_by: updatedBy || 'SYSTEM',
+    value_type:   'STRING',
+    updated_by:   updatedBy || 'SYSTEM',
   });
   return true;
 }
 
 // ============================================================================
-// SCHEMA DEFINITIONS (reference only)
+// SCHEMA DEFINITIONS  (reference / validation only — not used for DB creation)
 // ============================================================================
 
 const SCHEMAS = {
@@ -530,7 +439,7 @@ const SCHEMAS = {
     validations: { contact_type: ['PRIMARY', 'BILLING', 'OPERATIONS', 'TECHNICAL', 'SECONDARY'], status: ['ACTIVE', 'INACTIVE', 'DELETED'] },
   },
   Users: {
-    headers: ['user_id', 'email', 'first_name', 'last_name', 'phone', 'role', 'team_id', 'country_code', 'countries_access', 'reports_to', 'can_approve_orders', 'approval_limit', 'max_tickets', 'status', 'created_at', 'updated_at'],
+    headers: ['user_id', 'email', 'first_name', 'last_name', 'phone', 'role', 'team_id', 'country_code', 'countries_access', 'reports_to', 'can_approve_orders', 'approval_limit', 'max_tickets', 'status', 'password_hash', 'created_at', 'updated_at'],
     validations: { role: ['SUPER_ADMIN', 'ADMIN', 'CS_MANAGER', 'CS_AGENT', 'SALES_REP', 'COUNTRY_MANAGER', 'REGIONAL_MANAGER', 'GROUP_HEAD', 'VIEWER'], status: ['ACTIVE', 'INACTIVE', 'SUSPENDED'] },
   },
   Teams: {

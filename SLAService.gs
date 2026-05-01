@@ -130,8 +130,7 @@ function parseFilters(filters, affiliate) {
 
 function getStaffList() {
   try {
-    var ss = getSpreadsheet();
-    var users = sheetToObjects(ss.getSheetByName('Users'));
+    var users = getSheetData('Users');
     var staff = users
       .filter(function(u){ return u.status === 'ACTIVE'; })
       .map(function(u){
@@ -157,9 +156,8 @@ function getStaffList() {
 // Derives country_code from affiliate name. Calculates SLA booleans inline.
 // ============================================================================
 function getSLAAnalytics(filters, affiliateFilter) {
-  var ss      = getSpreadsheet();
-  var slaData = sheetToObjects(ss.getSheetByName('SLAData'))    || [];
-  var poData  = sheetToObjects(ss.getSheetByName('POApprovals')) || [];
+  var slaData = getSheetData('SLAData')    || [];
+  var poData  = getSheetData('POApprovals') || [];
   var f       = parseFilters(filters, affiliateFilter);
 
   var resolveCC = slaResolveCC_;
@@ -353,11 +351,10 @@ function getSLAAnalytics(filters, affiliateFilter) {
 // getExternalSLAAnalytics — UNCHANGED from v1.0.0
 // ============================================================================
 function getExternalSLAAnalytics(filters, affiliateFilter) {
-  var ss       = getSpreadsheet();
-  var tickets  = sheetToObjects(ss.getSheetByName('Tickets'));
-  var comments = sheetToObjects(ss.getSheetByName('TicketComments'));
-  var orders   = sheetToObjects(ss.getSheetByName('Orders'));
-  var users    = sheetToObjects(ss.getSheetByName('Users'));
+  var tickets  = getSheetData('Tickets');
+  var comments = getSheetData('TicketComments');
+  var orders   = getSheetData('Orders');
+  var users    = getSheetData('Users');
   var f        = parseFilters(filters, affiliateFilter);
   var affMap   = { KE:'HPK', UG:'HPU', TZ:'HPT', RW:'HPR', SS:'HSS', ZM:'HPZ', DRC:'HPC' };
 
@@ -543,8 +540,7 @@ function debugExternalSLA() {
 
 function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
   try {
-    var ss      = getSpreadsheet();
-    var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
+    var slaData = getSheetData('SLAData') || [];
     var f       = parseFilters(filters, affiliateFilter);
 
     var rows = slaData.filter(function(r) {
@@ -581,8 +577,7 @@ function getFinanceApproverDetail(approverName, filters, affiliateFilter) {
 
 function getPOApproverDetail(approverName, filters, affiliateFilter) {
   try {
-    var ss     = getSpreadsheet();
-    var poData = sheetToObjects(ss.getSheetByName('POApprovals')) || [];
+    var poData = getSheetData('POApprovals') || [];
     var f      = parseFilters(filters, affiliateFilter);
 
     var STEPS = ['first','second','third','fourth','fifth','sixth','seventh'];
@@ -623,8 +618,7 @@ function getPOApproverDetail(approverName, filters, affiliateFilter) {
 
 function getAffiliateDetail(affiliateLabel, filters) {
   try {
-    var ss      = getSpreadsheet();
-    var slaData = sheetToObjects(ss.getSheetByName('SLAData')) || [];
+    var slaData = getSheetData('SLAData') || [];
     var f       = parseFilters(filters, 'ALL');
 
     var rows = slaData.filter(function(r) {

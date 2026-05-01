@@ -59,24 +59,10 @@ function serveStaffDashboard(session, token) {
 function serveCustomerPortal(session, token) {
   var customerId = '';
   try {
-    var ss = getSpreadsheet();
-    var sheet = ss.getSheetByName('Contacts');
-    if (sheet) {
-      var data = sheet.getDataRange().getValues();
-      var h = data[0].map(function(x){ return String(x||'').toLowerCase().trim(); });
-      var cidCol  = h.indexOf('contact_id');
-      var custCol = h.indexOf('customer_id');
-      var nameCol = h.indexOf('first_name');
-      var lastCol = h.indexOf('last_name');
-      var name = '';
-      for (var r = 1; r < data.length; r++) {
-        if (String(data[r][cidCol]||'').trim() === session.userId) {
-          customerId = String(data[r][custCol]||'').trim();
-          name = String(data[r][nameCol]||'').trim() + ' ' + String(data[r][lastCol]||'').trim();
-          break;
-        }
-      }
-      session.name = name.trim();
+    var contact = findRow('Contacts', 'contact_id', session.userId);
+    if (contact) {
+      customerId   = String(contact.customer_id || '').trim();
+      session.name = (String(contact.first_name || '').trim() + ' ' + String(contact.last_name || '').trim()).trim();
     }
   } catch(e) { Logger.log('serveCustomerPortal: ' + e.message); }
 
