@@ -89,42 +89,34 @@ function loginUser(params) {
 }
 
 function findStaffByEmail(email, hashed) {
-  var rows = getSheetData('Users');
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    if (String(row.email || '').trim().toLowerCase() !== email) continue;
-    var status = String(row.status || '').toUpperCase();
-    if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive. Contact your administrator.' };
-    if (status === 'LOCKED')   return { found: false, error: 'Your account is locked. Contact your administrator.' };
-    if (isDateInFuture(row.locked_until))
-      return { found: false, error: 'Account temporarily locked. Try again later.' };
-    var storedHash = String(row.password_hash || '').trim();
-    if (storedHash && storedHash !== hashed)
-      return { found: false, wrongPassword: true, error: 'Incorrect password.' };
-    return { found: true, user: row };
-  }
-  return { found: false };
+  var row = findRow('Users', 'email', email);
+  if (!row) return { found: false };
+  var status = String(row.status || '').toUpperCase();
+  if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive. Contact your administrator.' };
+  if (status === 'LOCKED')   return { found: false, error: 'Your account is locked. Contact your administrator.' };
+  if (isDateInFuture(row.locked_until))
+    return { found: false, error: 'Account temporarily locked. Try again later.' };
+  var storedHash = String(row.password_hash || '').trim();
+  if (storedHash && storedHash !== hashed)
+    return { found: false, wrongPassword: true, error: 'Incorrect password.' };
+  return { found: true, user: row };
 }
 
 function findCustomerByEmail(email, hashed) {
-  var rows = getSheetData('Contacts');
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    if (String(row.email || '').trim().toLowerCase() !== email) continue;
-    var portalUser = String(row.is_portal_user || '').toUpperCase();
-    if (portalUser === 'FALSE' || portalUser === '0')
-      return { found: false, error: 'Portal access is not enabled for this account. Contact support.' };
-    var status = String(row.status || '').toUpperCase();
-    if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive.' };
-    if (status === 'LOCKED')   return { found: false, error: 'Your account is locked.' };
-    if (isDateInFuture(row.locked_until))
-      return { found: false, error: 'Account temporarily locked. Try again later.' };
-    var storedHash = String(row.password_hash || '').trim();
-    if (storedHash && storedHash !== hashed)
-      return { found: false, wrongPassword: true, error: 'Incorrect password.' };
-    return { found: true, contact: row };
-  }
-  return { found: false };
+  var row = findRow('Contacts', 'email', email);
+  if (!row) return { found: false };
+  var portalUser = String(row.is_portal_user || '').toUpperCase();
+  if (portalUser === 'FALSE' || portalUser === '0')
+    return { found: false, error: 'Portal access is not enabled for this account. Contact support.' };
+  var status = String(row.status || '').toUpperCase();
+  if (status === 'INACTIVE') return { found: false, error: 'Your account is inactive.' };
+  if (status === 'LOCKED')   return { found: false, error: 'Your account is locked.' };
+  if (isDateInFuture(row.locked_until))
+    return { found: false, error: 'Account temporarily locked. Try again later.' };
+  var storedHash = String(row.password_hash || '').trim();
+  if (storedHash && storedHash !== hashed)
+    return { found: false, wrongPassword: true, error: 'Incorrect password.' };
+  return { found: true, contact: row };
 }
 
 // ================================================================
