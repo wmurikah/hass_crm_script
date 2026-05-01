@@ -124,40 +124,32 @@ function findCustomerByEmail(email, hashed) {
 // ================================================================
 
 function createSession(userId, userType, role, hoursValid) {
-  var rawToken  = Utilities.getUuid() + Utilities.getUuid().replace(/-/g, '');
+  var rawToken  = Utilities.getUuid() + Date.now().toString(36);
   var tokenHash = hashPassword(rawToken);
-  var now       = new Date();
-  var expiresAt = new Date(now.getTime() + hoursValid * 3600000);
-  var sessionId = 'SES' + Utilities.getUuid().replace(/-/g, '').substring(0, 16).toUpperCase();
-  appendRow('Sessions', {
-    session_id: sessionId,
-    user_type:  userType,
-    user_id:    userId,
-    token_hash: tokenHash,
-    role:       role,
-    is_active:  true,
-    expires_at: expiresAt.toISOString(),
-    created_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  });
+  var sessionId = generateUUID();
+  var now       = new Date().toISOString();
+  var expiresAt = new Date(Date.now() + hoursValid * 3600000).toISOString();
+  tursoWrite(
+    'INSERT INTO sessions (session_id, user_id, user_type, role, token_hash, ' +
+    'is_active, expires_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
+    [sessionId, userId, userType, role, tokenHash, 1, expiresAt, now, now]
+  );
   return rawToken;
 }
 
 function checkSession(params) {
   var token = String(params.token || '').trim();
-  if (!token) return { valid: false, reason: 'no_token' };
+  if (!token) return { valid: false };
   var tokenHash = hashPassword(token);
-  var row = findRow('Sessions', 'token_hash', tokenHash);
-  if (!row) return { valid: false, reason: 'not_found' };
-  if (String(row.is_active || '').toUpperCase() === 'FALSE' || row.is_active === false || row.is_active === '0')
-    return { valid: false, reason: 'logged_out' };
-  if (row.expires_at && new Date(row.expires_at) < new Date())
-    return { valid: false, reason: 'expired' };
+  var session = findRow('Sessions', 'token_hash', tokenHash);
+  if (!session) return { valid: false };
+  if (session.is_active != 1) return { valid: false };
+  if (new Date(session.expires_at) < new Date()) return { valid: false };
   return {
     valid:    true,
-    userId:   String(row.user_id   || ''),
-    userType: String(row.user_type || ''),
-    role:     String(row.role      || ''),
+    userId:   session.user_id,
+    userType: session.user_type,
+    role:     session.role,
     token:    token,
   };
 }
@@ -166,7 +158,7 @@ function logoutUser(params) {
   var token = String(params.token || '').trim();
   if (!token) return { success: true };
   var tokenHash = hashPassword(token);
-  updateRow('Sessions', 'token_hash', tokenHash, { is_active: false });
+  updateRow('Sessions', 'token_hash', tokenHash, { is_active: 0 });
   return { success: true };
 }
 
