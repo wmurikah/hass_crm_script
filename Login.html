@@ -1142,9 +1142,6 @@ body {
       }).getLogoUrl();
 
       // Load background image from Drive
-      google.script.run.withSuccessHandler(function(url) {
-        if (url) document.documentElement.style.setProperty('--bg-image', 'url(' + url + ')');
-      }).getBackgroundUrl();
     }
 
     // If already have a valid token, redirect immediately
@@ -1914,7 +1911,8 @@ body {
 
     // Redirect directly to the portal URL — no intermediate staging screen
     setTimeout(function() {
-      window.location.href = result.redirectUrl;
+      var base = window.location.href.split('?')[0];
+      window.location.href = base + '?token=' + result.token;
     }, 8600);
   };
 
