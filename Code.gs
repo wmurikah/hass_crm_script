@@ -1,7 +1,7 @@
 /**
  * HASS PETROLEUM CMS - MAIN ENTRY POINT
  * Version: 2.0.0
- * Database: Google Sheets (SPREADSHEET_ID in Script Properties)
+ * Database: Turso (libSQL) — primary
  */
 
 function doGet(e) {
@@ -42,11 +42,11 @@ function serveStaffDashboard(session, token) {
   var tmpl = HtmlService.createTemplateFromFile('Staffdashboard');
   var scriptUrl = ScriptApp.getService().getUrl();
   tmpl.SESSION = JSON.stringify({
-    userId:   session.userId,
-    userType: 'STAFF',
-    role:     session.role,
-    token:    token,
-    name:     '',
+    userId:    session.userId,
+    userType:  'STAFF',
+    role:      session.role,
+    token:     token,
+    name:      '',
     scriptUrl: scriptUrl
   });
   tmpl.scriptUrl = scriptUrl;
@@ -67,7 +67,12 @@ function serveCustomerPortal(session, token) {
   } catch(e) { Logger.log('serveCustomerPortal: ' + e.message); }
 
   if (!customerId) {
-    return HtmlService.createHtmlOutput('<div style="font-family:sans-serif;padding:40px;text-align:center"><h2>Account Not Linked</h2><p>Your portal account is not linked to a customer record. Please contact support@hasspetroleum.com</p></div>').setTitle('Account Error');
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:40px;text-align:center">' +
+      '<h2>Account Not Linked</h2>' +
+      '<p>Your portal account is not linked to a customer record. ' +
+      'Please contact support@hasspetroleum.com</p></div>'
+    ).setTitle('Account Error');
   }
 
   var tmpl = HtmlService.createTemplateFromFile('Customerportal');
@@ -104,7 +109,6 @@ function doPost(e) {
     var service = params.service;
 
     // --- Authentication guard ---
-    // All services except 'auth' require a valid session token.
     if (AUTHENTICATED_SERVICES_.indexOf(service) !== -1) {
       var token = String(params.token || '').trim();
       if (!token) {
@@ -114,26 +118,25 @@ function doPost(e) {
       if (!session.valid) {
         return _jsonResponse_({ success: false, error: 'Session expired or invalid.', code: 'UNAUTHORIZED' });
       }
-      // Attach validated session to params so handlers can use it without re-validating.
       params._session = session;
     }
 
     var result;
     switch (service) {
-      case 'auth':         result = handleAuthRequest(params);         break;
-      case 'tickets':      result = handleTicketRequest(params);       break;
-      case 'orders':       result = handleOrderRequest(params);        break;
-      case 'customers':    result = handleCustomerRequest(params);     break;
-      case 'documents':    result = handleDocumentRequest(params);     break;
-      case 'knowledge':    result = handleKnowledgeRequest(params);    break;
-      case 'notifications':result = handleNotificationRequest(params); break;
-      case 'integrations': result = handleIntegrationRequest(params);  break;
-      case 'sla':          result = handleSLARequest(params);          break;
-      case 'chat':         result = handleChatRequest(params);         break;
-      case 'settings':     result = handleSettingsRequest(params);     break;
-      case 'upload':       result = handleDataUploadRequest(params);   break;
-      case 'dashboard':    result = handleDashboardRequest(params);    break;
-      case 'users':        result = handleUserRequest(params);         break;
+      case 'auth':          result = handleAuthRequest(params);         break;
+      case 'tickets':       result = handleTicketRequest(params);       break;
+      case 'orders':        result = handleOrderRequest(params);        break;
+      case 'customers':     result = handleCustomerRequest(params);     break;
+      case 'documents':     result = handleDocumentRequest(params);     break;
+      case 'knowledge':     result = handleKnowledgeRequest(params);    break;
+      case 'notifications': result = handleNotificationRequest(params); break;
+      case 'integrations':  result = handleIntegrationRequest(params);  break;
+      case 'sla':           result = handleSLARequest(params);          break;
+      case 'chat':          result = handleChatRequest(params);         break;
+      case 'settings':      result = handleSettingsRequest(params);     break;
+      case 'upload':        result = handleDataUploadRequest(params);   break;
+      case 'dashboard':     result = handleDashboardRequest(params);    break;
+      case 'users':         result = handleUserRequest(params);         break;
       default:
         result = { success: false, error: 'Unknown service: ' + service };
     }
@@ -151,51 +154,34 @@ function _jsonResponse_(payload) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * Handles customer service requests.
- * @param {Object} params - Request parameters
- * @returns {Object} Response
- */
 function handleCustomerRequest(params) {
   try {
-    const action = params.action;
-
+    var action = params.action;
     switch (action) {
       case 'get':
         return { success: true, data: getById('Customers', params.id) };
-
       case 'list':
         return findWhere('Customers', params.conditions || {}, params.options || {});
-
       case 'search':
         return searchRecords('Customers', params.searchText,
           params.searchFields || ['company_name', 'trading_name', 'account_number'],
           params.filters || {}, params.options || {});
-
       case 'create':
         return createRecord('Customers', params.data, params.context);
-
       case 'update':
         return updateRecord('Customers', params.id, params.data, params.context);
-
       case 'customer360':
         return getCustomer360(params.customerId);
-
       case 'creditSummary':
         return getCustomerCreditSummary(params.customerId);
-
       case 'documents':
         return getCustomerDocuments(params.customerId, params.options || {});
-
       case 'documentStatus':
         return getDocumentCompletionStatus(params.customerId);
-
       case 'getConsumption':
         return getCustomerConsumption(params.customerId, params.period);
-
       case 'getPriceList':
         return getCustomerPriceList(params.customerId);
-
       default:
         return { success: false, error: 'Unknown customer action: ' + action };
     }
@@ -209,15 +195,7 @@ function processRequest(params) {
   return doPost({ postData: { contents: JSON.stringify(params) } });
 }
 
+// Background image removed — Login.html falls back to CSS gradient
 function getBackgroundUrl() {
-  try {
-    var folder = DriveApp.getFolderById('1AL9fUgYXM9DXj9-X_0YonrloqCXat2wq');
-    var files = folder.getFilesByName('backround.png');
-    if (files.hasNext()) {
-      var file = files.next();
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      return 'https://lh3.googleusercontent.com/d/' + file.getId();
-    }
-  } catch(e) { Logger.log('getBackgroundUrl: ' + e.message); }
   return '';
 }
