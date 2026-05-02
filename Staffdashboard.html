@@ -1987,9 +1987,27 @@ var SESSION = (function(){
     return {};
   }
 })();
+
+/* Navigate the TOP frame back to the published script URL.
+ * Inside Apps Script's IFRAME sandbox, window.location.href is the inner
+ * googleusercontent.com userCodeAppPanel URL — navigating that URL with a
+ * query string returns blank because it never reaches doGet. We must use
+ * SESSION.scriptUrl (the canonical /dev or /exec URL the server injected)
+ * and target window.top so doGet runs.
+ */
+function _gotoLogin() {
+  var url = (SESSION && SESSION.scriptUrl) || '';
+  try {
+    if (url) { window.top.location.href = url; return; }
+    window.top.location.href = window.top.location.href.split('?')[0];
+  } catch (e) {
+    window.location.href = url || window.location.href.split('?')[0];
+  }
+}
+
 if (!SESSION || !SESSION.token) {
   if (window.console) console.warn('[SESSION] no token — returning to login');
-  window.location.href = window.location.href.split('?')[0];
+  _gotoLogin();
 }
 
 /* ── State ── */
@@ -2137,9 +2155,8 @@ function logoutUser() {
     google.script.run.handleAuthRequest({ action: 'logout', token: token });
   }
   sessionStorage.clear();
-  // Redirect to login — strip all query params
-  var base = window.location.href.split('?')[0];
-  window.location.href = base;
+  // Redirect to login — top-frame navigation to published script URL.
+  _gotoLogin();
 }
 
 /* ── Init ── */

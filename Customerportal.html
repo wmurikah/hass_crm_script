@@ -525,10 +525,24 @@ const SESSION = (function() {
   }
 })();
 
+/* Top-frame navigation back to the published script URL.
+ * window.location.href inside Apps Script's IFRAME sandbox is the inner
+ * googleusercontent.com URL — using it as a base produces a blank iframe.
+ */
+function _gotoLogin() {
+  var url = (SESSION && SESSION.scriptUrl) || '';
+  try {
+    if (url) { window.top.location.href = url; return; }
+    window.top.location.href = window.top.location.href.split('?')[0];
+  } catch (e) {
+    window.location.href = url || window.location.href.split('?')[0];
+  }
+}
+
 // Redirect if no valid session
 if (!SESSION || !SESSION.token) {
   if (window.console) console.warn('[SESSION] no token — returning to login');
-  window.location.href = window.location.href.split('?')[0];
+  _gotoLogin();
 }
 
 const AFFILIATE_MAP={KE:{code:'HPK',name:'Kenya'},UG:{code:'HPU',name:'Uganda'},TZ:{code:'HPT',name:'Tanzania'},RW:{code:'HPR',name:'Rwanda'},SS:{code:'HSS',name:'South Sudan'},ZM:{code:'HPZ',name:'Zambia'},DRC:{code:'HPC',name:'DR Congo'},HTW:{code:'HTW',name:'Terminal'}};
@@ -1011,8 +1025,7 @@ function doLogout(){
   if (typeof google !== 'undefined' && google.script && token) {
     google.script.run.handleAuthRequest({ action: 'logout', token: token });
   }
-  var base = window.location.href.split('?')[0];
-  window.location.href = base;
+  _gotoLogin();
 }
 
 function logoutUser() {
@@ -1021,8 +1034,7 @@ function logoutUser() {
     google.script.run.handleAuthRequest({ action: 'logout', token: token });
   }
   sessionStorage.clear();
-  var base = window.location.href.split('?')[0];
-  window.location.href = base;
+  _gotoLogin();
 }
 
 document.addEventListener('DOMContentLoaded',function(){
