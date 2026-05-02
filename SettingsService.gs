@@ -2,7 +2,7 @@
  * HASS PETROLEUM CMS - SETTINGS SERVICE
  * Version: 3.0.0
  *
- * Integration settings management — Config table in Turso.
+ * Integration settings management - Config table in Turso.
  * All reads/writes go to Turso. Backup actions delegated to BackupService.
  */
 
@@ -24,6 +24,13 @@ function handleSettingsRequest(params) {
       case 'runIncremental':        return runIncrementalBackup();
       case 'installTrigger':        return installBackupTrigger();
       case 'removeTrigger':         return removeBackupTrigger();
+      // OneDrive / SharePoint backup destination
+      case 'getOneDriveStatus':     return getOneDriveStatus();
+      case 'startOneDriveLogin':    return startOneDriveLogin();
+      case 'disconnectOneDrive':    return disconnectOneDrive();
+      case 'listOneDriveFolders':   return listOneDriveFolders(params.parentId);
+      case 'setOneDriveFolder':     return setOneDriveFolder(params.folderId, params.folderName);
+      case 'createOneDriveFolder':  return createOneDriveFolder(params.folderName, params.parentId);
       default:
         return { success: false, error: 'Unknown settings action: ' + action };
     }
@@ -65,7 +72,7 @@ function getSettings() {
 }
 
 /**
- * Saves settings to Config table in Turso — upserts key-value pairs.
+ * Saves settings to Config table in Turso - upserts key-value pairs.
  */
 function saveSettings(settings) {
   if (!settings || typeof settings !== 'object') {
@@ -157,7 +164,7 @@ function testWhatsApp() {
       method:             'post',
       contentType:        'application/json',
       headers:            { 'Authorization': 'Bearer ' + config.WA_TOKEN },
-      payload:            JSON.stringify({ messaging_product: 'whatsapp', to: '254700000000', type: 'text', text: { body: 'Hass Petroleum CMS — Test message' } }),
+      payload:            JSON.stringify({ messaging_product: 'whatsapp', to: '254700000000', type: 'text', text: { body: 'Hass Petroleum CMS - Test message' } }),
       muteHttpExceptions: true,
     });
     var code = response.getResponseCode();
@@ -177,7 +184,7 @@ function testTeams() {
     var response = UrlFetchApp.fetch(config.TEAMS_WEBHOOK_URL, {
       method:             'post',
       contentType:        'application/json',
-      payload:            JSON.stringify({ '@type': 'MessageCard', '@context': 'http://schema.org/extensions', summary: 'Hass CMS Test', themeColor: '1A237E', title: 'Hass Petroleum CMS — Test Notification', text: 'This is a test notification from the Hass CMS Settings panel.' }),
+      payload:            JSON.stringify({ '@type': 'MessageCard', '@context': 'http://schema.org/extensions', summary: 'Hass CMS Test', themeColor: '1A237E', title: 'Hass Petroleum CMS - Test Notification', text: 'This is a test notification from the Hass CMS Settings panel.' }),
       muteHttpExceptions: true,
     });
     var code = response.getResponseCode();
@@ -214,7 +221,7 @@ function testZoom() {
     });
     var code = meetResp.getResponseCode();
     return code >= 200 && code < 300
-      ? { success: true,  message: 'Zoom API connected — test meeting created' }
+      ? { success: true,  message: 'Zoom API connected - test meeting created' }
       : { success: false, message: 'Meeting creation failed: HTTP ' + code };
   } catch(e) {
     return { success: false, message: 'Zoom test failed: ' + e.message };
@@ -237,11 +244,146 @@ function testTwilio() {
     var code = response.getResponseCode();
     if (code === 200) {
       var body = JSON.parse(response.getContentText());
-      return { success: true, message: 'Connected — Account: ' + (body.friendly_name || body.sid) };
+      return { success: true, message: 'Connected - Account: ' + (body.friendly_name || body.sid) };
     }
     return { success: false, message: 'HTTP ' + code + ': Authentication failed' };
   } catch(e) {
     return { success: false, message: 'Twilio test failed: ' + e.message };
+  }
+}
+
+// ============================================================================
+// ONEDRIVE / SHAREPOINT BACKUP DESTINATION
+// ============================================================================
+
+var ONEDRIVE_KEYS_ = [
+  'ONEDRIVE_CLIENT_ID', 'ONEDRIVE_CLIENT_SECRET', 'ONEDRIVE_TENANT_ID',
+  'ONEDRIVE_REFRESH_TOKEN', 'ONEDRIVE_ACCOUNT_EMAIL',
+  'ONEDRIVE_FOLDER_ID', 'ONEDRIVE_FOLDER_PATH',
+];
+
+function getOneDriveStatus() {
+  var c = getConfigValues(ONEDRIVE_KEYS_);
+  var connected = !!(c.ONEDRIVE_REFRESH_TOKEN && c.ONEDRIVE_ACCOUNT_EMAIL);
+  return {
+    success: true,
+    connected: connected,
+    account_email: c.ONEDRIVE_ACCOUNT_EMAIL || '',
+    folder_path:   c.ONEDRIVE_FOLDER_PATH   || '',
+    folder_id:     c.ONEDRIVE_FOLDER_ID     || '',
+  };
+}
+
+function startOneDriveLogin() {
+  var c = getConfigValues(['ONEDRIVE_CLIENT_ID', 'ONEDRIVE_TENANT_ID']);
+  if (!c.ONEDRIVE_CLIENT_ID) {
+    return { success: false, error: 'Set ONEDRIVE_CLIENT_ID and ONEDRIVE_TENANT_ID in Config first.' };
+  }
+  var tenant = c.ONEDRIVE_TENANT_ID || 'common';
+  var redirect = ScriptApp.getService().getUrl() + '?onedrive_callback=1';
+  var scope = encodeURIComponent('offline_access Files.ReadWrite Sites.ReadWrite.All User.Read');
+  var url = 'https://login.microsoftonline.com/' + tenant + '/oauth2/v2.0/authorize'
+    + '?client_id=' + encodeURIComponent(c.ONEDRIVE_CLIENT_ID)
+    + '&response_type=code'
+    + '&redirect_uri=' + encodeURIComponent(redirect)
+    + '&response_mode=query'
+    + '&scope=' + scope;
+  return { success: true, auth_url: url };
+}
+
+function disconnectOneDrive() {
+  saveSettings({
+    ONEDRIVE_REFRESH_TOKEN: '',
+    ONEDRIVE_ACCOUNT_EMAIL: '',
+    ONEDRIVE_FOLDER_ID:     '',
+    ONEDRIVE_FOLDER_PATH:   '',
+  });
+  return { success: true, message: 'OneDrive disconnected.' };
+}
+
+function getOneDriveAccessToken_() {
+  var c = getConfigValues(['ONEDRIVE_CLIENT_ID','ONEDRIVE_CLIENT_SECRET','ONEDRIVE_TENANT_ID','ONEDRIVE_REFRESH_TOKEN']);
+  if (!c.ONEDRIVE_REFRESH_TOKEN) throw new Error('OneDrive not connected. Sign in first.');
+  var tenant = c.ONEDRIVE_TENANT_ID || 'common';
+  var resp = UrlFetchApp.fetch('https://login.microsoftonline.com/' + tenant + '/oauth2/v2.0/token', {
+    method: 'post',
+    payload: {
+      client_id:     c.ONEDRIVE_CLIENT_ID,
+      client_secret: c.ONEDRIVE_CLIENT_SECRET,
+      refresh_token: c.ONEDRIVE_REFRESH_TOKEN,
+      grant_type:    'refresh_token',
+      scope:         'offline_access Files.ReadWrite Sites.ReadWrite.All User.Read',
+    },
+    muteHttpExceptions: true,
+  });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error('OneDrive token refresh failed: HTTP ' + resp.getResponseCode());
+  }
+  var body = JSON.parse(resp.getContentText());
+  if (body.refresh_token && body.refresh_token !== c.ONEDRIVE_REFRESH_TOKEN) {
+    saveSettings({ ONEDRIVE_REFRESH_TOKEN: body.refresh_token });
+  }
+  return body.access_token;
+}
+
+function listOneDriveFolders(parentId) {
+  try {
+    var token = getOneDriveAccessToken_();
+    var url = parentId
+      ? 'https://graph.microsoft.com/v1.0/me/drive/items/' + parentId + '/children?$filter=folder ne null&$top=200'
+      : 'https://graph.microsoft.com/v1.0/me/drive/root/children?$filter=folder ne null&$top=200';
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + token },
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() !== 200) {
+      return { success: false, error: 'Graph API HTTP ' + resp.getResponseCode() };
+    }
+    var body = JSON.parse(resp.getContentText());
+    var folders = (body.value || []).filter(function(it){ return it.folder; }).map(function(it){
+      return { id: it.id, name: it.name, child_count: (it.folder && it.folder.childCount) || 0 };
+    });
+    return { success: true, folders: folders };
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function setOneDriveFolder(folderId, folderName) {
+  if (!folderId) return { success: false, error: 'No folder selected' };
+  saveSettings({
+    ONEDRIVE_FOLDER_ID:   folderId,
+    ONEDRIVE_FOLDER_PATH: folderName || folderId,
+  });
+  return { success: true };
+}
+
+function createOneDriveFolder(folderName, parentId) {
+  try {
+    if (!folderName) return { success: false, error: 'Folder name required' };
+    var token = getOneDriveAccessToken_();
+    var url = parentId
+      ? 'https://graph.microsoft.com/v1.0/me/drive/items/' + parentId + '/children'
+      : 'https://graph.microsoft.com/v1.0/me/drive/root/children';
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + token },
+      payload: JSON.stringify({ name: folderName, folder: {}, '@microsoft.graph.conflictBehavior': 'rename' }),
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() < 200 || resp.getResponseCode() >= 300) {
+      return { success: false, error: 'Create failed: HTTP ' + resp.getResponseCode() };
+    }
+    var body = JSON.parse(resp.getContentText());
+    saveSettings({
+      ONEDRIVE_FOLDER_ID:   body.id,
+      ONEDRIVE_FOLDER_PATH: body.name,
+    });
+    return { success: true, folder_id: body.id, folder_name: body.name };
+  } catch(e) {
+    return { success: false, error: e.message };
   }
 }
 
@@ -251,7 +393,7 @@ function testEmail() {
     if (!email) return { success: false, message: 'Could not determine your email address' };
     MailApp.sendEmail({
       to:       email,
-      subject:  'Hass Petroleum CMS — Email Test',
+      subject:  'Hass Petroleum CMS - Email Test',
       htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;">'
         + '<h2 style="color:#1A237E;">Email Test Successful</h2>'
         + '<p>This confirms that email sending is working correctly from the Hass Petroleum CMS.</p>'

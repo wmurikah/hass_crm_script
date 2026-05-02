@@ -701,7 +701,7 @@ body {
   min-height: 16px;
 }
 
-/* Exit animation class — added by JS before redirect */
+/* Exit animation class - added by JS before redirect */
 #loginTransition.lt-exit .lt-wave {
   animation: ltWaveFall 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
@@ -888,7 +888,7 @@ body {
           </div>
           <div class="field-group">
             <label class="auth-label" for="signupAccountNumber">Hass Account Number</label>
-            <input class="auth-input" type="text" id="signupAccountNumber" placeholder="Optional — your Oracle EBS account number">
+            <input class="auth-input" type="text" id="signupAccountNumber" placeholder="Optional - your Oracle EBS account number">
             <div class="field-helper">If you already have an account with us, providing this speeds up verification.</div>
             <div class="field-error" id="signupAccountNumberError"></div>
           </div>
@@ -1101,7 +1101,7 @@ body {
       <button onclick="closePrivacyModal()" class="modal-close-btn">&#x2715;</button>
     </div>
     <div class="privacy-modal-body">
-      <p class="policy-meta">Hass Petroleum Group Privacy Policy &mdash; Customer &bull; Effective 2025 &bull; Approved by the Chief Executive Officer</p>
+      <p class="policy-meta">Hass Petroleum Group Privacy Policy - Customer &bull; Effective 2025 &bull; Approved by the Chief Executive Officer</p>
 
       <h4>What We Collect</h4>
       <p>Hass Petroleum collects personal data including your name, email address, phone number, company details, and transaction records to operate the customer portal and provide fuel ordering and delivery services.</p>
@@ -1150,7 +1150,7 @@ body {
    * Used for all post-login redirects. We must NOT rely on
    * window.location.href because, inside Apps Script's IFRAME web-app
    * sandbox, that returns the inner googleusercontent.com userCodeAppPanel
-   * URL — a single-use token URL that does NOT route through doGet.
+   * URL - a single-use token URL that does NOT route through doGet.
    * Navigating window.location.href to that URL with a `?token=` query
    * just produces a blank iframe (the symptom the user reported).
    * Setting window.top.location.href to the published /dev or /exec URL
@@ -1164,7 +1164,7 @@ body {
       // Navigate the top frame so doGet runs against the published URL.
       window.top.location.href = url;
     } catch (e) {
-      // Cross-origin write was blocked — fall back to navigating the iframe.
+      // Cross-origin write was blocked - fall back to navigating the iframe.
       window.location.href = url;
     }
   }
@@ -1949,14 +1949,14 @@ body {
     // Show the overlay
     overlay.style.display = 'flex';
 
-    // Animate progress bar — extended by 600ms so redirect happens at 8600ms without a staging splash
+    // Animate progress bar - extended by 600ms so redirect happens at 8600ms without a staging splash
     setTimeout(function() { bar.style.width='25%';  statusEl.textContent='Signing you in...'; },        800);
     setTimeout(function() { bar.style.width='50%';  statusEl.textContent='Loading your workspace...'; },2500);
     setTimeout(function() { bar.style.width='72%';  statusEl.textContent='Fetching your data...'; },    4500);
     setTimeout(function() { bar.style.width='88%';  statusEl.textContent='Almost ready...'; },           6500);
     setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  8000);
 
-    // Redirect directly to the portal URL — no intermediate staging screen.
+    // Redirect directly to the portal URL - no intermediate staging screen.
     // gotoApp uses window.top.location so doGet runs against the published URL.
     setTimeout(function() {
       gotoApp('?token=' + encodeURIComponent(result.token));

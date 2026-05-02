@@ -1,7 +1,7 @@
 /**
  * HASS PETROLEUM CMS - MAIN ENTRY POINT
  * Version: 2.0.0
- * Database: Turso (libSQL) — primary
+ * Database: Turso (libSQL) - primary
  */
 
 function doGet(e) {
@@ -10,7 +10,7 @@ function doGet(e) {
   var token  = String(params.token || '').trim();
   Logger.log('[Code] doGet page=' + page + ' tokenLen=' + token.length);
 
-  // No token and not explicitly requesting login — go to login
+  // No token and not explicitly requesting login - go to login
   if (!token && page !== 'login') return serveLoginPage('');
 
   // Validate token if present
@@ -35,7 +35,7 @@ function serveLoginPage(errorMessage) {
   tmpl.errorMessage = errorMessage || '';
   tmpl.scriptUrl    = ScriptApp.getService().getUrl();
   return tmpl.evaluate()
-    .setTitle('Hass Petroleum Group — Portal')
+    .setTitle('Hass Petroleum Group - Portal')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -55,7 +55,7 @@ function serveStaffDashboard(session, token) {
     });
     tmpl.scriptUrl = scriptUrl;
     var output = tmpl.evaluate()
-      .setTitle('Hass Petroleum — Staff Portal')
+      .setTitle('Hass Petroleum - Staff Portal')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     Logger.log('[Code] serveStaffDashboard rendered ' + output.getContent().length + ' chars');
@@ -105,7 +105,7 @@ function serveCustomerPortal(session, token) {
     });
     tmpl.scriptUrl = ScriptApp.getService().getUrl();
     var output = tmpl.evaluate()
-      .setTitle('Hass Petroleum — Customer Portal')
+      .setTitle('Hass Petroleum - Customer Portal')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
     Logger.log('[Code] serveCustomerPortal rendered ' + output.getContent().length + ' chars');
@@ -246,7 +246,7 @@ function processRequest(params) {
   }
 }
 
-// Background image removed — Login.html falls back to CSS gradient
+// Background image removed - Login.html falls back to CSS gradient
 function getBackgroundUrl() {
   return '';
 }

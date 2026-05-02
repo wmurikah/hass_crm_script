@@ -124,7 +124,7 @@ function addStaffUser(data) {
   try {
     MailApp.sendEmail({
       to:       data.email.trim(),
-      subject:  'Welcome to Hass Petroleum Portal — Your Account',
+      subject:  'Welcome to Hass Petroleum Portal - Your Account',
       htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;">'
         + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
         + '<p>Hi ' + data.first_name + ',</p>'
@@ -164,7 +164,7 @@ function getStaffUser(userId) {
 
 /**
  * Edits arbitrary user details (Super Admin power).
- * Whitelisted fields only — never password_hash, never user_id.
+ * Whitelisted fields only - never password_hash, never user_id.
  */
 function updateStaffUser(userId, data) {
   if (!userId || !data) return { success: false, error: 'userId and data required' };
@@ -245,7 +245,7 @@ function resetUserPassword(userId, userType) {
     try {
       MailApp.sendEmail({
         to:       email,
-        subject:  'Hass Petroleum Portal — Password Reset',
+        subject:  'Hass Petroleum Portal - Password Reset',
         htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;">'
           + '<h2 style="color:#1A237E;">Password Reset</h2>'
           + '<p>Hi ' + name + ',</p>'
@@ -368,7 +368,7 @@ function addCustomerContact(customerId, data, actorId) {
     try {
       MailApp.sendEmail({
         to:       email,
-        subject:  'Hass Petroleum Portal — Your Account',
+        subject:  'Hass Petroleum Portal - Your Account',
         htmlBody: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">'
           + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
           + '<p>Hi ' + (data.first_name || '') + ',</p>'
@@ -480,7 +480,7 @@ function createCustomerAccount(data, actorId) {
   try {
     MailApp.sendEmail({
       to:       email,
-      subject:  'Welcome to Hass Petroleum Portal — Account Created',
+      subject:  'Welcome to Hass Petroleum Portal - Account Created',
       htmlBody: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">'
         + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
         + '<p>Hi ' + (data.first_name || company) + ',</p>'
@@ -597,7 +597,7 @@ function rejectSignup(requestId, reason) {
     });
 
     try {
-      MailApp.sendEmail(req.email, 'Hass Petroleum Portal — Application Update',
+      MailApp.sendEmail(req.email, 'Hass Petroleum Portal - Application Update',
         'Dear ' + (req.first_name || req.company_name) + ',\n\n'
         + 'We have reviewed your portal access request. Unfortunately we are unable to approve it at this time.'
         + (reason ? '\n\nReason: ' + reason : '')

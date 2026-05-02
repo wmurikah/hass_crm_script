@@ -11,7 +11,7 @@
  * - getSLAAnalytics() updated to match actual SLAData sheet columns:
  *   document_number (was oracle_document_number)
  *   created_at      (was created_at_oracle)
- *   affiliate       (was country_code — now resolved to country code inline)
+ *   affiliate       (was country_code - now resolved to country code inline)
  *   oracle_approver (was finance_approver)
  *   finance_within_sla and la_within_sla are now calculated inline
  *   (they are not stored in the sheet)
@@ -149,7 +149,7 @@ function getStaffList() {
 }
 
 // ============================================================================
-// getSLAAnalytics — UPDATED v1.1.0
+// getSLAAnalytics - UPDATED v1.1.0
 // Reads actual SLAData sheet columns confirmed by diagnostic:
 //   affiliate, document_number, oracle_approver, finance_variance_min,
 //   la_variance_min, created_at, upload_batch_id
@@ -348,7 +348,7 @@ function getSLAAnalytics(filters, affiliateFilter) {
 }
 
 // ============================================================================
-// getExternalSLAAnalytics — UNCHANGED from v1.0.0
+// getExternalSLAAnalytics - UNCHANGED from v1.0.0
 // ============================================================================
 function getExternalSLAAnalytics(filters, affiliateFilter) {
   var tickets  = getSheetData('Tickets');

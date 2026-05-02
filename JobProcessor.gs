@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — JOB PROCESSOR
+ * HASS PETROLEUM CMS - JOB PROCESSOR
  * Version: 1.0.0
  *
  * Async job queue backed by the JobQueue sheet.
@@ -48,7 +48,7 @@ var JOB_RETRY_SECS    = [60, 300, 900];           // delay per attempt number
 function processJobQueue() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(JOB_LOCK_MS)) {
-    Logger.log('[JobProcessor] Lock busy — skipping this run');
+    Logger.log('[JobProcessor] Lock busy - skipping this run');
     return;
   }
   try {
@@ -308,7 +308,7 @@ function enqueueNotification(userId, userType, title, message, extra) {
 
 /**
  * Installs the 5-minute time-driven trigger for processJobQueue().
- * Safe to call multiple times — skips installation if already present.
+ * Safe to call multiple times - skips installation if already present.
  */
 function installJobProcessorTrigger() {
   var triggers = ScriptApp.getProjectTriggers();

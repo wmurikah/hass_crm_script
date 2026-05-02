@@ -544,6 +544,19 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .dash-card-body { font-size:13px; color:#64748b; }
 @media(max-width:900px){.dash-stat-row{grid-template-columns:repeat(2,1fr);}}
 
+/* State-of-the-art KPI cards */
+.dash-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s; }
+.dash-kpi-card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(15,23,42,0.08); }
+.dash-kpi-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent, #1A237E); border-radius:14px 0 0 14px; }
+.dash-kpi-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.dash-kpi-val { font-family:'Space Mono',monospace; font-size:24px; font-weight:700; color:#0D1442; line-height:1.1; }
+.dash-kpi-label { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-top:3px; }
+.dash-kpi-delta { font-size:11px; margin-top:4px; font-weight:600; }
+.dash-kpi-delta.up { color:#16a34a; }
+.dash-kpi-delta.down { color:#dc2626; }
+.dash-kpi-delta.flat { color:#94a3b8; }
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr !important;}}
+
 /* ── Data Upload Tab ── */
 .upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
 @media(max-width:900px){.upload-grid{grid-template-columns:1fr;}}
@@ -723,21 +736,80 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   <main id="mainContent">
 
     <div class="page-section" id="page-dashboard">
-      <div class="dash-welcome">
-        <h2 id="dashWelcomeHeading">Good morning</h2>
-        <p style="color:#64748b;font-size:14px;margin-top:4px;">Here is what is happening across the Hass Petroleum Group today.</p>
+      <div class="dash-welcome" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 id="dashWelcomeHeading">Good morning</h2>
+          <p style="color:#64748b;font-size:14px;margin-top:4px;" id="dashWelcomeSub">Here is what is happening across the Hass Petroleum Group today.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="dashHealthBadge" class="badge badge-secondary" style="font-size:11px;padding:6px 10px;border-radius:20px;">Loading...</span>
+          <button class="btn btn-outline btn-sm" onclick="loadDashboardHome()" title="Refresh">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div class="dash-stat-row" id="dashStatRow">
-        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatOpenTickets">--</div><div class="dash-stat-label">Open Tickets</div></div>
-        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatPendingOrders">--</div><div class="dash-stat-label">Pending Orders</div></div>
-        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatInTransit">--</div><div class="dash-stat-label">In Transit</div></div>
-        <div class="dash-stat-card"><div class="dash-stat-val" id="dStatUnreadChat">--</div><div class="dash-stat-label">Unread Messages</div></div>
+      <!-- Hero KPI Strip - operational pulse, not SLA averages -->
+      <div class="dash-kpi-strip" id="dashKpiStrip" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:18px;">
+        <div class="dash-kpi-card" style="--accent:#1A237E"><div class="dash-kpi-icon" style="background:rgba(26,35,126,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A237E" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div><div><div class="dash-kpi-val" id="dStatOpenTickets">--</div><div class="dash-kpi-label">Open Tickets</div><div class="dash-kpi-delta" id="dDeltaTickets">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#FF6F00"><div class="dash-kpi-icon" style="background:rgba(255,111,0,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div><div><div class="dash-kpi-val" id="dStatPendingOrders">--</div><div class="dash-kpi-label">Pending Orders</div><div class="dash-kpi-delta" id="dDeltaOrders">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#0d9488"><div class="dash-kpi-icon" style="background:rgba(13,148,136,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div><div><div class="dash-kpi-val" id="dStatInTransit">--</div><div class="dash-kpi-label">In Transit</div><div class="dash-kpi-delta" id="dDeltaTransit">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#7c3aed"><div class="dash-kpi-icon" style="background:rgba(124,58,237,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="dash-kpi-val" id="dStatPendingApproval">--</div><div class="dash-kpi-label">Awaiting Approval</div><div class="dash-kpi-delta" id="dDeltaApproval">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#16a34a"><div class="dash-kpi-icon" style="background:rgba(22,163,74,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div><div><div class="dash-kpi-val" id="dStatRevenueToday">--</div><div class="dash-kpi-label">Revenue Today</div><div class="dash-kpi-delta" id="dDeltaRevenue">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#dc2626"><div class="dash-kpi-icon" style="background:rgba(220,38,38,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div><div class="dash-kpi-val" id="dStatBreaches">--</div><div class="dash-kpi-label">SLA Breaches (24h)</div><div class="dash-kpi-delta" id="dDeltaBreach">&nbsp;</div></div></div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
-        <div class="dash-card" id="dashRecentTickets"><div class="dash-card-title">Recent Tickets</div><div class="dash-card-body" id="dashTicketList">Loading...</div></div>
-        <div class="dash-card" id="dashRecentOrders"><div class="dash-card-title">Recent Orders</div><div class="dash-card-body" id="dashOrderList">Loading...</div></div>
+      <!-- Live activity grid -->
+      <div class="dash-grid" style="display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-top:22px;">
+
+        <div class="dash-card" style="padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div>
+              <div class="dash-card-title">Operations Pulse</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Tickets opened, orders placed and deliveries completed in the last 14 days.</div>
+            </div>
+            <span style="font-size:10px;background:rgba(26,35,126,0.1);color:#1A237E;padding:3px 8px;border-radius:10px;font-weight:700;letter-spacing:0.4px;">LIVE</span>
+          </div>
+          <div style="height:240px;"><canvas id="dashPulseChart"></canvas></div>
+        </div>
+
+        <div class="dash-card" style="padding:20px;">
+          <div class="dash-card-title">Affiliate Activity</div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">Active orders by affiliate, last 30 days.</div>
+          <div style="height:240px;"><canvas id="dashAffiliateChart"></canvas></div>
+        </div>
+
+        <div class="dash-card" style="padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div class="dash-card-title">Customer Service Queue</div>
+            <a href="#" onclick="showPage('tickets');return false;" style="font-size:11px;color:#1A237E;text-decoration:none;font-weight:600;">View all</a>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Top open tickets ranked by priority and SLA risk.</div>
+          <div id="dashTicketList" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
+        </div>
+
+        <div class="dash-card" style="padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div class="dash-card-title">Recent Orders</div>
+            <a href="#" onclick="showPage('orders');return false;" style="font-size:11px;color:#1A237E;text-decoration:none;font-weight:600;">View all</a>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Last 5 orders across all affiliates.</div>
+          <div id="dashOrderList" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
+        </div>
+
+        <div class="dash-card" style="padding:20px;">
+          <div class="dash-card-title">System Channels</div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Health of integrations the portal depends on.</div>
+          <div id="dashChannelHealth" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
+        </div>
+
+        <div class="dash-card" style="padding:20px;">
+          <div class="dash-card-title">My Tasks</div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Items assigned to you.</div>
+          <div id="dashMyTasks" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
+        </div>
+
       </div>
     </div>
 
@@ -784,7 +856,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           </select>
         </div>
 
-        <!-- Month picker — shown only when period=month -->
+        <!-- Month picker - shown only when period=month -->
         <div class='sla-filter-group' id='filterMonthGroup' style='display:none'>
           <label class='filter-label'>Month</label>
           <select id='filterMonth' class='filter-select' onchange='applySLAFilters()'>
@@ -797,7 +869,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           </select>
         </div>
 
-        <!-- Custom range — shown only when period=custom -->
+        <!-- Custom range - shown only when period=custom -->
         <div class='sla-filter-group' id='filterCustomGroup' style='display:none'>
           <label class='filter-label'>From</label>
           <input type='month' id='filterCustomFrom' class='filter-input' onchange='applySLAFilters()'>
@@ -850,12 +922,12 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <!-- Charts Row -->
         <div class="sla-charts-row">
           <div class="sla-chart-card">
-            <div class="sla-chart-title">Finance Approval Time (minutes) — by Affiliate</div>
+            <div class="sla-chart-title">Finance Approval Time (minutes) - by Affiliate</div>
             <div class="sla-chart-subtitle">Time from order submission to finance approval</div>
             <div class="sla-chart-wrap"><canvas id="chartFinance"></canvas></div>
           </div>
           <div class="sla-chart-card">
-            <div class="sla-chart-title">Loading Authority Approval Time (minutes) — by Affiliate</div>
+            <div class="sla-chart-title">Loading Authority Approval Time (minutes) - by Affiliate</div>
             <div class="sla-chart-subtitle">Time from finance approval to loading authority issued</div>
             <div class="sla-chart-wrap"><canvas id="chartLA"></canvas></div>
           </div>
@@ -888,7 +960,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
         <!-- Approver Performance Leaderboard -->
         <div class="sla-chart-card">
-          <div class="sla-chart-title">Approver Performance</div>
+          <div class="sla-chart-title">Finance Approver Performance</div>
           <div class="sla-chart-subtitle">Individual staff approval times for the selected period</div>
           <table class="sla-table">
             <thead>
@@ -903,6 +975,80 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
               </tr>
             </thead>
             <tbody id="approverLeaderboardBody"></tbody>
+          </table>
+        </div>
+
+        <!-- PO SECTION -->
+        <div style="margin-top:32px;padding:18px 0 4px;border-top:2px solid #e2e8f0;">
+          <div style="font-size:18px;font-weight:700;color:#0D1442;display:flex;align-items:center;gap:10px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Purchase Order Approval Performance
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-top:4px;">Approval-chain SLAs for Oracle PO requisitions across all approver steps.</div>
+        </div>
+
+        <!-- PO KPI Row -->
+        <div class="sla-kpis" id="slaPOKpis">
+          <div class="kpi-card" style="--accent:#FF6F00"><div class="kpi-label">Avg PO Step Time</div><div class="kpi-value" id="kpiPOAvgStep">--</div><div class="kpi-sub">minutes &middot; Target: 120 min</div></div>
+          <div class="kpi-card" style="--accent:#16a34a"><div class="kpi-label">PO Steps Within SLA</div><div class="kpi-value" id="kpiPOWithinSLA">--</div><div class="kpi-sub">% within 120 min</div></div>
+          <div class="kpi-card" style="--accent:#0d9488"><div class="kpi-label">Total POs</div><div class="kpi-value" id="kpiPOTotal">--</div><div class="kpi-sub">approved POs in period</div></div>
+          <div class="kpi-card" style="--accent:#7c3aed"><div class="kpi-label">Active PO Approvers</div><div class="kpi-value" id="kpiPOActiveApprovers">--</div><div class="kpi-sub">staff in approval chain</div></div>
+        </div>
+
+        <!-- PO Charts Row -->
+        <div class="sla-charts-row">
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">Avg PO Approval Step Time by Affiliate</div>
+            <div class="sla-chart-subtitle">Average minutes per approver step in the chain</div>
+            <div class="sla-chart-wrap"><canvas id="chartPOAvg"></canvas></div>
+          </div>
+          <div class="sla-chart-card">
+            <div class="sla-chart-title">PO Volume by Affiliate</div>
+            <div class="sla-chart-subtitle">Number of approved POs in the selected period</div>
+            <div class="sla-chart-wrap"><canvas id="chartPOVolume"></canvas></div>
+          </div>
+        </div>
+
+        <!-- PO Approver Throughput Chart -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">PO Approver Throughput vs SLA</div>
+          <div class="sla-chart-subtitle">Top approvers by step volume and the percentage processed within the 120-minute SLA</div>
+          <div class="sla-chart-wrap"><canvas id="chartPOApprovers"></canvas></div>
+        </div>
+
+        <!-- PO By Affiliate Table -->
+        <div class="sla-chart-card" style="margin-bottom:24px;">
+          <div class="sla-chart-title">PO Performance Breakdown by Affiliate</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th>Affiliate</th>
+                <th>POs Approved</th>
+                <th>Avg Step Time (min)</th>
+                <th>% Within 120min</th>
+              </tr>
+            </thead>
+            <tbody id="poAffiliateBody"></tbody>
+          </table>
+        </div>
+
+        <!-- PO Approver Leaderboard -->
+        <div class="sla-chart-card">
+          <div class="sla-chart-title">PO Approver Leaderboard</div>
+          <div class="sla-chart-subtitle">Individual approver performance across the full PO approval chain</div>
+          <table class="sla-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Approver</th>
+                <th>Steps Approved</th>
+                <th>Avg Approval Time</th>
+                <th>Fastest</th>
+                <th>Slowest</th>
+                <th>Within SLA</th>
+              </tr>
+            </thead>
+            <tbody id="poApproverBody"></tbody>
           </table>
         </div>
 
@@ -1959,18 +2105,18 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
           <!-- Info Banner -->
           <div class="settings-help" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:12px 16px;border-radius:8px;margin-bottom:20px;">
-            <strong>Turso is the primary database.</strong> Google Sheets is a read-only backup snapshot.
+            <strong>Turso is the primary database.</strong> SharePoint / OneDrive is a read-only backup snapshot.
             The portal reads and writes exclusively from Turso. Backups copy changed rows
-            from Turso &rarr; Sheets automatically every 60 minutes. You can also trigger a backup manually at any time.
+            from Turso to your selected OneDrive folder automatically every 60 minutes. You can also trigger a backup manually at any time.
           </div>
 
           <!-- Status Card -->
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;" id="backupStatusGrid">
-            <div class="stat-card"><div class="stat-label">Last Backup</div><div class="stat-value" id="bkpLastAt" style="font-size:13px;">—</div></div>
-            <div class="stat-card"><div class="stat-label">Last Full Backup</div><div class="stat-value" id="bkpLastFullAt" style="font-size:13px;">—</div></div>
+            <div class="stat-card"><div class="stat-label">Last Backup</div><div class="stat-value" id="bkpLastAt" style="font-size:13px;">-</div></div>
+            <div class="stat-card"><div class="stat-label">Last Full Backup</div><div class="stat-value" id="bkpLastFullAt" style="font-size:13px;">-</div></div>
             <div class="stat-card"><div class="stat-label">Status</div><div id="bkpStatus"><span class="badge badge-secondary">NEVER</span></div></div>
-            <div class="stat-card"><div class="stat-label">Tables</div><div class="stat-value" id="bkpTables">—</div></div>
-            <div class="stat-card"><div class="stat-label">Rows Backed Up</div><div class="stat-value" id="bkpRows">—</div></div>
+            <div class="stat-card"><div class="stat-label">Tables</div><div class="stat-value" id="bkpTables">-</div></div>
+            <div class="stat-card"><div class="stat-label">Rows Backed Up</div><div class="stat-value" id="bkpRows">-</div></div>
           </div>
 
           <!-- Auto-Backup Toggle -->
@@ -1978,6 +2124,37 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
             <label style="font-weight:600;font-size:14px;color:#1e293b;flex:1;">Auto-backup every 60 minutes</label>
             <span id="bkpTriggerBadge" class="badge badge-secondary" style="font-size:11px;">Trigger Off</span>
             <button id="bkpTriggerToggle" class="btn btn-outline btn-sm" onclick="toggleAutoBackup()" style="min-width:90px;">Enable</button>
+          </div>
+
+          <!-- OneDrive / SharePoint Destination -->
+          <div style="margin-bottom:20px;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0078d4" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <div style="font-weight:700;font-size:14px;color:#1e293b;flex:1;">Microsoft OneDrive / SharePoint Destination</div>
+              <span id="oneDriveStatusBadge" class="badge badge-secondary" style="font-size:11px;">Not connected</span>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Sign in with a Microsoft 365 account, then pick or create the folder where backups should be written.</div>
+            <div id="oneDriveAccountInfo" style="display:none;font-size:13px;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+              <div><strong>Signed in as:</strong> <span id="oneDriveAccountEmail">-</span></div>
+              <div style="margin-top:4px;"><strong>Backup folder:</strong> <span id="oneDriveFolderPath" style="font-family:monospace;font-size:12px;">-</span></div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" id="btnOneDriveLogin" onclick="oneDriveLogin()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                Sign in with Microsoft
+              </button>
+              <button class="btn btn-outline btn-sm" id="btnOneDrivePickFolder" onclick="oneDrivePickFolder()" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                Select Folder
+              </button>
+              <button class="btn btn-outline btn-sm" id="btnOneDriveCreateFolder" onclick="oneDriveCreateFolder()" disabled>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                Create Folder
+              </button>
+              <button class="btn btn-outline btn-sm" id="btnOneDriveDisconnect" onclick="oneDriveDisconnect()" disabled>Disconnect</button>
+            </div>
+            <div id="oneDriveFolderBrowser" style="display:none;margin-top:12px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;max-height:240px;overflow-y:auto;"></div>
+            <div id="oneDriveResultMsg" style="display:none;margin-top:10px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
           </div>
 
           <!-- Backup Actions -->
@@ -2022,8 +2199,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
                     <tr><td class="col-required">APPROVAL_STATUS</td><td>APPROVE or REJECT</td></tr>
                     <tr><td class="col-required">LOADING_AUTHORITY_DATE</td><td>LA issued datetime</td></tr>
                     <tr><td class="col-required">LOADING_AUTHORITY_VARIANCE</td><td>Minutes to LA issuance</td></tr>
-                    <tr><td class="col-optional">AFFILIATE</td><td>Optional — falls back to filename detection</td></tr>
-                    <tr><td class="col-optional">ORDERED_ITEM</td><td>Optional — product code</td></tr>
+                    <tr><td class="col-optional">AFFILIATE</td><td>Optional - falls back to filename detection</td></tr>
+                    <tr><td class="col-optional">ORDERED_ITEM</td><td>Optional - product code</td></tr>
                   </tbody>
                 </table>
                 <div class="schema-legend" style="margin-top:6px;"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
@@ -2043,7 +2220,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
             <!-- PO Upload (was PUR) -->
             <div class="upload-section">
               <h3>PO Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Purchase Order Approval Chain)</span></h3>
-              <p class="upload-desc">Drop your Oracle PO export here. Supports multi-sheet workbooks (Product, LPG, Lubes, Local, Export).</p>
+              <p class="upload-desc">Drop your Oracle PO export here. Country is auto-detected from the filename (e.g. <code>PO-KE.xlsx</code>). Supports multi-sheet workbooks (Product, LPG, Lubes, Local, Export).</p>
               <details class="upload-schema-collapsed">
                 <summary>Column requirements <span style='color:#94a3b8;font-weight:400;'>(click to expand)</span></summary>
                 <table class="schema-table">
@@ -2055,27 +2232,12 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
                     <tr><td class="col-required">FIRST_APPROVER</td><td>First approver name</td></tr>
                     <tr><td class="col-required">FIRST_APPROVALS_VARIANCE</td><td>Minutes for first approval</td></tr>
                     <tr><td class="col-required">AUTHORIZATION_STATUS</td><td>APPROVED or REJECTED</td></tr>
-                    <tr><td class="col-optional">SECOND..SEVENTH_APPROVER / _DATE / _VARIANCE</td><td>Optional — additional chain steps</td></tr>
+                    <tr><td class="col-optional">SECOND..SEVENTH_APPROVER / _DATE / _VARIANCE</td><td>Optional additional chain steps</td></tr>
                     <tr><td class="col-optional">Req Description, NATURE, PURCHASE_ORDER_CREATED_BY</td><td>Optional metadata</td></tr>
                   </tbody>
                 </table>
                 <div class="schema-legend" style="margin-top:6px;"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
               </details>
-              <div class='form-group' style='margin-bottom:12px;'>
-                <label class='filter-label'>Affiliate (which country is this PUR file for?)</label>
-                <select id='purAffiliate' class='filter-select' style='width:100%;'>
-                  <option value=''>Select affiliate...</option>
-                  <option value='KE'>HPK &mdash; Kenya</option>
-                  <option value='UG'>HPU &mdash; Uganda</option>
-                  <option value='TZ'>HPT &mdash; Tanzania</option>
-                  <option value='RW'>HPR &mdash; Rwanda</option>
-                  <option value='SS'>HSS &mdash; South Sudan</option>
-                  <option value='ZM'>HPZ &mdash; Zambia</option>
-                  <option value='CD'>HPC &mdash; DRC</option>
-                  <option value='MW'>HPM &mdash; Malawi</option>
-                  <option value='SO'>HSO &mdash; Somalia</option>
-                </select>
-              </div>
               <div class="upload-drop-zone" id="purDropZone">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
                 <p>Drop your PO file here (.xls / .xlsx / .csv)</p>
@@ -2102,11 +2264,11 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </div>
       </div>
 
-      <!-- Oracle EBS Tab — Multi-transport Wizard -->
+      <!-- Oracle EBS Tab - Multi-transport Wizard -->
       <div class="settings-panel" id="tab-erp" style="display:none">
         <div class="settings-card">
           <div class="settings-help">
-            Oracle EBS lives in AWS. The portal supports several transports — pick whichever your EBS team has exposed.
+            Oracle EBS lives in AWS. The portal supports several transports - pick whichever your EBS team has exposed.
             The wizard below guides non-technical users through configuration and tests each transport.
           </div>
 
@@ -2124,7 +2286,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
           <!-- Transport-specific config (always visible) -->
           <details class="upload-schema-collapsed" style="margin-top:18px;">
-            <summary>Advanced — Edit raw transport settings</summary>
+            <summary>Advanced - Edit raw transport settings</summary>
             <div style="margin-top:10px;">
               <h4 style="font-size:13px;margin:12px 0 6px;color:#0D1442;">Transport selection</h4>
               <div class="form-group">
@@ -2194,7 +2356,33 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           </div>
           <div class="form-group"><label>Webhook URL</label><input data-setting-key="WA_WEBHOOK_URL" type="url" class="form-input" readonly style="background:#f8fafc"></div>
           <div class="form-group"><label>Webhook Verify Token</label><input data-setting-key="WA_VERIFY_TOKEN" type="text" class="form-input" placeholder="Your custom verification string"></div>
-          <div class="settings-actions">
+
+          <!-- WhatsApp SLA Scanner -->
+          <div style="margin-top:18px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+            <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:6px;">WhatsApp SLA Scanner</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Polls inbound messages every 60 seconds, matches them to open tickets and customers, and feeds first-response and resolution timings into External SLA metrics.</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Scan interval</label>
+                <select data-setting-key="WA_SCAN_INTERVAL_SEC" class="form-input">
+                  <option value="60">Every 60 seconds (default)</option>
+                  <option value="120">Every 2 minutes</option>
+                  <option value="300">Every 5 minutes</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Scanner status</label>
+                <div style="display:flex;align-items:center;gap:10px;padding-top:6px;">
+                  <span id="waScanBadge" class="badge badge-secondary" style="font-size:11px;">Inactive</span>
+                  <button id="btnWaScanToggle" class="btn btn-outline btn-sm" onclick="toggleWhatsAppScanner()">Enable</button>
+                  <button class="btn btn-outline btn-sm" onclick="runWhatsAppScanNow()">Run scan now</button>
+                </div>
+              </div>
+            </div>
+            <div id="waScanResult" style="display:none;margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+          </div>
+
+          <div class="settings-actions" style="margin-top:14px;">
             <button class="btn-secondary" onclick="testSettingsConnection('testWhatsApp')">Send Test Message</button>
             <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
           </div>
@@ -2250,7 +2438,48 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           </div>
           <div class="form-group"><label>Twilio Phone Number</label><input data-setting-key="TWILIO_NUMBER" type="text" class="form-input" placeholder="+254xxxxxxxxx"></div>
           <div class="form-group"><label>Call Webhook URL</label><input data-setting-key="TWILIO_WEBHOOK_URL" type="url" class="form-input" readonly style="background:#f8fafc"></div>
-          <div class="settings-actions">
+
+          <!-- Soft Phone + Transcription -->
+          <div style="margin-top:18px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+            <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:6px;">Browser Soft Phone &amp; Transcription</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Lets agents pick up inbound calls directly in the portal. Twilio Voice Insights records the call, auto-transcribes it, and the transcript / talk time / wait time feed External SLA metrics.</div>
+            <div class="form-row">
+              <div class="form-group"><label>Voice TwiML App SID</label><input data-setting-key="TWILIO_TWIML_APP_SID" type="text" class="form-input" placeholder="APxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
+              <div class="form-group"><label>API Key SID</label><input data-setting-key="TWILIO_API_KEY_SID" type="text" class="form-input" placeholder="SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>API Key Secret</label><input data-setting-key="TWILIO_API_KEY_SECRET" type="password" class="form-input" placeholder="Twilio API key secret"></div>
+              <div class="form-group">
+                <label>Transcription provider</label>
+                <select data-setting-key="CALL_TRANSCRIPTION_PROVIDER" class="form-input">
+                  <option value="TWILIO_VOICE_INTELLIGENCE">Twilio Voice Intelligence</option>
+                  <option value="WHISPER">OpenAI Whisper</option>
+                  <option value="MS_SPEECH">Microsoft Azure Speech</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Auto-pickup</label>
+                <select data-setting-key="CALL_AUTO_PICKUP" class="form-input">
+                  <option value="MANUAL">Manual (agent clicks Answer)</option>
+                  <option value="AUTO">Auto-pickup when assigned</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Call SLA scanner</label>
+                <div style="display:flex;align-items:center;gap:10px;padding-top:6px;">
+                  <span id="callScanBadge" class="badge badge-secondary" style="font-size:11px;">Inactive</span>
+                  <button id="btnCallScanToggle" class="btn btn-outline btn-sm" onclick="toggleCallScanner()">Enable</button>
+                  <button class="btn btn-outline btn-sm" onclick="runCallScanNow()">Sync now</button>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Scanner runs every 60 seconds, fetches completed call recordings, transcribes them, and writes <em>wait time</em>, <em>talk time</em>, <em>transcript</em> and <em>resolution flag</em> into the External SLA dataset.</div>
+            <div id="callScanResult" style="display:none;margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+          </div>
+
+          <div class="settings-actions" style="margin-top:14px;">
             <button class="btn-secondary" onclick="testSettingsConnection('testTwilio')">Make Test Call</button>
             <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
           </div>
@@ -2261,7 +2490,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <!-- Email Tab -->
       <div class="settings-panel" id="tab-email" style="display:none">
         <div class="settings-card">
-          <div class="settings-help">Controls how the portal sends emails — order confirmations, ticket notifications, password resets. Microsoft Graph recommended for @hasspetroleum.com.</div>
+          <div class="settings-help">Controls how the portal sends emails (order confirmations, ticket notifications, password resets) and how it ingests inbound mail for SLA tracking. Microsoft Graph recommended for @hasspetroleum.com.</div>
           <div class="form-group">
             <label>Provider</label>
             <select data-setting-key="EMAIL_PROVIDER" class="form-input">
@@ -2277,7 +2506,37 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
             <div class="form-group"><label>MS Graph Secret</label><input data-setting-key="MS_GRAPH_SECRET" type="password" class="form-input" placeholder="Azure AD client secret"></div>
             <div class="form-group"><label>Reply-To Address</label><input data-setting-key="EMAIL_FROM" type="email" class="form-input" placeholder="hassaudit@outlook.com"></div>
           </div>
-          <div class="settings-actions">
+
+          <!-- Inbound SLA Scanner -->
+          <div style="margin-top:18px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+            <div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:6px;">Inbound SLA Scanner</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Scan a specific mailbox every 60 seconds. Subject and body are inspected for ticket references and customer addresses, then merged into External SLA metrics (first response, resolution time).</div>
+            <div class="form-row">
+              <div class="form-group"><label>Mailbox to scan</label><input data-setting-key="EMAIL_SCAN_MAILBOX" type="email" class="form-input" placeholder="customercare@hasspetroleum.com"></div>
+              <div class="form-group"><label>Subject keyword filter (optional)</label><input data-setting-key="EMAIL_SCAN_SUBJECT_FILTER" type="text" class="form-input" placeholder="ticket, order, complaint"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Scan interval</label>
+                <select data-setting-key="EMAIL_SCAN_INTERVAL_SEC" class="form-input">
+                  <option value="60">Every 60 seconds (default)</option>
+                  <option value="120">Every 2 minutes</option>
+                  <option value="300">Every 5 minutes</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Scanner status</label>
+                <div style="display:flex;align-items:center;gap:10px;padding-top:6px;">
+                  <span id="emailScanBadge" class="badge badge-secondary" style="font-size:11px;">Inactive</span>
+                  <button id="btnEmailScanToggle" class="btn btn-outline btn-sm" onclick="toggleEmailScanner()">Enable</button>
+                  <button class="btn btn-outline btn-sm" onclick="runEmailScanNow()">Run scan now</button>
+                </div>
+              </div>
+            </div>
+            <div id="emailScanResult" style="display:none;margin-top:8px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+          </div>
+
+          <div class="settings-actions" style="margin-top:14px;">
             <button class="btn-secondary" onclick="testSettingsConnection('testEmail')">Send Test Email</button>
             <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
           </div>
@@ -2329,7 +2588,7 @@ var SESSION = (function(){
 
 /* Navigate the TOP frame back to the published script URL.
  * Inside Apps Script's IFRAME sandbox, window.location.href is the inner
- * googleusercontent.com userCodeAppPanel URL — navigating that URL with a
+ * googleusercontent.com userCodeAppPanel URL - navigating that URL with a
  * query string returns blank because it never reaches doGet. We must use
  * SESSION.scriptUrl (the canonical /dev or /exec URL the server injected)
  * and target window.top so doGet runs.
@@ -2345,7 +2604,7 @@ function _gotoLogin() {
 }
 
 if (!SESSION || !SESSION.token) {
-  if (window.console) console.warn('[SESSION] no token — returning to login');
+  if (window.console) console.warn('[SESSION] no token - returning to login');
   _gotoLogin();
 }
 
@@ -2494,7 +2753,7 @@ function logoutUser() {
     google.script.run.handleAuthRequest({ action: 'logout', token: token });
   }
   sessionStorage.clear();
-  // Redirect to login — top-frame navigation to published script URL.
+  // Redirect to login - top-frame navigation to published script URL.
   _gotoLogin();
 }
 
@@ -2522,7 +2781,7 @@ function initDashboard() {
       SESSION.role = role;
       SESSION.name = name;
 
-      // Logo replaced with text badge — no Drive fetch needed
+      // Logo replaced with text badge - no Drive fetch needed
 
       if (typeof applyRoleVisibility === 'function') applyRoleVisibility();
       if (typeof showPage === 'function') showPage('dashboard');
@@ -2759,6 +3018,118 @@ function renderSLAData(data) {
 
   // Approver leaderboard
   renderApproverLeaderboard(data);
+
+  // PO charts and tables
+  renderPOSection(data);
+}
+
+var slaChartPOAvg, slaChartPOVolume, slaChartPOApprovers;
+
+function renderPOSection(data) {
+  var poByAff = data.poByAffiliate || [];
+  var poApprovers = data.poApproverStats || [];
+
+  // PO KPIs
+  var totalPOs = poByAff.reduce(function(s, g){ return s + (g.poCount || 0); }, 0);
+  var stepCount = poApprovers.reduce(function(s, a){ return s + (a.count || 0); }, 0);
+  var stepSum   = poApprovers.reduce(function(s, a){ return s + (a.avg * a.count); }, 0);
+  var stepOk    = poApprovers.reduce(function(s, a){ return s + Math.round(a.count * a.withinSLAPct / 100); }, 0);
+  var avgStep   = stepCount ? Math.round(stepSum / stepCount) : 0;
+  var withinPct = stepCount ? Math.round(stepOk / stepCount * 100) : 0;
+  var setText = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+  setText('kpiPOAvgStep', avgStep);
+  setText('kpiPOWithinSLA', withinPct + '%');
+  setText('kpiPOTotal', totalPOs);
+  setText('kpiPOActiveApprovers', poApprovers.length);
+
+  var affColors = { HPK:'#1A237E', HPU:'#FF6F00', HPT:'#0d9488', HPR:'#7c3aed', HSS:'#db2777', HPZ:'#ea580c', HPC:'#0284c7', HTW:'#64748b' };
+
+  var avgCanvas = document.getElementById('chartPOAvg');
+  if (avgCanvas) {
+    slaChartPOAvg = safeDestroyChart(slaChartPOAvg);
+    slaChartPOAvg = new Chart(avgCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: poByAff.map(function(g){ return g.affiliate; }),
+        datasets: [{
+          label: 'Avg PO Step Time (min)',
+          data: poByAff.map(function(g){ return g.avgStepMin; }),
+          backgroundColor: poByAff.map(function(g){ return affColors[g.affiliate] || '#94a3b8'; }),
+          borderRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { afterLabel: function(ctx){ var d = poByAff[ctx.dataIndex]; return 'POs: ' + d.poCount + '  |  SLA%: ' + d.stepSLAPct + '%'; } } },
+        },
+        scales: { y: { title: { display: true, text: 'Minutes per step' } }, x: { grid: { display: false } } },
+      },
+    });
+  }
+
+  var volCanvas = document.getElementById('chartPOVolume');
+  if (volCanvas) {
+    slaChartPOVolume = safeDestroyChart(slaChartPOVolume);
+    slaChartPOVolume = new Chart(volCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: poByAff.map(function(g){ return g.affiliate; }),
+        datasets: [{
+          data: poByAff.map(function(g){ return g.poCount; }),
+          backgroundColor: poByAff.map(function(g){ return affColors[g.affiliate] || '#94a3b8'; }),
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '55%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } } },
+      },
+    });
+  }
+
+  var apprCanvas = document.getElementById('chartPOApprovers');
+  if (apprCanvas) {
+    var top = poApprovers.slice(0, 10);
+    slaChartPOApprovers = safeDestroyChart(slaChartPOApprovers);
+    slaChartPOApprovers = new Chart(apprCanvas.getContext('2d'), {
+      data: {
+        labels: top.map(function(a){ return a.name; }),
+        datasets: [
+          { type: 'bar', label: 'Steps Approved', data: top.map(function(a){ return a.count; }), backgroundColor: 'rgba(255,111,0,0.85)', borderRadius: 6, yAxisID: 'y' },
+          { type: 'line', label: 'Within SLA %', data: top.map(function(a){ return a.withinSLAPct; }), borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.1)', borderWidth: 2, fill: false, tension: 0.3, pointRadius: 4, yAxisID: 'y1' },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          y:  { type: 'linear', position: 'left',  title: { display: true, text: 'Step count' } },
+          y1: { type: 'linear', position: 'right', min: 0, max: 100, title: { display: true, text: 'SLA %' }, grid: { drawOnChartArea: false } },
+        },
+      },
+    });
+  }
+
+  // PO affiliate table
+  var poAffBody = document.getElementById('poAffiliateBody');
+  if (poAffBody) {
+    if (!poByAff.length) {
+      poAffBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px;">No PO data for the selected period.</td></tr>';
+    } else {
+      poAffBody.innerHTML = poByAff.map(function(g) {
+        var pct = g.stepSLAPct;
+        var cls = pct >= 80 ? 'pct-good' : pct >= 60 ? 'pct-warn' : 'pct-bad';
+        return '<tr><td style="font-weight:700;color:#1A237E;">' + g.affiliate + '</td>'
+          + '<td>' + g.poCount + '</td>'
+          + '<td>' + g.avgStepMin + '</td>'
+          + '<td><span class="pct-badge ' + cls + '">' + pct + '%</span></td></tr>';
+      }).join('');
+    }
+  }
 }
 
 function showSLALoading(on){
@@ -2801,7 +3172,7 @@ function renderApproverLeaderboard(data) {
 /* ── SLA Drill-Down Modal ── */
 function openFinanceApproverDrill(approverName) {
   document.getElementById('drillTitle').textContent = approverName;
-  document.getElementById('drillSubtitle').textContent = 'Finance Approver — individual order detail';
+  document.getElementById('drillSubtitle').textContent = 'Finance Approver - individual order detail';
   document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
   document.getElementById('slaDrillModal').style.display = 'flex';
 
@@ -2826,7 +3197,7 @@ function renderFinanceApproverDrill(approverName, rows) {
     var ok = val <= target;
     return '<span class="sla-pill ' + (ok?'sla-ok':'sla-bad') + '">' + (ok?'&#10003;':'&#10007;') + ' ' + Math.round(val) + ' min</span>';
   }
-  function fmt(d) { if(!d) return '&mdash;'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
+  function fmt(d) { if(!d) return '-'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
 
   var withinFin = rows.filter(function(r){ return r.finance_variance_min > 0 && r.finance_variance_min <= finTarget; }).length;
   var withinLA  = rows.filter(function(r){ return r.la_variance_min > 0 && r.la_variance_min <= laTarget; }).length;
@@ -2872,7 +3243,7 @@ function renderFinanceApproverDrill(approverName, rows) {
 
 function openPOApproverDrill(approverName) {
   document.getElementById('drillTitle').textContent = approverName;
-  document.getElementById('drillSubtitle').textContent = 'PO Approver — full approval chain detail';
+  document.getElementById('drillSubtitle').textContent = 'PO Approver - full approval chain detail';
   document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
   document.getElementById('slaDrillModal').style.display = 'flex';
 
@@ -2893,7 +3264,7 @@ function openPOApproverDrill(approverName) {
 function renderPOApproverDrill(approverName, pos) {
   var STEPS = ['first','second','third','fourth','fifth','sixth','seventh'];
   var SLA_PO = 120;
-  function fmt(d) { if(!d) return '&mdash;'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
+  function fmt(d) { if(!d) return '-'; try{ return new Date(d).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){return d;} }
   function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   var totalSteps = 0, withinSLA = 0;
@@ -2952,7 +3323,7 @@ function renderPOApproverDrill(approverName, pos) {
 }
 
 function openAffiliateDrill(affiliateLabel) {
-  document.getElementById('drillTitle').textContent = affiliateLabel + ' — Order Detail';
+  document.getElementById('drillTitle').textContent = affiliateLabel + ' - Order Detail';
   document.getElementById('drillSubtitle').textContent = 'All orders in selected period';
   document.getElementById('drillBody').innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">Loading...</div>';
   document.getElementById('slaDrillModal').style.display = 'flex';
@@ -3517,7 +3888,7 @@ function openEditUserModal(userId) {
             + escapeHtml(r.role_name) + ' <span style="color:#94a3b8;font-size:11px;">(' + r.role_code + ')</span>'
             + '</label>';
         });
-        if (!rolesHtml) rolesHtml = '<div style="color:#94a3b8;font-size:12px;">No roles defined yet — visit the Roles tab and click <strong>Verify &amp; Migrate</strong> first.</div>';
+        if (!rolesHtml) rolesHtml = '<div style="color:#94a3b8;font-size:12px;">No roles defined yet - visit the Roles tab and click <strong>Verify &amp; Migrate</strong> first.</div>';
         document.getElementById('editUserRolesList').innerHTML = rolesHtml;
         document.getElementById('editUserError').style.display = 'none';
         document.getElementById('editUserModal').style.display = 'flex';
@@ -3699,7 +4070,7 @@ function approveSignup(requestId, companyName) {
   google.script.run
     .withSuccessHandler(function(r) {
       if (r && r.success) {
-        showToast('Signup approved — credentials sent to applicant');
+        showToast('Signup approved - credentials sent to applicant');
         loadPendingSignups();
       } else {
         showToast((r && r.error) || 'Failed to approve');
@@ -3892,7 +4263,7 @@ var _contactsDrawerCustomer = { id: null, name: '' };
 
 function openContactsDrawer(customerId, companyName) {
   _contactsDrawerCustomer = { id: customerId, name: companyName || 'Customer' };
-  document.getElementById('contactsDrawerTitle').textContent = _contactsDrawerCustomer.name + ' — Contacts';
+  document.getElementById('contactsDrawerTitle').textContent = _contactsDrawerCustomer.name + ' - Contacts';
   document.getElementById('contactsDrawer').style.display = 'flex';
   reloadContactsDrawer();
 }
@@ -3949,7 +4320,7 @@ function togglePortalAccess(btn, contactId, newAccess) {
 
 function openAddContactModal() {
   if (!_contactsDrawerCustomer.id) { showSettingsToast('Open a customer first', false); return; }
-  document.getElementById('contactModalTitle').textContent = 'Add Contact — ' + _contactsDrawerCustomer.name;
+  document.getElementById('contactModalTitle').textContent = 'Add Contact - ' + _contactsDrawerCustomer.name;
   document.getElementById('contactCustomerId').value = _contactsDrawerCustomer.id;
   document.getElementById('contactContactId').value = '';
   ['contactFirst','contactLast','contactEmail','contactPhone','contactJob'].forEach(function(id) { document.getElementById(id).value = ''; });
@@ -5138,9 +5509,9 @@ function openReport(reportId) {
     orders: 'Order Summary', tickets: 'Ticket Summary', credit: 'Credit Exposure',
     sla: 'SLA Summary', consumption: 'Consumption Trend', cost: 'Cost Trend',
   };
-  var title = titles[reportId] || ('Report — ' + reportId);
+  var title = titles[reportId] || ('Report - ' + reportId);
   var tableHtml = wrap.innerHTML;
-  var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + ' — Hass Petroleum</title>'
+  var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + ' - Hass Petroleum</title>'
     + '<style>'
     + 'body{font-family:Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 20px;color:#1e293b;}'
     + 'h1{color:#1A237E;font-size:22px;margin:0 0 4px;} .meta{color:#64748b;font-size:12px;margin-bottom:18px;}'
@@ -5169,7 +5540,7 @@ function openReport(reportId) {
  * Limitation: this only works while the dashboard tab is open. For true
  * always-on background tray push, the app must be served as a PWA with
  * a service worker (not possible inside the Apps Script HtmlService
- * iframe — see ServiceWorker.html / Manifest.html for the scaffold to
+ * iframe - see ServiceWorker.html / Manifest.html for the scaffold to
  * use when serving this UI from a custom domain).
  */
 window.unreadChatCount = window.unreadChatCount || 0;
@@ -5213,11 +5584,11 @@ function testDesktopNotification() {
   if (!('Notification' in window)) { showToast('Browser does not support notifications'); return; }
   if (Notification.permission !== 'granted') {
     Notification.requestPermission().then(function(p) {
-      if (p === 'granted') showChatBrowserNotification('System', 'Test notification — chat alerts will appear in your Windows tray.', 'Hass CMS');
+      if (p === 'granted') showChatBrowserNotification('System', 'Test notification - chat alerts will appear in your Windows tray.', 'Hass CMS');
     });
     return;
   }
-  showChatBrowserNotification('System', 'Test notification — chat alerts will appear in your Windows tray.', 'Hass CMS');
+  showChatBrowserNotification('System', 'Test notification - chat alerts will appear in your Windows tray.', 'Hass CMS');
 }
 
 function showChatBrowserNotification(senderName, messageContent, roomName) {
@@ -5228,7 +5599,7 @@ function showChatBrowserNotification(senderName, messageContent, roomName) {
   if (Notification.permission !== 'granted') return;
   var preview = (messageContent || '').length > 60 ? messageContent.substring(0, 60) + '...' : (messageContent || '');
   try {
-    var n = new Notification('Hass CMS — ' + (roomName || 'Team Chat'), {
+    var n = new Notification('Hass CMS - ' + (roomName || 'Team Chat'), {
       body: (senderName || 'Team') + ': ' + preview,
       icon: 'https://lh3.googleusercontent.com/d/1AL9fUgYXM9DXj9-X_0YonrloqCXat2wq',
       tag: 'hass-chat-' + (roomName || 'general'),
@@ -5237,7 +5608,7 @@ function showChatBrowserNotification(senderName, messageContent, roomName) {
       silent: false
     });
     n.onclick = function() { window.focus(); showPage('chat'); n.close(); };
-    // Don't auto-close — let Windows action center retain it until dismissed
+    // Don't auto-close - let Windows action center retain it until dismissed
   } catch (e) { Logger && Logger.log && Logger.log('notif: ' + e.message); }
 }
 
@@ -5415,7 +5786,7 @@ function renderTransportBadges(report) {
     if (!t.configured) { color = '#94a3b8'; label = 'not configured'; }
     else if (t.ok === true) { color = '#15803d'; label = 'OK'; }
     else if (t.ok === false) { color = '#dc2626'; label = 'fail'; }
-    else { color = '#d97706'; label = '—'; }
+    else { color = '#d97706'; label = '-'; }
     html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:18px;background:#fff;border:1px solid #e2e8f0;font-size:12px;">'
       + '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';"></span>'
       + '<strong>' + name + '</strong> <span style="color:#64748b;">' + label + '</span>'
@@ -5510,7 +5881,8 @@ function switchSettingsTab(tabId, btn) {
   document.querySelectorAll('.settings-tab').forEach(function(t) { t.classList.remove('active'); });
   document.getElementById(tabId).style.display = 'block';
   if (btn) btn.classList.add('active');
-  if (tabId === 'tab-backup') loadBackupStatus();
+  if (tabId === 'tab-backup') { loadBackupStatus(); refreshOneDriveStatus(); }
+  if (tabId === 'tab-email' || tabId === 'tab-whatsapp' || tabId === 'tab-phone') refreshScannerStatuses();
 }
 
 /* ══════════ Backup Tab ══════════ */
@@ -5520,14 +5892,14 @@ function loadBackupStatus() {
     .withSuccessHandler(function(r) {
       if (!r || !r.success) return;
       var fmt = function(iso) {
-        if (!iso) return '—';
+        if (!iso) return '-';
         try { return new Date(iso).toLocaleString(); } catch(e) { return iso; }
       };
       var el = function(id) { return document.getElementById(id); };
       if (el('bkpLastAt'))     el('bkpLastAt').textContent     = fmt(r.last_backup_at);
       if (el('bkpLastFullAt')) el('bkpLastFullAt').textContent = fmt(r.last_full_backup_at);
-      if (el('bkpTables'))     el('bkpTables').textContent     = r.last_backup_tables || '—';
-      if (el('bkpRows'))       el('bkpRows').textContent       = r.last_backup_rows   || '—';
+      if (el('bkpTables'))     el('bkpTables').textContent     = r.last_backup_tables || '-';
+      if (el('bkpRows'))       el('bkpRows').textContent       = r.last_backup_rows   || '-';
 
       var statusEl = el('bkpStatus');
       if (statusEl) {
@@ -5599,7 +5971,7 @@ function toggleAutoBackup() {
   var btn     = document.getElementById('bkpTriggerToggle');
   var enabled = btn && btn._enabled;
   var action  = enabled ? 'removeTrigger' : 'installTrigger';
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
   google.script.run
     .withSuccessHandler(function(r) {
       if (btn) btn.disabled = false;
@@ -5611,6 +5983,213 @@ function toggleAutoBackup() {
     })
     .handleSettingsRequest({ action: action });
 }
+
+/* ══════════ OneDrive / SharePoint Backup Destination ══════════ */
+function refreshOneDriveStatus() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      var connected = !!r.connected;
+      var info = document.getElementById('oneDriveAccountInfo');
+      var badge = document.getElementById('oneDriveStatusBadge');
+      var loginBtn = document.getElementById('btnOneDriveLogin');
+      var pickBtn = document.getElementById('btnOneDrivePickFolder');
+      var createBtn = document.getElementById('btnOneDriveCreateFolder');
+      var disconnectBtn = document.getElementById('btnOneDriveDisconnect');
+
+      if (connected) {
+        if (badge) { badge.className = 'badge badge-success'; badge.textContent = 'Connected'; }
+        if (info) info.style.display = 'block';
+        var em = document.getElementById('oneDriveAccountEmail');
+        var fp = document.getElementById('oneDriveFolderPath');
+        if (em) em.textContent = r.account_email || '-';
+        if (fp) fp.textContent = r.folder_path || 'Not selected';
+        if (loginBtn) loginBtn.textContent = 'Re-authenticate';
+        if (pickBtn) pickBtn.disabled = false;
+        if (createBtn) createBtn.disabled = false;
+        if (disconnectBtn) disconnectBtn.disabled = false;
+      } else {
+        if (badge) { badge.className = 'badge badge-secondary'; badge.textContent = 'Not connected'; }
+        if (info) info.style.display = 'none';
+        if (pickBtn) pickBtn.disabled = true;
+        if (createBtn) createBtn.disabled = true;
+        if (disconnectBtn) disconnectBtn.disabled = true;
+      }
+    })
+    .withFailureHandler(function(e) { console.error('oneDriveStatus:', e); })
+    .handleSettingsRequest({ action: 'getOneDriveStatus' });
+}
+
+function showOneDriveResult(msg, ok) {
+  var el = document.getElementById('oneDriveResultMsg');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.background = ok ? '#f0fdf4' : '#fef2f2';
+  el.style.color      = ok ? '#166534' : '#991b1b';
+  el.style.border     = '1px solid ' + (ok ? '#bbf7d0' : '#fecaca');
+  el.textContent = msg;
+}
+
+function oneDriveLogin() {
+  var btn = document.getElementById('btnOneDriveLogin');
+  if (btn) { btn.disabled = true; btn.textContent = 'Opening Microsoft sign-in...'; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign in with Microsoft'; }
+      if (r && r.success && r.auth_url) {
+        window.open(r.auth_url, '_blank', 'width=520,height=640');
+        showOneDriveResult('A Microsoft sign-in window has opened. Complete the consent flow, then click Refresh status.', true);
+      } else {
+        showOneDriveResult((r && r.error) || 'Could not start Microsoft sign-in. Check Azure app credentials.', false);
+      }
+      refreshOneDriveStatus();
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign in with Microsoft'; }
+      showOneDriveResult('Sign-in failed: ' + e.message, false);
+    })
+    .handleSettingsRequest({ action: 'startOneDriveLogin' });
+}
+
+function oneDriveDisconnect() {
+  if (!confirm('Disconnect OneDrive? Backups will pause until you reconnect.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showOneDriveResult(r && r.success ? 'OneDrive disconnected.' : ((r && r.error) || 'Disconnect failed'), !!(r && r.success));
+      refreshOneDriveStatus();
+    })
+    .handleSettingsRequest({ action: 'disconnectOneDrive' });
+}
+
+function oneDrivePickFolder() {
+  var browser = document.getElementById('oneDriveFolderBrowser');
+  if (!browser) return;
+  browser.style.display = 'block';
+  browser.innerHTML = '<div style="padding:14px;color:#64748b;font-size:12px;">Loading folders...</div>';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) {
+        browser.innerHTML = '<div style="padding:14px;color:#dc2626;font-size:12px;">' + ((r && r.error) || 'Could not list folders') + '</div>';
+        return;
+      }
+      var folders = r.folders || [];
+      if (!folders.length) {
+        browser.innerHTML = '<div style="padding:14px;color:#64748b;font-size:12px;">No folders found at this level. Use Create Folder below.</div>';
+        return;
+      }
+      browser.innerHTML = folders.map(function(f) {
+        var safeId = String(f.id||'').replace(/'/g, "\\'");
+        var safeName = String(f.name||'').replace(/'/g, "\\'");
+        return '<div onclick="oneDriveSelectFolder(\''+safeId+'\',\''+safeName+'\')" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;">'
+          + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0078d4" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
+          + '<span>' + f.name + '</span>'
+          + '<span style="margin-left:auto;font-size:11px;color:#94a3b8;">' + (f.child_count || 0) + ' items</span>'
+          + '</div>';
+      }).join('');
+    })
+    .withFailureHandler(function(e) {
+      browser.innerHTML = '<div style="padding:14px;color:#dc2626;font-size:12px;">' + e.message + '</div>';
+    })
+    .handleSettingsRequest({ action: 'listOneDriveFolders' });
+}
+
+function oneDriveSelectFolder(folderId, folderName) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showOneDriveResult(r && r.success ? 'Backup folder set to: ' + folderName : ((r && r.error) || 'Could not set folder'), !!(r && r.success));
+      refreshOneDriveStatus();
+    })
+    .handleSettingsRequest({ action: 'setOneDriveFolder', folderId: folderId, folderName: folderName });
+}
+
+function oneDriveCreateFolder() {
+  var name = prompt('Name of new OneDrive folder for HASS CMS backups:', 'HASS CMS Backups');
+  if (!name) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showOneDriveResult(r && r.success ? 'Folder created and selected: ' + name : ((r && r.error) || 'Create failed'), !!(r && r.success));
+      refreshOneDriveStatus();
+    })
+    .handleSettingsRequest({ action: 'createOneDriveFolder', folderName: name });
+}
+
+/* ══════════ External SLA Scanners (email / WhatsApp / phone) ══════════ */
+function showScannerResult(elId, msg, ok) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.background = ok ? '#f0fdf4' : '#fef2f2';
+  el.style.color      = ok ? '#166534' : '#991b1b';
+  el.style.border     = '1px solid ' + (ok ? '#bbf7d0' : '#fecaca');
+  el.textContent = msg;
+}
+
+function applyScannerStatus(badgeId, btnId, active) {
+  var badge = document.getElementById(badgeId);
+  var btn   = document.getElementById(btnId);
+  if (badge) {
+    badge.className   = active ? 'badge badge-success' : 'badge badge-secondary';
+    badge.textContent = active ? 'Active (every 60s)' : 'Inactive';
+  }
+  if (btn) {
+    btn.textContent = active ? 'Disable' : 'Enable';
+    btn._active = active;
+  }
+}
+
+function refreshScannerStatuses() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) return;
+      applyScannerStatus('emailScanBadge', 'btnEmailScanToggle', !!r.email_active);
+      applyScannerStatus('waScanBadge',    'btnWaScanToggle',    !!r.whatsapp_active);
+      applyScannerStatus('callScanBadge',  'btnCallScanToggle',  !!r.call_active);
+    })
+    .handleIntegrationRequest({ action: 'getScannerStatus' });
+}
+
+function toggleScanner(channel, badgeId, btnId, resultId) {
+  var btn = document.getElementById(btnId);
+  var willActivate = !(btn && btn._active);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (btn) btn.disabled = false;
+      if (r && r.success) {
+        applyScannerStatus(badgeId, btnId, willActivate);
+        showScannerResult(resultId, willActivate ? 'Scanner enabled. Polling every 60 seconds.' : 'Scanner disabled.', true);
+      } else {
+        showScannerResult(resultId, (r && r.error) || 'Could not change scanner state', false);
+        applyScannerStatus(badgeId, btnId, !willActivate);
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (btn) btn.disabled = false;
+      showScannerResult(resultId, 'Error: ' + e.message, false);
+    })
+    .handleIntegrationRequest({ action: willActivate ? 'enableScanner' : 'disableScanner', channel: channel });
+}
+
+function runScannerNow(channel, resultId) {
+  showScannerResult(resultId, 'Running scan...', true);
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) {
+        showScannerResult(resultId, 'Scan complete. ' + (r.processed || 0) + ' new items, ' + (r.sla_records || 0) + ' SLA records updated.', true);
+      } else {
+        showScannerResult(resultId, (r && r.error) || 'Scan failed', false);
+      }
+    })
+    .withFailureHandler(function(e) { showScannerResult(resultId, 'Error: ' + e.message, false); })
+    .handleIntegrationRequest({ action: 'runScannerNow', channel: channel });
+}
+
+function toggleEmailScanner()   { toggleScanner('email',    'emailScanBadge', 'btnEmailScanToggle', 'emailScanResult'); }
+function runEmailScanNow()      { runScannerNow('email',    'emailScanResult'); }
+function toggleWhatsAppScanner(){ toggleScanner('whatsapp', 'waScanBadge',    'btnWaScanToggle',    'waScanResult'); }
+function runWhatsAppScanNow()   { runScannerNow('whatsapp', 'waScanResult'); }
+function toggleCallScanner()    { toggleScanner('call',     'callScanBadge',  'btnCallScanToggle',  'callScanResult'); }
+function runCallScanNow()       { runScannerNow('call',     'callScanResult'); }
 
 function saveCurrentSettings() {
   var fields = document.querySelectorAll('[data-setting-key]');
@@ -5714,7 +6293,7 @@ function processSalesUpload() {
   // Validate prefix
   var upper = filename.toUpperCase();
   if (!upper.startsWith('LA') && !upper.startsWith('SALES')) {
-    logUpload('Note: filename does not start with LA. Continuing — make sure this is a Loading Authority / Finance file.');
+    logUpload('Note: filename does not start with LA. Continuing - make sure this is a Loading Authority / Finance file.');
   }
 
   var reader = new FileReader();
@@ -5815,16 +6394,12 @@ function processPurUpload() {
   document.getElementById('uploadSummary').style.display = 'none';
 
   var filename = window._purFile.name;
-  // Primary: extract from filename. Secondary: use the affiliate select.
   var countryCode = extractCountryFromFilename(filename);
-  if (!countryCode) {
-    countryCode = document.getElementById('purAffiliate') ? document.getElementById('purAffiliate').value : '';
-  }
   logUpload('File: ' + filename + ' | Country detected: ' + (countryCode || 'UNKNOWN'));
 
   var upperPo = filename.toUpperCase();
   if (!upperPo.startsWith('PO') && !upperPo.startsWith('PUR')) {
-    logUpload('Note: filename does not start with PO. Continuing — make sure this is a Purchase Order approval file.');
+    logUpload('Note: filename does not start with PO. Continuing. Make sure this is a Purchase Order approval file.');
   }
 
   var reader = new FileReader();
@@ -5921,6 +6496,29 @@ function logUpload(msg) {
 
 
 /* ══════════ Dashboard Home ══════════ */
+var dashChartPulse, dashChartAffiliate;
+
+function fmtCurrency(v) {
+  if (v === null || v === undefined || isNaN(v)) return '-';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return Math.round(v).toString();
+}
+
+function deltaTag(elId, cur, prev, invertGood) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (prev === null || prev === undefined || prev === 0) { el.textContent = ' '; el.className = 'dash-kpi-delta flat'; return; }
+  var diff = cur - prev;
+  var pct = Math.round((diff / prev) * 100);
+  var sign = diff > 0 ? '+' : '';
+  var goodWhenUp = !invertGood;
+  var cls = diff === 0 ? 'flat' : ((diff > 0) === goodWhenUp ? 'up' : 'down');
+  el.className = 'dash-kpi-delta ' + cls;
+  el.textContent = (diff === 0 ? 'No change' : (sign + pct + '% vs yesterday'));
+}
+
 function loadDashboardHome() {
   var hour = new Date().getHours();
   var greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -5929,27 +6527,130 @@ function loadDashboardHome() {
 
   google.script.run
     .withSuccessHandler(function(data) {
-      if (!data.success) return;
+      if (!data || !data.success) return;
       var set = function(id, val){ var el=document.getElementById(id); if(el) el.textContent=val; };
-      set('dStatOpenTickets',   data.openTickets);
-      set('dStatPendingOrders', data.pendingOrders);
-      set('dStatInTransit',     data.inTransit);
-      set('dStatUnreadChat',    data.unreadMessages);
 
-      var tl = document.getElementById('dashTicketList');
-      if (tl && data.recentTickets.length > 0) {
-        tl.innerHTML = data.recentTickets.map(function(t){
-          var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
-          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+'</div><div style="font-size:12px;color:#64748b;">'+t.subject.substring(0,45)+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+t.priority+'</span></div>';
-        }).join('');
+      // KPI strip
+      set('dStatOpenTickets',     data.openTickets);
+      set('dStatPendingOrders',   data.pendingOrders);
+      set('dStatInTransit',       data.inTransit);
+      set('dStatPendingApproval', data.pendingApproval || 0);
+      set('dStatRevenueToday',    'KES ' + fmtCurrency(data.revenueToday || 0));
+      set('dStatBreaches',        data.slaBreaches24h || 0);
+
+      var prev = data.previousDay || {};
+      deltaTag('dDeltaTickets',   data.openTickets,     prev.openTickets,     true);
+      deltaTag('dDeltaOrders',    data.pendingOrders,   prev.pendingOrders,   true);
+      deltaTag('dDeltaTransit',   data.inTransit,       prev.inTransit,       false);
+      deltaTag('dDeltaApproval',  data.pendingApproval, prev.pendingApproval, true);
+      deltaTag('dDeltaRevenue',   data.revenueToday,    prev.revenueToday,    false);
+      deltaTag('dDeltaBreach',    data.slaBreaches24h,  prev.slaBreaches24h,  true);
+
+      // Health badge
+      var badge = document.getElementById('dashHealthBadge');
+      if (badge) {
+        var sev = data.healthScore != null ? data.healthScore : 100;
+        var label = sev >= 90 ? 'All systems healthy' : sev >= 70 ? 'Minor issues' : 'Action needed';
+        var cls   = sev >= 90 ? 'badge-success' : sev >= 70 ? 'badge-warning' : 'badge-danger';
+        badge.className = 'badge ' + cls;
+        badge.style.padding = '6px 10px';
+        badge.style.borderRadius = '20px';
+        badge.textContent = label + ' (' + sev + '%)';
       }
 
+      // Pulse chart
+      var pulseLabels = (data.pulseSeries || []).map(function(p){ return p.label; });
+      var pulseCanvas = document.getElementById('dashPulseChart');
+      if (pulseCanvas && pulseLabels.length) {
+        if (dashChartPulse) dashChartPulse.destroy();
+        dashChartPulse = new Chart(pulseCanvas.getContext('2d'), {
+          data: {
+            labels: pulseLabels,
+            datasets: [
+              { type:'line', label:'Tickets',   data:(data.pulseSeries||[]).map(function(p){return p.tickets;}),   borderColor:'#1A237E', backgroundColor:'rgba(26,35,126,0.08)', tension:0.35, pointRadius:3, fill:true },
+              { type:'line', label:'Orders',    data:(data.pulseSeries||[]).map(function(p){return p.orders;}),    borderColor:'#FF6F00', backgroundColor:'rgba(255,111,0,0.08)', tension:0.35, pointRadius:3, fill:true },
+              { type:'line', label:'Delivered', data:(data.pulseSeries||[]).map(function(p){return p.delivered;}), borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,0.08)', tension:0.35, pointRadius:3, fill:true },
+            ],
+          },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top', labels:{boxWidth:10,font:{size:11}}} }, scales:{ x:{ grid:{display:false} }, y:{ beginAtZero:true, grid:{color:'rgba(226,232,240,0.6)'} } } },
+        });
+      }
+
+      // Affiliate doughnut
+      var affCanvas = document.getElementById('dashAffiliateChart');
+      var affLabels = (data.affiliateActivity || []).map(function(a){ return a.label; });
+      if (affCanvas && affLabels.length) {
+        var palette = ['#1A237E','#FF6F00','#0d9488','#7c3aed','#db2777','#ea580c','#0284c7','#16a34a','#64748b'];
+        if (dashChartAffiliate) dashChartAffiliate.destroy();
+        dashChartAffiliate = new Chart(affCanvas.getContext('2d'), {
+          type: 'doughnut',
+          data: { labels: affLabels, datasets: [{ data: (data.affiliateActivity||[]).map(function(a){return a.orders;}), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }] },
+          options: { responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}} } },
+        });
+      }
+
+      // Customer service queue
+      var tl = document.getElementById('dashTicketList');
+      if (tl) {
+        if (data.recentTickets && data.recentTickets.length > 0) {
+          tl.innerHTML = data.recentTickets.map(function(t){
+            var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
+            var slaWarn = t.sla_risk ? '<span style="font-size:10px;color:#dc2626;background:#fef2f2;padding:1px 6px;border-radius:8px;margin-left:6px;">SLA RISK</span>' : '';
+            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<div style="overflow:hidden;"><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+slaWarn+'</div><div style="font-size:12px;color:#64748b;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'+(t.subject||'').substring(0,55)+'</div></div>'
+              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+t.priority+'</span></div>';
+          }).join('');
+        } else {
+          tl.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No open tickets right now.</div>';
+        }
+      }
+
+      // Recent orders
       var ol = document.getElementById('dashOrderList');
-      if (ol && data.recentOrders.length > 0) {
-        ol.innerHTML = data.recentOrders.map(function(o){
-          var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
-          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+o.country_code+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+o.status.replace('_',' ')+'</span></div>';
-        }).join('');
+      if (ol) {
+        if (data.recentOrders && data.recentOrders.length > 0) {
+          ol.innerHTML = data.recentOrders.map(function(o){
+            var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
+            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+(o.country_code||'')+(o.total_amount?' &middot; KES '+fmtCurrency(o.total_amount):'')+'</div></div>'
+              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+String(o.status||'').replace('_',' ')+'</span></div>';
+          }).join('');
+        } else {
+          ol.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No recent orders.</div>';
+        }
+      }
+
+      // Channel health
+      var ch = document.getElementById('dashChannelHealth');
+      if (ch) {
+        var channels = data.channelHealth || [];
+        if (channels.length) {
+          ch.innerHTML = channels.map(function(c) {
+            var status = c.status || 'unknown';
+            var color  = status === 'ok' ? '#16a34a' : status === 'warn' ? '#d97706' : status === 'down' ? '#dc2626' : '#94a3b8';
+            var label  = status === 'ok' ? 'Healthy' : status === 'warn' ? 'Degraded' : status === 'down' ? 'Down' : 'Idle';
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border-radius:8px;">'
+              + '<div style="font-size:13px;color:#1e293b;font-weight:600;">'+c.label+'</div>'
+              + '<div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:'+color+';"></span><span style="font-size:11px;color:'+color+';font-weight:700;">'+label+'</span></div></div>';
+          }).join('');
+        } else {
+          ch.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No integrations configured.</div>';
+        }
+      }
+
+      // My tasks
+      var mt = document.getElementById('dashMyTasks');
+      if (mt) {
+        var tasks = data.myTasks || [];
+        if (tasks.length) {
+          mt.innerHTML = tasks.map(function(t){
+            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<div><div style="font-size:13px;color:#1e293b;font-weight:600;">'+(t.title||'')+'</div><div style="font-size:11px;color:#64748b;">'+(t.context||'')+'</div></div>'
+              + '<span style="font-size:11px;color:#1A237E;">'+(t.due||'')+'</span></div>';
+          }).join('');
+        } else {
+          mt.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">Inbox zero. Nothing assigned to you.</div>';
+        }
       }
     })
     .handleDashboardRequest({ action:'getDashboardSummary', affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL' });
@@ -5959,7 +6660,7 @@ function loadDashboardHome() {
 document.addEventListener('DOMContentLoaded', function(){
   try { feather.replace(); } catch(e) { console.warn('feather-icons failed:', e.message); }
 
-  // Show dashboard immediately — do not wait for server round-trip
+  // Show dashboard immediately - do not wait for server round-trip
   showPage('dashboard');
 
   // Load user info and role in background

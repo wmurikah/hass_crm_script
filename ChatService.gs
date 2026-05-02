@@ -2,7 +2,7 @@
  * HASS PETROLEUM CMS - CHAT SERVICE
  * Version: 3.0.0
  *
- * Staff team collaboration chat — rooms and direct messages.
+ * Staff team collaboration chat - rooms and direct messages.
  * All reads/writes go to Turso via DatabaseSetup helpers.
  * Uses StaffMessages table in Turso.
  */
@@ -46,7 +46,7 @@ function getChatMessages(roomId, limit) {
 }
 
 /**
- * Sends a chat message — inserts into StaffMessages via Turso.
+ * Sends a chat message - inserts into StaffMessages via Turso.
  */
 function sendChatMessage(roomId, roomType, senderId, senderName, content) {
   if (!roomId || !senderId || !content) {

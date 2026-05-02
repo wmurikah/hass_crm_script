@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — CustomerStatementsService.gs
+ * HASS PETROLEUM CMS - CustomerStatementsService.gs
  * Version: 1.0.0
  *
  * Customer account statements pulled from Oracle EBS (AWS).
@@ -17,7 +17,7 @@
  *
  * Public API:
  *   handleStatementRequest(params)             - dispatcher (registered in Code.gs)
- *   runCustomerStatement(customerId, range)    - main entry — returns statement
+ *   runCustomerStatement(customerId, range)    - main entry - returns statement
  *   getCachedStatement(customerId, range)      - read cached without refetch
  *   exportStatementCsv(statement)              - returns CSV string
  *
@@ -169,7 +169,7 @@ function getCachedStatement(customerId, range) {
     payments:       _localPayments(customerId, range),
     summary:        { opening_balance: 0, total_invoiced: 0, total_paid: 0, closing_balance: 0 },
     ageing:         { current: 0, days_30: 0, days_60: 0, days_90: 0, days_over_90: 0 },
-    warnings:       ['Cached data — call action:run to refresh from Oracle.'],
+    warnings:       ['Cached data - call action:run to refresh from Oracle.'],
   };
   statement.lines = _composeLines(statement.invoices, statement.payments);
   statement.summary.total_invoiced = statement.invoices.reduce(function(s, i) { return s + (parseFloat(i.amount) || 0); }, 0);
