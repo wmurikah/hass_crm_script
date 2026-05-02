@@ -881,10 +881,29 @@ body {
             <div class="field-error" id="signupCompanyNameError"></div>
           </div>
           <div class="field-group">
-            <label class="auth-label" for="signupAccountNumber">Account Number or KRA PIN <span style="color:var(--error)">*</span></label>
-            <input class="auth-input" type="text" id="signupAccountNumber" required placeholder="Oracle EBS account number or KRA PIN">
-            <div class="field-helper">Your Oracle EBS account number or KRA PIN</div>
+            <label class="auth-label" for="signupKraPin">KRA PIN <span style="color:var(--error)">*</span></label>
+            <input class="auth-input" type="text" id="signupKraPin" required placeholder="P051234567X" pattern="^[A-Z][0-9]{9}[A-Z]$" title="Kenyan KRA PIN format: A123456789B">
+            <div class="field-helper">Required by Kenyan tax authorities. Format: A123456789B</div>
+            <div class="field-error" id="signupKraPinError"></div>
+          </div>
+          <div class="field-group">
+            <label class="auth-label" for="signupAccountNumber">Hass Account Number</label>
+            <input class="auth-input" type="text" id="signupAccountNumber" placeholder="Optional — your Oracle EBS account number">
+            <div class="field-helper">If you already have an account with us, providing this speeds up verification.</div>
             <div class="field-error" id="signupAccountNumberError"></div>
+          </div>
+          <div class="field-group">
+            <label class="auth-label" for="signupCertOfInc">Certificate of Incorporation No.</label>
+            <input class="auth-input" type="text" id="signupCertOfInc" placeholder="e.g. CPR/2015/12345">
+            <div class="field-error" id="signupCertOfIncError"></div>
+          </div>
+          <div class="field-group">
+            <label class="auth-label" for="signupCompanyAddress">Company Address</label>
+            <input class="auth-input" type="text" id="signupCompanyAddress" placeholder="Physical / postal address">
+            <div class="field-error" id="signupCompanyAddressError"></div>
+          </div>
+          <div class="field-helper" style="background:#fef9c3;border:1px solid #fde68a;color:#854d0e;border-radius:6px;padding:8px 10px;margin-top:6px;">
+            After approval you'll be asked to upload your <strong>KRA PIN certificate</strong>, <strong>Certificate of Incorporation</strong>, and a <strong>director's ID copy</strong> from inside the portal.
           </div>
         </div>
 
@@ -1717,10 +1736,11 @@ body {
       if (!topupAcct) { showFieldError('signupTopupAccount', 'Please enter your account number'); valid = false; }
     } else if (accountType === 'Corporate Account') {
       var companyName = document.getElementById('signupCompanyName').value.trim();
-      var acctNum = document.getElementById('signupAccountNumber').value.trim();
+      var kraPin = document.getElementById('signupKraPin').value.trim();
       var jobTitle = document.getElementById('signupJobTitle').value.trim();
       if (!companyName) { showFieldError('signupCompanyName', 'Please enter the company name'); valid = false; }
-      if (!acctNum) { showFieldError('signupAccountNumber', 'Please enter the account number'); valid = false; }
+      if (!kraPin) { showFieldError('signupKraPin', 'KRA PIN is required for KYC'); valid = false; }
+      else if (!/^[A-Z][0-9]{9}[A-Z]$/i.test(kraPin)) { showFieldError('signupKraPin', 'Invalid KRA PIN format (e.g. A123456789B)'); valid = false; }
       if (!jobTitle) { showFieldError('signupJobTitle', 'Please enter your job title'); valid = false; }
     }
 
@@ -1747,6 +1767,9 @@ body {
     } else if (accountType === 'Corporate Account') {
       extraFields.companyName = document.getElementById('signupCompanyName').value.trim();
       extraFields.accountNumber = document.getElementById('signupAccountNumber').value.trim();
+      extraFields.kraPin = document.getElementById('signupKraPin').value.trim().toUpperCase();
+      extraFields.certificateOfIncorporation = document.getElementById('signupCertOfInc').value.trim();
+      extraFields.companyAddress = document.getElementById('signupCompanyAddress').value.trim();
       extraFields.jobTitle = document.getElementById('signupJobTitle').value.trim();
     }
 

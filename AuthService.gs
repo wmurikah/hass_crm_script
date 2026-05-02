@@ -181,10 +181,14 @@ function signupCustomer(params) {
   var password    = String(params.password    || '').trim();
   var accountType = String(params.accountType || params.account_type  || '').trim();
   var companyName = String(params.companyName || params.company_name  || '').trim();
+  var extra       = (params.extraFields && typeof params.extraFields === 'object') ? params.extraFields : {};
   if (!email)    return { success: false, error: 'Email is required.' };
   if (!name)     return { success: false, error: 'Full name is required.' };
   if (!password) return { success: false, error: 'Password is required.' };
   if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters.' };
+  if (accountType === 'Corporate Account' && !String(extra.kraPin || '').trim()) {
+    return { success: false, error: 'KRA PIN is required for corporate sign-ups.' };
+  }
 
   var existing = findCustomerByEmail(email, '');
   if (existing.found) return { success: false, error: 'An account with this email already exists. Please sign in.' };
@@ -200,16 +204,31 @@ function signupCustomer(params) {
 
   var parts     = name.split(' ');
   var firstName = parts[0] || name;
+  var lastName  = parts.length > 1 ? parts.slice(1).join(' ') : '';
   var requestId = 'SRQ' + Utilities.getUuid().replace(/-/g, '').substring(0, 12).toUpperCase();
   var now       = new Date().toISOString();
+  var kraPin    = String(extra.kraPin || '').trim().toUpperCase();
+  var accountNo = String(extra.accountNumber || params.accountNumber || '').trim();
 
   appendRow('SignupRequests', {
     request_id:          requestId,
-    company_name:        companyName,
+    company_name:        companyName || (accountType !== 'Corporate Account' ? name : ''),
     first_name:          firstName,
+    last_name:           lastName,
     email:               email,
+    phone:               phone,
     account_type:        accountType,
     customer_id:         String(params.verifiedCustomerId || ''),
+    job_title:           String(extra.jobTitle || params.jobTitle || ''),
+    kra_pin:             kraPin,
+    tax_pin:             kraPin,
+    account_number:      accountNo,
+    certificate_of_incorporation: String(extra.certificateOfIncorporation || ''),
+    company_address:     String(extra.companyAddress || ''),
+    card_number:         String(extra.cardNumber || ''),
+    dealer_code:         String(extra.dealerCode || ''),
+    station_name:        String(extra.stationName || ''),
+    kyc_status:          'PENDING_DOCS',
     submitted_at:        now,
     status:              'PENDING_APPROVAL',
     approved_by:         '',
@@ -220,7 +239,7 @@ function signupCustomer(params) {
 
   PropertiesService.getScriptProperties().setProperty(
     'PENDING_SIGNUP_' + requestId,
-    JSON.stringify({ password_hash: hashPassword(password), phone: phone, name: name })
+    JSON.stringify({ password_hash: hashPassword(password), phone: phone, name: name, extra: extra })
   );
 
   try {

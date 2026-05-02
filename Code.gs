@@ -225,8 +225,25 @@ function handleCustomerRequest(params) {
   }
 }
 
+/**
+ * Client entry point invoked via google.script.run.
+ *
+ * doPost() returns a ContentService.TextOutput which google.script.run
+ * cannot serialize back to a plain JS object on the client. Without this
+ * unwrap step, withSuccessHandler receives an opaque object and any
+ * client-side logic that reads `r.success` / `r.error` silently fails
+ * (this is what was breaking the staff Edit modal and the RBAC matrix).
+ */
 function processRequest(params) {
-  return doPost({ postData: { contents: JSON.stringify(params) } });
+  try {
+    var resp = doPost({ postData: { contents: JSON.stringify(params || {}) } });
+    var text = (resp && typeof resp.getContent === 'function') ? resp.getContent() : '';
+    if (!text) return { success: false, error: 'Empty server response' };
+    return JSON.parse(text);
+  } catch (e) {
+    Logger.log('[Code] processRequest unwrap error: ' + e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // Background image removed — Login.html falls back to CSS gradient

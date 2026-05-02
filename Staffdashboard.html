@@ -411,6 +411,11 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 .filter-pill { display:flex; align-items:center; gap:5px; padding:4px 10px; background:#e0e7ff; color:#1A237E; border-radius:20px; font-size:12px; font-weight:600; }
 .filter-pill button { background:none; border:none; cursor:pointer; color:#1A237E; font-size:14px; line-height:1; padding:0 0 0 2px; }
 
+/* ── Reports Page ── */
+.report-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; transition:box-shadow 0.2s ease, transform 0.2s ease; }
+.report-card:hover { box-shadow:0 4px 14px rgba(15,23,42,0.06); transform:translateY(-1px); }
+.report-card .btn-secondary[disabled] { opacity:0.45; cursor:not-allowed; }
+
 /* ── Users & Roles Page ── */
 .users-tabs { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
 .users-tab { background:#fff; border:1px solid var(--slate-200); border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; color:var(--slate-600); cursor:pointer; font-family:inherit; transition:all 0.15s; }
@@ -1402,7 +1407,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <button class="users-tab" id="tabRoles" onclick="switchUserTab('roles')">Roles &amp; Permissions</button>
         <div style="flex:1"></div>
         <input type="text" id="userSearch" class="users-search" placeholder="Search by name or email..." oninput="filterUserTable()">
-        <button class="btn-add-staff" onclick="openAddStaffModal()">+ Add Staff</button>
+        <button class="btn-add-staff" id="btnAddStaffTopbar" onclick="openAddStaffModal()">+ Add Staff</button>
+        <button class="btn-add-staff" id="btnAddCustomerTopbar" onclick="openCreateCustomerModal()" style="display:none;background:#0f172a;">+ Create Customer</button>
       </div>
 
       <!-- Staff Tab -->
@@ -1438,7 +1444,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <div class="table-wrap">
           <table class="users-table" id="pendingSignupsTable">
             <thead>
-              <tr><th>Company</th><th>Email</th><th>Account Type</th><th>Submitted</th><th>Status</th><th style="text-align:right">Actions</th></tr>
+              <tr><th>Company</th><th>Applicant</th><th>Email</th><th>KRA / Tax PIN</th><th>Type</th><th>KYC</th><th>Submitted</th><th style="text-align:right">Actions</th></tr>
             </thead>
             <tbody id="pendingSignupsBody"></tbody>
           </table>
@@ -1449,8 +1455,11 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
       <!-- Roles & Permissions Tab -->
       <div id="rolesPanel" class="user-panel" style="display:none">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:#1e3a8a;line-height:1.5;">
+          <strong>How roles work.</strong> Each role is just a checklist of permissions. To make a thin role like <code>NE</code> more capable, find it in the matrix and tick the permissions you want it to have. To restrict a role, untick. Changes apply immediately and are cached for 60s. The Super Admin column is locked at <code>*</code> (all permissions). Use <strong>+ New Role</strong> to create a custom role, then assign permissions to it. Click <strong>Verify &amp; Migrate</strong> only if the schema or default seed needs to be (re)created.
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div style="font-size:13px;color:#64748b;">Roles and their permissions are stored in Turso. Toggle checkboxes to grant/revoke. Click <strong>Verify &amp; Migrate</strong> to (re)create the schema and seed defaults.</div>
+          <div style="font-size:13px;color:#64748b;">Tick / untick to grant / revoke. Roles can be delegated by Super Admin to anyone with the <code>roles.assign</code> permission.</div>
           <div style="display:flex;gap:8px;">
             <button class="btn-secondary" onclick="openCreateRoleModal()">+ New Role</button>
             <button class="btn-primary" onclick="runVerifyMigrateRBAC()">Verify &amp; Migrate</button>
@@ -1641,15 +1650,133 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       </div>
     </div>
 
+    <!-- Signup Details Modal -->
+    <div class="modal-overlay" id="signupDetailsModal" style="display:none">
+      <div class="modal-card" style="max-width:560px">
+        <div class="modal-header">
+          <h3>Signup Application</h3>
+          <button class="modal-close" onclick="closeModal('signupDetailsModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="signupDetailsBody"></div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('signupDetailsModal')">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Customer Contacts Drawer -->
     <div class="modal-overlay" id="contactsDrawer" style="display:none">
-      <div class="modal-card" style="max-width:560px">
+      <div class="modal-card" style="max-width:680px">
         <div class="modal-header">
           <h3 id="contactsDrawerTitle">Customer Contacts</h3>
           <button class="modal-close" onclick="closeModal('contactsDrawer')">&times;</button>
         </div>
-        <div class="modal-body" id="contactsDrawerBody">
-          <div class="users-loading">Loading contacts...</div>
+        <div class="modal-body">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+            <button class="btn-primary" onclick="openAddContactModal()">+ Add Contact</button>
+          </div>
+          <div id="contactsDrawerBody">
+            <div class="users-loading">Loading contacts...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add / Edit Contact Modal -->
+    <div class="modal-overlay" id="contactModal" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="contactModalTitle">Add Contact</h3>
+          <button class="modal-close" onclick="closeModal('contactModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="contactCustomerId">
+          <input type="hidden" id="contactContactId">
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input id="contactFirst" class="form-input" type="text"></div>
+            <div class="form-group"><label>Last Name</label><input id="contactLast" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Email *</label><input id="contactEmail" class="form-input" type="email"></div>
+            <div class="form-group"><label>Phone</label><input id="contactPhone" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Job Title</label><input id="contactJob" class="form-input" type="text"></div>
+            <div class="form-group">
+              <label>Type</label>
+              <select id="contactType" class="form-input">
+                <option value="CONTACT">Contact</option>
+                <option value="PRIMARY">Primary</option>
+                <option value="BILLING">Billing</option>
+                <option value="OPERATIONS">Operations</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <input id="contactPortal" type="checkbox" style="width:16px;height:16px;">
+            <label for="contactPortal" style="font-weight:500;font-size:13px;">Grant portal access (sends a temporary password)</label>
+          </div>
+          <div id="contactError" class="form-error" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('contactModal')">Cancel</button>
+          <button class="btn-primary" id="contactSaveBtn" onclick="submitContactModal()">Save Contact</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Customer Modal -->
+    <div class="modal-overlay" id="createCustomerModal" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Create Customer Account</h3>
+          <button class="modal-close" onclick="closeModal('createCustomerModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:12px;color:#64748b;margin-bottom:10px;">A primary contact is created with portal access and a temporary password is emailed.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Company Name *</label><input id="ccCompany" class="form-input" type="text"></div>
+            <div class="form-group"><label>Trading Name</label><input id="ccTrading" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Account Number</label><input id="ccAccountNumber" class="form-input" type="text" placeholder="Auto-generated if blank"></div>
+            <div class="form-group"><label>KRA / Tax PIN</label><input id="ccTaxPin" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Country *</label>
+              <select id="ccCountry" class="form-input">
+                <option value="KE">KE - Kenya</option>
+                <option value="UG">UG - Uganda</option>
+                <option value="TZ">TZ - Tanzania</option>
+                <option value="RW">RW - Rwanda</option>
+                <option value="SS">SS - South Sudan</option>
+                <option value="ZM">ZM - Zambia</option>
+                <option value="DRC">DRC - Congo</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Currency</label><input id="ccCurrency" class="form-input" type="text" value="KES"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Credit Limit</label><input id="ccCreditLimit" class="form-input" type="number" value="0"></div>
+            <div class="form-group"><label>Payment Terms</label><input id="ccPaymentTerms" class="form-input" type="text" value="NET30"></div>
+          </div>
+          <hr style="margin:14px 0;border:0;border-top:1px solid #e2e8f0;">
+          <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Primary Contact</div>
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input id="ccFirst" class="form-input" type="text"></div>
+            <div class="form-group"><label>Last Name</label><input id="ccLast" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Email *</label><input id="ccEmail" class="form-input" type="email"></div>
+            <div class="form-group"><label>Phone</label><input id="ccPhone" class="form-input" type="text"></div>
+          </div>
+          <div id="ccError" class="form-error" style="display:none"></div>
+          <div id="ccSuccess" style="display:none;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:12px;font-size:13px;margin-top:8px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('createCustomerModal')">Close</button>
+          <button class="btn-primary" id="ccSaveBtn" onclick="submitCreateCustomer()">Create Customer</button>
         </div>
       </div>
     </div>
@@ -1673,57 +1800,117 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <button class="btn-primary" onclick="applyReportRange()">Apply</button>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;">
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;" id="reportsGrid">
+        <!-- Operational reports -->
+        <div class="report-card" data-rid="orders">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <span style="font-size:24px;">📦</span>
             <div style="font-weight:700;font-size:15px;color:#1e293b;">Order Summary</div>
           </div>
           <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Totals, delivered, cancelled and value by affiliate.</div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-primary" onclick="runReport('orders')">Run</button>
+            <button class="btn-secondary" onclick="openReport('orders')" id="rpt-open-orders" disabled>Open in new tab</button>
             <button class="btn-secondary" onclick="exportReport('orders')">Export CSV</button>
+          </div>
+          <div class="rpt-progress" id="rpt-progress-orders" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-orders">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-orders" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
           </div>
           <div id="rpt-orders-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
         </div>
 
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+        <div class="report-card" data-rid="tickets">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <span style="font-size:24px;">🎫</span>
             <div style="font-weight:700;font-size:15px;color:#1e293b;">Ticket Summary</div>
           </div>
           <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Tickets by category with resolution and CSAT.</div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-primary" onclick="runReport('tickets')">Run</button>
+            <button class="btn-secondary" onclick="openReport('tickets')" id="rpt-open-tickets" disabled>Open in new tab</button>
             <button class="btn-secondary" onclick="exportReport('tickets')">Export CSV</button>
+          </div>
+          <div class="rpt-progress" id="rpt-progress-tickets" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-tickets">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-tickets" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
           </div>
           <div id="rpt-tickets-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
         </div>
 
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+        <div class="report-card" data-rid="credit">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <span style="font-size:24px;">💳</span>
             <div style="font-weight:700;font-size:15px;color:#1e293b;">Credit Exposure</div>
           </div>
           <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Credit limit vs utilisation by customer.</div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-primary" onclick="runReport('credit')">Run</button>
+            <button class="btn-secondary" onclick="openReport('credit')" id="rpt-open-credit" disabled>Open in new tab</button>
             <button class="btn-secondary" onclick="exportReport('credit')">Export CSV</button>
+          </div>
+          <div class="rpt-progress" id="rpt-progress-credit" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-credit">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-credit" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
           </div>
           <div id="rpt-credit-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
         </div>
 
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+        <div class="report-card" data-rid="sla">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <span style="font-size:24px;">⏱</span>
             <div style="font-weight:700;font-size:15px;color:#1e293b;">SLA Summary</div>
           </div>
           <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Finance / Loading SLA performance per affiliate.</div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-primary" onclick="runReport('sla')">Run</button>
+            <button class="btn-secondary" onclick="openReport('sla')" id="rpt-open-sla" disabled>Open in new tab</button>
             <button class="btn-secondary" onclick="exportReport('sla')">Export CSV</button>
           </div>
+          <div class="rpt-progress" id="rpt-progress-sla" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-sla">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-sla" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+          </div>
           <div id="rpt-sla-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+
+        <!-- Analytical reports -->
+        <div class="report-card" data-rid="consumption" style="background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);border:1px solid #c7d2fe;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">📊</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">Consumption Trend</div>
+            <span style="font-size:10px;background:#1A237E;color:#fff;padding:2px 6px;border-radius:8px;letter-spacing:0.4px;">ANALYTICS</span>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Volume sold by month and product across affiliates.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-primary" onclick="runReport('consumption')">Run</button>
+            <button class="btn-secondary" onclick="openReport('consumption')" id="rpt-open-consumption" disabled>Open in new tab</button>
+            <button class="btn-secondary" onclick="exportReport('consumption')">Export CSV</button>
+          </div>
+          <div class="rpt-progress" id="rpt-progress-consumption" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-consumption">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-consumption" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+          </div>
+          <div id="rpt-consumption-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
+        </div>
+
+        <div class="report-card" data-rid="cost" style="background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);border:1px solid #c7d2fe;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:24px;">💹</span>
+            <div style="font-weight:700;font-size:15px;color:#1e293b;">Cost Trend</div>
+            <span style="font-size:10px;background:#1A237E;color:#fff;padding:2px 6px;border-radius:8px;letter-spacing:0.4px;">ANALYTICS</span>
+          </div>
+          <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Spend, average price per litre and YoY change.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-primary" onclick="runReport('cost')">Run</button>
+            <button class="btn-secondary" onclick="openReport('cost')" id="rpt-open-cost" disabled>Open in new tab</button>
+            <button class="btn-secondary" onclick="exportReport('cost')">Export CSV</button>
+          </div>
+          <div class="rpt-progress" id="rpt-progress-cost" style="display:none;margin-top:12px;">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;" id="rpt-label-cost">Preparing...</div>
+            <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="rpt-bar-cost" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+          </div>
+          <div id="rpt-cost-result" style="display:none;margin-top:14px;overflow-x:auto;"></div>
         </div>
       </div>
     </div>
@@ -3132,6 +3319,14 @@ function switchUserTab(tab) {
   if (pendingPanel) pendingPanel.style.display = tab === 'pending' ? 'block' : 'none';
   var rolesPanel = document.getElementById('rolesPanel');
   if (rolesPanel) rolesPanel.style.display = tab === 'roles' ? 'block' : 'none';
+
+  // Toggle the topbar action button between "+ Add Staff" and "+ Create Customer"
+  var addStaffBtn   = document.getElementById('btnAddStaffTopbar');
+  var addCustBtn    = document.getElementById('btnAddCustomerTopbar');
+  var canCreateCust = (SESSION && SESSION.role === 'SUPER_ADMIN') || _hasPerm('customers.create');
+  if (addStaffBtn) addStaffBtn.style.display = (tab === 'staff') ? 'inline-block' : 'none';
+  if (addCustBtn)  addCustBtn.style.display  = (tab === 'customers' && canCreateCust) ? 'inline-block' : 'none';
+
   if (tab === 'customers' && usersCustomerData.length === 0) loadCustomersData();
   if (tab === 'pending') loadPendingSignups();
   if (tab === 'roles') loadRolesMatrix();
@@ -3284,40 +3479,62 @@ function submitCreateRole() {
 
 /* ── Edit User (Super Admin) ── */
 function openEditUserModal(userId) {
-  google.script.run
-    .withSuccessHandler(function(r) {
-      if (!r.success) { showSettingsToast(r.error, false); return; }
-      var u = r.user || {};
-      document.getElementById('editUserId').value = u.user_id || '';
-      document.getElementById('editUserFirst').value = u.first_name || '';
-      document.getElementById('editUserLast').value  = u.last_name || '';
-      document.getElementById('editUserEmail').value = u.email || '';
-      document.getElementById('editUserPhone').value = u.phone || '';
-      document.getElementById('editUserCountry').value = u.country_code || '';
-      document.getElementById('editUserTeam').value = u.team_id || '';
-      document.getElementById('editUserStatus').value = u.status || 'ACTIVE';
-      document.getElementById('editUserApprovalLimit').value = u.approval_limit || '';
-      // Render role checkboxes
-      var assigned = u.assigned_roles || [];
-      var rolesHtml = '';
-      (rbacRoles.length ? rbacRoles : []).forEach(function(r) {
-        var checked = assigned.indexOf(r.role_code) !== -1;
-        rolesHtml += '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;">'
-          + '<input type="checkbox" data-role="' + r.role_code + '" ' + (checked ? 'checked' : '') + '> '
-          + escapeHtml(r.role_name) + ' <span style="color:#94a3b8;font-size:11px;">(' + r.role_code + ')</span>'
-          + '</label>';
-      });
-      if (!rolesHtml) rolesHtml = '<div style="color:#94a3b8;font-size:12px;">Roles not loaded yet — open the Roles tab first.</div>';
-      document.getElementById('editUserRolesList').innerHTML = rolesHtml;
-      document.getElementById('editUserError').style.display = 'none';
-      document.getElementById('editUserModal').style.display = 'flex';
-    })
-    .processRequest({ service:'users', action:'getStaffUser', token: SESSION.token, userId: userId });
+  // Make sure the role catalogue is available so the role checkboxes render
+  // the first time a Super Admin clicks Edit (without having to visit the
+  // Roles tab first).
+  function ensureRoles(cb) {
+    if (rbacRoles && rbacRoles.length) { cb(); return; }
+    google.script.run
+      .withSuccessHandler(function(r) {
+        rbacRoles = (r && r.roles) || [];
+        cb();
+      })
+      .withFailureHandler(function() { cb(); })
+      .processRequest({ service:'permissions', action:'listRoles', token: SESSION.token });
+  }
+
+  ensureRoles(function() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success) { showSettingsToast((r && r.error) || 'Failed to load user', false); return; }
+        var u = r.user || {};
+        document.getElementById('editUserId').value = u.user_id || '';
+        document.getElementById('editUserFirst').value = u.first_name || '';
+        document.getElementById('editUserLast').value  = u.last_name || '';
+        document.getElementById('editUserEmail').value = u.email || '';
+        document.getElementById('editUserPhone').value = u.phone || '';
+        document.getElementById('editUserCountry').value = u.country_code || '';
+        document.getElementById('editUserTeam').value = u.team_id || '';
+        document.getElementById('editUserStatus').value = u.status || 'ACTIVE';
+        document.getElementById('editUserApprovalLimit').value = u.approval_limit || '';
+        // Render role checkboxes
+        var assigned = u.assigned_roles || [];
+        var rolesHtml = '';
+        (rbacRoles.length ? rbacRoles : []).forEach(function(r) {
+          var checked = assigned.indexOf(r.role_code) !== -1;
+          rolesHtml += '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;">'
+            + '<input type="checkbox" data-role="' + r.role_code + '" ' + (checked ? 'checked' : '') + '> '
+            + escapeHtml(r.role_name) + ' <span style="color:#94a3b8;font-size:11px;">(' + r.role_code + ')</span>'
+            + '</label>';
+        });
+        if (!rolesHtml) rolesHtml = '<div style="color:#94a3b8;font-size:12px;">No roles defined yet — visit the Roles tab and click <strong>Verify &amp; Migrate</strong> first.</div>';
+        document.getElementById('editUserRolesList').innerHTML = rolesHtml;
+        document.getElementById('editUserError').style.display = 'none';
+        document.getElementById('editUserModal').style.display = 'flex';
+      })
+      .withFailureHandler(function(e) {
+        showSettingsToast('Could not load user: ' + ((e && e.message) || 'unknown'), false);
+      })
+      .processRequest({ service:'users', action:'getStaffUser', token: SESSION.token, userId: userId });
+  });
 }
 
 function submitEditUser() {
   var btn = document.getElementById('editUserSaveBtn');
+  var errBox = document.getElementById('editUserError');
+  errBox.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Saving...';
+
   var userId = document.getElementById('editUserId').value;
   var data = {
     first_name:      document.getElementById('editUserFirst').value.trim(),
@@ -3337,40 +3554,45 @@ function submitEditUser() {
   var toAdd    = desiredRoles.filter(function(r){return initialRoles.indexOf(r) === -1;});
   var toRemove = initialRoles.filter(function(r){return desiredRoles.indexOf(r) === -1;});
 
+  function showErr(msg) {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+    errBox.textContent = msg || 'Failed to save user';
+    errBox.style.display = 'block';
+  }
+
   google.script.run
     .withSuccessHandler(function(r) {
-      if (!r.success) {
-        btn.disabled = false; btn.textContent = 'Save Changes';
-        document.getElementById('editUserError').textContent = r.error;
-        document.getElementById('editUserError').style.display = 'block';
-        return;
-      }
-      // Now apply role diffs sequentially
+      if (!r || !r.success) { showErr((r && r.error) || 'Failed to save user'); return; }
+      // Apply role diffs sequentially; surface failures instead of swallowing them.
       var queue = []
         .concat(toAdd.map(function(rc){ return { action:'assignRole', roleCode: rc }; }))
         .concat(toRemove.map(function(rc){ return { action:'removeRole', roleCode: rc }; }));
+      var failures = [];
       function next() {
         if (!queue.length) {
           btn.disabled = false; btn.textContent = 'Save Changes';
           closeModal('editUserModal');
           usersLoaded = false; loadUsersData();
-          showSettingsToast('User updated', true);
+          if (failures.length) {
+            showSettingsToast('User saved, but some role changes failed: ' + failures.join(', '), false);
+          } else {
+            showSettingsToast('User updated', true);
+          }
           return;
         }
         var op = queue.shift();
         google.script.run
-          .withSuccessHandler(next)
-          .withFailureHandler(next)
+          .withSuccessHandler(function(rr) {
+            if (rr && rr.success === false) failures.push(op.action + ' ' + op.roleCode + ': ' + rr.error);
+            next();
+          })
+          .withFailureHandler(function(e) { failures.push(op.action + ' ' + op.roleCode + ': ' + (e && e.message || 'failed')); next(); })
           .processRequest({ service:'permissions', action: op.action, token: SESSION.token,
             userId: userId, roleCode: op.roleCode });
       }
       next();
     })
-    .withFailureHandler(function(e) {
-      btn.disabled = false; btn.textContent = 'Save Changes';
-      document.getElementById('editUserError').textContent = e.message;
-      document.getElementById('editUserError').style.display = 'block';
-    })
+    .withFailureHandler(function(e) { showErr((e && e.message) || 'Network error'); })
     .processRequest({ service:'users', action:'updateStaffUser', token: SESSION.token, userId: userId, data: data });
 }
 
@@ -3403,23 +3625,67 @@ function loadPendingSignups() {
       body.innerHTML = requests.map(function(req) {
         var rid = String(req.request_id || '').replace(/'/g, "\\'");
         var company = (req.company_name || '').replace(/'/g, "\\'");
+        var applicant = (req.first_name || '') + ' ' + (req.last_name || '');
+        var kra = req.kra_pin || req.tax_pin || '-';
+        var kycStatus = String(req.kyc_status || 'PENDING_DOCS').toUpperCase();
+        var kycLabel = kycStatus === 'COMPLETE' ? 'Complete' : kycStatus === 'IN_REVIEW' ? 'In Review' : 'Pending Docs';
+        var kycColor = kycStatus === 'COMPLETE' ? '#15803d' : kycStatus === 'IN_REVIEW' ? '#92400e' : '#dc2626';
         return '<tr>'
-          + '<td><strong>' + escapeHtml(req.company_name || '-') + '</strong></td>'
-          + '<td>' + escapeHtml(req.email || '-') + '</td>'
+          + '<td><strong>' + escapeHtml(req.company_name || '-') + '</strong>'
+          +   (req.account_number ? '<div style="font-size:11px;color:#64748b;">' + escapeHtml(req.account_number) + '</div>' : '')
+          + '</td>'
+          + '<td>' + escapeHtml(applicant.trim() || '-') + (req.job_title ? '<div style="font-size:11px;color:#64748b;">' + escapeHtml(req.job_title) + '</div>' : '') + '</td>'
+          + '<td>' + escapeHtml(req.email || '-') + (req.phone ? '<div style="font-size:11px;color:#64748b;">' + escapeHtml(req.phone) + '</div>' : '') + '</td>'
+          + '<td style="font-family:monospace;font-size:12px;">' + escapeHtml(kra) + '</td>'
           + '<td>' + escapeHtml(req.account_type || '-') + '</td>'
+          + '<td><span style="font-size:11px;font-weight:600;color:' + kycColor + ';">' + kycLabel + '</span></td>'
           + '<td style="font-size:12px;color:#64748b;">' + formatDate(req.submitted_at) + '</td>'
-          + '<td>' + getStatusBadge(req.status || 'PENDING_APPROVAL') + '</td>'
           + '<td style="text-align:right;white-space:nowrap;">'
+          + '<button class="action-btn" onclick="viewSignupDetails(\'' + rid + '\')">Details</button>'
           + '<button class="action-btn" style="color:#15803d;border-color:#bbf7d0;" onclick="approveSignup(\'' + rid + '\',\'' + company + '\')">Approve</button>'
           + '<button class="action-btn danger" onclick="rejectSignup(\'' + rid + '\')">Reject</button>'
           + '</td></tr>';
       }).join('');
+      // Cache for the details modal
+      window._pendingSignupRows = requests;
     })
     .withFailureHandler(function(e) {
       if (loader) loader.style.display = 'none';
       if (empty) { empty.textContent = 'Error: ' + (e && e.message || 'failed'); empty.style.display = 'block'; }
     })
     .handleUserRequest({ action: 'getPendingSignups' });
+}
+
+function viewSignupDetails(requestId) {
+  var rows = window._pendingSignupRows || [];
+  var req = rows.filter(function(r){ return r.request_id === requestId; })[0];
+  if (!req) { showToast('Request not found'); return; }
+  var rows2 = [
+    ['Company', req.company_name],
+    ['Account Type', req.account_type],
+    ['Applicant', ((req.first_name || '') + ' ' + (req.last_name || '')).trim()],
+    ['Job Title', req.job_title],
+    ['Email', req.email],
+    ['Phone', req.phone],
+    ['KRA / Tax PIN', req.kra_pin || req.tax_pin],
+    ['Account Number', req.account_number],
+    ['Certificate of Incorporation', req.certificate_of_incorporation],
+    ['Company Address', req.company_address],
+    ['Card Number', req.card_number],
+    ['Dealer Code', req.dealer_code],
+    ['Station Name', req.station_name],
+    ['KYC Status', req.kyc_status || 'PENDING_DOCS'],
+    ['Submitted', formatDate(req.submitted_at)],
+  ].filter(function(p){ return p[1]; });
+  var html = '<table style="width:100%;font-size:13px;">'
+    + rows2.map(function(p) {
+        return '<tr><td style="padding:6px 8px;color:#64748b;border-bottom:1px solid #f1f5f9;width:40%;">' + escapeHtml(p[0]) + '</td>'
+             + '<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;font-weight:500;">' + escapeHtml(String(p[1])) + '</td></tr>';
+      }).join('')
+    + '</table>'
+    + '<div style="margin-top:12px;font-size:12px;color:#64748b;background:#f8fafc;border-radius:6px;padding:10px;">Once approved, the applicant must upload their KRA PIN certificate, Certificate of Incorporation, and director ID copy from the customer portal Documents tab.</div>';
+  document.getElementById('signupDetailsBody').innerHTML = html;
+  document.getElementById('signupDetailsModal').style.display = 'flex';
 }
 
 function approveSignup(requestId, companyName) {
@@ -3622,43 +3888,211 @@ function toggleUserStatus(userId, newStatus) {
     .handleUserRequest({ action:'setUserStatus', userId:userId, status:newStatus });
 }
 
-function openContactsDrawer(customerId, companyName) {
-  document.getElementById('contactsDrawerTitle').textContent = (companyName || 'Customer') + ' — Contacts';
-  document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-loading">Loading contacts...</div>';
-  document.getElementById('contactsDrawer').style.display = 'flex';
+var _contactsDrawerCustomer = { id: null, name: '' };
 
+function openContactsDrawer(customerId, companyName) {
+  _contactsDrawerCustomer = { id: customerId, name: companyName || 'Customer' };
+  document.getElementById('contactsDrawerTitle').textContent = _contactsDrawerCustomer.name + ' — Contacts';
+  document.getElementById('contactsDrawer').style.display = 'flex';
+  reloadContactsDrawer();
+}
+
+function reloadContactsDrawer() {
+  if (!_contactsDrawerCustomer.id) return;
+  document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-loading">Loading contacts...</div>';
   google.script.run
     .withSuccessHandler(function(r) {
-      if (r.success && r.contacts.length) {
-        var html = '<table class="users-table"><thead><tr><th>Name</th><th>Email</th><th>Type</th><th>Portal Access</th></tr></thead><tbody>';
+      var body = document.getElementById('contactsDrawerBody');
+      if (r && r.success && (r.contacts || []).length) {
+        var html = '<table class="users-table"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Portal</th><th style="text-align:right">Actions</th></tr></thead><tbody>';
         r.contacts.forEach(function(c) {
-          var isOn = c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE';
+          var isOn = c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE' || c.is_portal_user === 1 || c.is_portal_user === '1';
           html += '<tr>'
-            + '<td><strong>' + (c.first_name||'') + ' ' + (c.last_name||'') + '</strong></td>'
-            + '<td>' + (c.email||'') + '</td>'
-            + '<td>' + (c.contact_type||'') + '</td>'
+            + '<td><strong>' + escapeHtml((c.first_name||'') + ' ' + (c.last_name||'')) + '</strong>'
+            +   (c.job_title ? '<div style="font-size:11px;color:#64748b;">' + escapeHtml(c.job_title) + '</div>' : '')
+            + '</td>'
+            + '<td>' + escapeHtml(c.email||'') + '</td>'
+            + '<td>' + escapeHtml(c.phone||'') + '</td>'
+            + '<td>' + escapeHtml(c.contact_type||'') + '</td>'
             + '<td><button class="contact-portal-toggle ' + (isOn?'on':'') + '" onclick="togglePortalAccess(this,\'' + c.contact_id + '\',' + !isOn + ')"></button></td>'
+            + '<td style="text-align:right;white-space:nowrap;">'
+            +   '<button class="action-btn" onclick="openEditContactModal(\'' + c.contact_id + '\')">Edit</button>'
+            +   '<button class="action-btn" onclick="openResetPwModal(\'' + c.contact_id + '\',\'' + escapeHtml((c.first_name||'')+' '+(c.last_name||'')).replace(/\'/g,"\\\'") + '\',\'CUSTOMER\')">Reset PW</button>'
+            + '</td>'
             + '</tr>';
         });
         html += '</tbody></table>';
-        document.getElementById('contactsDrawerBody').innerHTML = html;
+        body.innerHTML = html;
       } else {
-        document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-empty">No contacts found</div>';
+        body.innerHTML = '<div class="users-empty">No contacts found. Click <strong>+ Add Contact</strong> to create one.</div>';
       }
     })
-    .handleUserRequest({ action:'getCustomerContacts', customerId:customerId });
+    .withFailureHandler(function(e) {
+      document.getElementById('contactsDrawerBody').innerHTML = '<div class="users-empty">Error: ' + ((e && e.message) || 'failed') + '</div>';
+    })
+    .handleUserRequest({ action:'getCustomerContacts', customerId: _contactsDrawerCustomer.id });
 }
 
 function togglePortalAccess(btn, contactId, newAccess) {
   google.script.run
     .withSuccessHandler(function(r) {
-      if (r.success) {
+      if (r && r.success) {
         btn.classList.toggle('on', newAccess);
         btn.setAttribute('onclick', "togglePortalAccess(this,'" + contactId + "'," + !newAccess + ")");
         showSettingsToast(r.message, true);
+      } else {
+        showSettingsToast((r && r.error) || 'Failed', false);
       }
     })
     .handleUserRequest({ action:'setContactPortalAccess', contactId:contactId, hasAccess:newAccess });
+}
+
+function openAddContactModal() {
+  if (!_contactsDrawerCustomer.id) { showSettingsToast('Open a customer first', false); return; }
+  document.getElementById('contactModalTitle').textContent = 'Add Contact — ' + _contactsDrawerCustomer.name;
+  document.getElementById('contactCustomerId').value = _contactsDrawerCustomer.id;
+  document.getElementById('contactContactId').value = '';
+  ['contactFirst','contactLast','contactEmail','contactPhone','contactJob'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('contactType').value = 'CONTACT';
+  document.getElementById('contactPortal').checked = false;
+  document.getElementById('contactError').style.display = 'none';
+  document.getElementById('contactSaveBtn').disabled = false;
+  document.getElementById('contactSaveBtn').textContent = 'Save Contact';
+  document.getElementById('contactModal').style.display = 'flex';
+}
+
+function openEditContactModal(contactId) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { showSettingsToast((r && r.error) || 'Failed to load contact', false); return; }
+      var c = (r.contacts || []).filter(function(x){ return x.contact_id === contactId; })[0];
+      if (!c) { showSettingsToast('Contact not found', false); return; }
+      document.getElementById('contactModalTitle').textContent = 'Edit Contact';
+      document.getElementById('contactCustomerId').value = _contactsDrawerCustomer.id;
+      document.getElementById('contactContactId').value = contactId;
+      document.getElementById('contactFirst').value = c.first_name || '';
+      document.getElementById('contactLast').value  = c.last_name  || '';
+      document.getElementById('contactEmail').value = c.email      || '';
+      document.getElementById('contactPhone').value = c.phone      || '';
+      document.getElementById('contactJob').value   = c.job_title  || '';
+      document.getElementById('contactType').value  = (c.contact_type || 'CONTACT').toUpperCase();
+      document.getElementById('contactPortal').checked = (c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE' || c.is_portal_user === 1);
+      document.getElementById('contactError').style.display = 'none';
+      document.getElementById('contactSaveBtn').disabled = false;
+      document.getElementById('contactSaveBtn').textContent = 'Save Contact';
+      document.getElementById('contactModal').style.display = 'flex';
+    })
+    .handleUserRequest({ action:'getCustomerContacts', customerId: _contactsDrawerCustomer.id });
+}
+
+function submitContactModal() {
+  var btn = document.getElementById('contactSaveBtn');
+  var err = document.getElementById('contactError');
+  err.style.display = 'none';
+  var data = {
+    first_name: document.getElementById('contactFirst').value.trim(),
+    last_name:  document.getElementById('contactLast').value.trim(),
+    email:      document.getElementById('contactEmail').value.trim(),
+    phone:      document.getElementById('contactPhone').value.trim(),
+    job_title:  document.getElementById('contactJob').value.trim(),
+    contact_type: document.getElementById('contactType').value,
+    is_portal_user: document.getElementById('contactPortal').checked,
+  };
+  if (!data.first_name || !data.email) {
+    err.textContent = 'First name and email are required.';
+    err.style.display = 'block';
+    return;
+  }
+  var contactId = document.getElementById('contactContactId').value;
+  var customerId = document.getElementById('contactCustomerId').value;
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  var done = function(r) {
+    btn.disabled = false; btn.textContent = 'Save Contact';
+    if (r && r.success) {
+      closeModal('contactModal');
+      reloadContactsDrawer();
+      usersLoaded = false; loadCustomersData();
+      showSettingsToast(r.message || 'Contact saved', true);
+    } else {
+      err.textContent = (r && r.error) || 'Save failed';
+      err.style.display = 'block';
+    }
+  };
+
+  if (contactId) {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler(function(e){ err.textContent = (e && e.message) || 'Network error'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Save Contact'; })
+      .handleUserRequest({ action:'updateCustomerContact', contactId: contactId, data: data });
+  } else {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler(function(e){ err.textContent = (e && e.message) || 'Network error'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'Save Contact'; })
+      .handleUserRequest({ action:'addCustomerContact', customerId: customerId, data: data });
+  }
+}
+
+/* ── Create Customer (Super Admin) ── */
+function openCreateCustomerModal() {
+  ['ccCompany','ccTrading','ccAccountNumber','ccTaxPin','ccFirst','ccLast','ccEmail','ccPhone'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('ccCountry').value = 'KE';
+  document.getElementById('ccCurrency').value = 'KES';
+  document.getElementById('ccCreditLimit').value = 0;
+  document.getElementById('ccPaymentTerms').value = 'NET30';
+  document.getElementById('ccError').style.display = 'none';
+  document.getElementById('ccSuccess').style.display = 'none';
+  document.getElementById('ccSaveBtn').disabled = false;
+  document.getElementById('ccSaveBtn').textContent = 'Create Customer';
+  document.getElementById('createCustomerModal').style.display = 'flex';
+}
+
+function submitCreateCustomer() {
+  var btn = document.getElementById('ccSaveBtn');
+  var err = document.getElementById('ccError');
+  var ok  = document.getElementById('ccSuccess');
+  err.style.display = 'none'; ok.style.display = 'none';
+  var data = {
+    company_name:   document.getElementById('ccCompany').value.trim(),
+    trading_name:   document.getElementById('ccTrading').value.trim(),
+    account_number: document.getElementById('ccAccountNumber').value.trim(),
+    tax_pin:        document.getElementById('ccTaxPin').value.trim(),
+    country_code:   document.getElementById('ccCountry').value,
+    currency_code:  document.getElementById('ccCurrency').value.trim() || 'KES',
+    credit_limit:   Number(document.getElementById('ccCreditLimit').value || 0),
+    payment_terms:  document.getElementById('ccPaymentTerms').value.trim() || 'NET30',
+    first_name:     document.getElementById('ccFirst').value.trim(),
+    last_name:      document.getElementById('ccLast').value.trim(),
+    email:          document.getElementById('ccEmail').value.trim(),
+    phone:          document.getElementById('ccPhone').value.trim(),
+  };
+  if (!data.company_name || !data.first_name || !data.email) {
+    err.textContent = 'Company name, primary contact first name, and email are required.';
+    err.style.display = 'block';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Creating...';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Create Customer';
+      if (r && r.success) {
+        ok.innerHTML = '<strong>✅ Customer created.</strong><br>'
+          + 'Account #: <code>' + escapeHtml(r.accountNumber || '') + '</code><br>'
+          + 'Temporary password (also emailed): <code style="background:#fff;padding:2px 6px;border-radius:4px;">' + escapeHtml(r.tempPassword || '') + '</code><br>'
+          + 'Customer must change this on first login.';
+        ok.style.display = 'block';
+        usersLoaded = false; loadCustomersData();
+      } else {
+        err.textContent = (r && r.error) || 'Failed to create customer';
+        err.style.display = 'block';
+      }
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = 'Create Customer';
+      err.textContent = (e && e.message) || 'Network error';
+      err.style.display = 'block';
+    })
+    .processRequest({ service:'users', action:'createCustomerAccount', token: SESSION.token, data: data });
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -4467,20 +4901,47 @@ function applyReportRange() {
 
 function runReport(reportId) {
   var wrap = document.getElementById('rpt-' + reportId + '-result');
+  var prog = document.getElementById('rpt-progress-' + reportId);
+  var bar  = document.getElementById('rpt-bar-' + reportId);
+  var label = document.getElementById('rpt-label-' + reportId);
+  var openBtn = document.getElementById('rpt-open-' + reportId);
   if (!wrap) return;
   wrap.style.display = 'block';
-  wrap.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:13px;padding:20px;">Loading...</div>';
+  wrap.innerHTML = '';
+  if (prog) prog.style.display = 'block';
+  if (bar) bar.style.width = '0%';
+  if (label) label.textContent = 'Querying records...';
+  if (openBtn) openBtn.disabled = true;
+
+  // Animated progress bar to give a sense of activity. The server call is
+  // synchronous from the client's perspective; we cap at 85% until it returns.
+  var pct = 0;
+  var ticker = setInterval(function() {
+    pct = Math.min(85, pct + Math.max(2, 8 - pct / 12));
+    if (bar) bar.style.width = pct + '%';
+    if (label) label.textContent = pct < 30 ? 'Querying records...' : pct < 60 ? 'Aggregating...' : 'Building report...';
+  }, 250);
 
   var onSuccess = function(result) {
+    clearInterval(ticker);
     var data = result && result.success ? (result.data || result) : null;
     if (!result || !result.success || !data) {
+      if (bar) bar.style.width = '0%';
+      if (label) label.textContent = 'Failed.';
       wrap.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:12px;">Failed to load report.</div>';
       return;
     }
     window._reportData[reportId] = data;
+    if (bar) bar.style.width = '100%';
+    if (label) label.textContent = 'Done.';
+    if (openBtn) openBtn.disabled = false;
     renderReport(reportId, data);
+    setTimeout(function() { if (prog) prog.style.display = 'none'; }, 600);
   };
   var onFail = function(e) {
+    clearInterval(ticker);
+    if (bar) bar.style.width = '0%';
+    if (label) label.textContent = 'Failed.';
     wrap.innerHTML = '<div style="color:#dc2626;font-size:13px;padding:12px;">Error: ' + (e && e.message || 'failed') + '</div>';
   };
 
@@ -4496,6 +4957,10 @@ function runReport(reportId) {
   } else if (reportId === 'sla') {
     google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
       .handleSLARequest({ action:'getSLAAnalytics', filters:{ year:'2026', period:'all' }, affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+  } else if (reportId === 'consumption' || reportId === 'cost') {
+    // Consumption / cost trend reports aggregate orders into months.
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleOrderRequest({ action:'list', conditions:{}, options:{ limit:5000 } });
   }
 }
 
@@ -4577,6 +5042,39 @@ function renderReport(reportId, data) {
         r.onTime != null ? Number(r.onTime).toFixed(1) + '%' : '-'
       ];
     });
+  } else if (reportId === 'consumption') {
+    // Aggregate volumes by month
+    var byMonth = {};
+    (data || []).forEach(function(o) {
+      var d = o.created_at || o.order_date || '';
+      var period = d ? String(d).substring(0, 7) : '-';
+      if (!byMonth[period]) byMonth[period] = { volume: 0, value: 0, count: 0 };
+      byMonth[period].volume += Number(o.total_volume || o.volume || 0);
+      byMonth[period].value  += Number(o.total_amount || o.total_value || 0);
+      byMonth[period].count++;
+    });
+    headers = ['Month','Orders','Volume (L)','Value'];
+    rows = Object.keys(byMonth).sort().map(function(k) {
+      var r = byMonth[k];
+      return [k, r.count, Math.round(r.volume).toLocaleString(), Math.round(r.value).toLocaleString()];
+    });
+  } else if (reportId === 'cost') {
+    // Spend + average price per litre by month
+    var costByMonth = {};
+    (data || []).forEach(function(o) {
+      var d = o.created_at || o.order_date || '';
+      var period = d ? String(d).substring(0, 7) : '-';
+      if (!costByMonth[period]) costByMonth[period] = { value: 0, volume: 0, count: 0 };
+      costByMonth[period].value  += Number(o.total_amount || o.total_value || 0);
+      costByMonth[period].volume += Number(o.total_volume || o.volume || 0);
+      costByMonth[period].count++;
+    });
+    headers = ['Month','Orders','Total Spend','Avg Price / L'];
+    rows = Object.keys(costByMonth).sort().map(function(k) {
+      var r = costByMonth[k];
+      var avg = r.volume ? (r.value / r.volume) : 0;
+      return [k, r.count, Math.round(r.value).toLocaleString(), avg.toFixed(2)];
+    });
   }
 
   if (!rows.length) {
@@ -4631,6 +5129,35 @@ function exportReport(reportId) {
   } else {
     proceed();
   }
+}
+
+function openReport(reportId) {
+  var wrap = document.getElementById('rpt-' + reportId + '-result');
+  if (!wrap || !wrap.querySelector('table')) { showToast('Run the report first.'); return; }
+  var titles = {
+    orders: 'Order Summary', tickets: 'Ticket Summary', credit: 'Credit Exposure',
+    sla: 'SLA Summary', consumption: 'Consumption Trend', cost: 'Cost Trend',
+  };
+  var title = titles[reportId] || ('Report — ' + reportId);
+  var tableHtml = wrap.innerHTML;
+  var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + ' — Hass Petroleum</title>'
+    + '<style>'
+    + 'body{font-family:Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 20px;color:#1e293b;}'
+    + 'h1{color:#1A237E;font-size:22px;margin:0 0 4px;} .meta{color:#64748b;font-size:12px;margin-bottom:18px;}'
+    + 'table{width:100%;border-collapse:collapse;font-size:13px;}'
+    + 'th,td{border-bottom:1px solid #e2e8f0;padding:8px 10px;text-align:left;}'
+    + 'th{background:#f8fafc;color:#64748b;text-transform:uppercase;letter-spacing:.4px;font-size:11px;}'
+    + '.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}'
+    + '.btn{background:#1A237E;color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;font-family:inherit;}'
+    + '@media print{.btn,.toolbar{display:none;}}'
+    + '</style></head><body>'
+    + '<div class="toolbar"><h1>' + escapeHtml(title) + '</h1><button class="btn" onclick="window.print()">Print / Save PDF</button></div>'
+    + '<div class="meta">Generated ' + new Date().toLocaleString() + '</div>'
+    + tableHtml
+    + '</body></html>';
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Pop-up blocked. Please allow pop-ups for this site.'); return; }
+  w.document.write(html); w.document.close();
 }
 
 

@@ -38,9 +38,18 @@ function handleUserRequest(params) {
       case 'getCustomerContacts':
         if (s) requirePermission(s, 'customers.view');
         return getCustomerContacts(params.customerId);
+      case 'addCustomerContact':
+        if (s) requirePermission(s, 'customers.edit');
+        return addCustomerContact(params.customerId, params.data, (s && s.userId) || 'STAFF');
+      case 'updateCustomerContact':
+        if (s) requirePermission(s, 'customers.edit');
+        return updateCustomerContact(params.contactId, params.data);
       case 'setContactPortalAccess':
         if (s) requirePermission(s, 'customers.edit');
         return setContactPortalAccess(params.contactId, params.hasAccess);
+      case 'createCustomerAccount':
+        if (s) requirePermission(s, 'customers.create');
+        return createCustomerAccount(params.data, (s && s.userId) || 'STAFF');
       case 'getPendingSignups':
         if (s) requirePermission(s, 'users.view');
         return getPendingSignups();
@@ -310,6 +319,193 @@ function setContactPortalAccess(contactId, hasAccess) {
   return success
     ? { success: true,  message: 'Portal access ' + (hasAccess ? 'enabled' : 'disabled') }
     : { success: false, error:   'Contact not found' };
+}
+
+/**
+ * Adds a new contact under a customer. Optionally provisions portal access
+ * (creates a row in Users with a temp password and emails it).
+ * Used by staff (Customer Accounts) and primary contacts (Customer Portal).
+ */
+function addCustomerContact(customerId, data, actorId) {
+  if (!customerId) return { success: false, error: 'customerId required' };
+  if (!data || !data.email || !data.first_name) {
+    return { success: false, error: 'first_name and email are required' };
+  }
+  var email = String(data.email).trim().toLowerCase();
+  if (!email) return { success: false, error: 'email is required' };
+
+  // Duplicate check (across both contacts and staff)
+  var existingContact = findRow('Contacts', 'email', email);
+  if (existingContact) return { success: false, error: 'A contact with this email already exists' };
+  var existingUser = findRow('Users', 'email', email);
+  if (existingUser) return { success: false, error: 'A user with this email already exists' };
+
+  var contactId = 'CON' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 8).toUpperCase();
+  var now = new Date().toISOString();
+  var grantPortal = !!data.is_portal_user;
+
+  appendRow('Contacts', {
+    contact_id:     contactId,
+    customer_id:    customerId,
+    first_name:     String(data.first_name).trim(),
+    last_name:      String(data.last_name || '').trim(),
+    email:          email,
+    phone:          String(data.phone || '').trim(),
+    job_title:      String(data.job_title || '').trim(),
+    contact_type:   String(data.contact_type || 'CONTACT').toUpperCase(),
+    is_portal_user: grantPortal,
+    status:         'ACTIVE',
+    created_by:     actorId || 'STAFF',
+    created_at:     now,
+    updated_at:     now,
+  });
+
+  var tempPassword = '';
+  if (grantPortal) {
+    tempPassword = generateTempPassword();
+    // Store password_hash on the contact row so login flow works
+    updateRow('Contacts', 'contact_id', contactId, { password_hash: hashPassword(tempPassword) });
+    try {
+      MailApp.sendEmail({
+        to:       email,
+        subject:  'Hass Petroleum Portal — Your Account',
+        htmlBody: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">'
+          + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
+          + '<p>Hi ' + (data.first_name || '') + ',</p>'
+          + '<p>You have been granted portal access to your company\'s Hass Petroleum account.</p>'
+          + '<div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;">'
+          + '<p style="margin:4px 0;"><strong>Email:</strong> ' + email + '</p>'
+          + '<p style="margin:4px 0;"><strong>Temporary Password:</strong> ' + tempPassword + '</p>'
+          + '</div>'
+          + '<p style="color:#dc2626;font-weight:600;">Please change your password on first login.</p>'
+          + '<p>Best regards,<br>Hass Petroleum Group</p>'
+          + '</div>',
+      });
+    } catch(e) { Logger.log('[UserService] addContact email failed: ' + e.message); }
+  }
+
+  try { clearSheetCache('Contacts'); } catch(e) {}
+  return {
+    success: true,
+    contactId: contactId,
+    tempPassword: tempPassword,
+    message: grantPortal ? 'Contact created. Login email sent.' : 'Contact created.',
+  };
+}
+
+function updateCustomerContact(contactId, data) {
+  if (!contactId || !data) return { success: false, error: 'contactId and data required' };
+  var ALLOWED = ['first_name','last_name','email','phone','job_title','contact_type','status','is_portal_user'];
+  var updates = {};
+  ALLOWED.forEach(function(k) {
+    if (data[k] !== undefined && data[k] !== null) updates[k] = data[k];
+  });
+  if (!Object.keys(updates).length) return { success: false, error: 'No editable fields provided' };
+  if (updates.email) {
+    updates.email = String(updates.email).trim().toLowerCase();
+    var dup = findRow('Contacts', 'email', updates.email);
+    if (dup && dup.contact_id !== contactId) {
+      return { success: false, error: 'Email already in use by another contact' };
+    }
+  }
+  var ok = updateRow('Contacts', 'contact_id', contactId, updates);
+  if (!ok) return { success: false, error: 'Contact not found' };
+  try { clearSheetCache('Contacts'); } catch(e) {}
+  return { success: true, message: 'Contact updated' };
+}
+
+/**
+ * Super-Admin path: provision a new customer account with a primary contact
+ * and a temporary password. Returns the temp password so the caller can
+ * display it once; the password is also emailed to the contact.
+ */
+function createCustomerAccount(data, actorId) {
+  if (!data) return { success: false, error: 'data required' };
+  var company = String(data.company_name || '').trim();
+  var email   = String(data.email || '').trim().toLowerCase();
+  if (!company) return { success: false, error: 'company_name is required' };
+  if (!email)   return { success: false, error: 'Primary contact email is required' };
+
+  // Block duplicate primary email (must be unique across both Contacts and Users)
+  var existingContact = findRow('Contacts', 'email', email);
+  if (existingContact) return { success: false, error: 'A contact with this email already exists' };
+  var existingUser = findRow('Users', 'email', email);
+  if (existingUser) return { success: false, error: 'A user with this email already exists' };
+
+  var customerId   = 'CUST' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+  var now          = new Date().toISOString();
+  var country      = String(data.country_code || 'KE').toUpperCase();
+  var accountNum   = String(data.account_number || ('HASS-' + country + '-' + customerId.substring(4, 10))).toUpperCase();
+
+  appendRow('Customers', {
+    customer_id:      customerId,
+    company_name:     company,
+    trading_name:     String(data.trading_name || company).trim(),
+    account_number:   accountNum,
+    country_code:     country,
+    currency_code:    String(data.currency_code || 'KES').toUpperCase(),
+    credit_limit:     Number(data.credit_limit || 0),
+    credit_used:      0,
+    payment_terms:    String(data.payment_terms || 'NET30'),
+    tax_pin:          String(data.tax_pin || data.kra_pin || '').trim(),
+    segment_id:       String(data.segment_id || '').trim(),
+    status:           'ACTIVE',
+    created_by:       actorId || 'SUPER_ADMIN',
+    created_at:       now,
+    updated_at:       now,
+  });
+
+  // Provision primary contact + portal user with a temp password.
+  var contactId   = 'CON' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
+  var tempPassword = generateTempPassword();
+  var hashed = hashPassword(tempPassword);
+
+  appendRow('Contacts', {
+    contact_id:     contactId,
+    customer_id:    customerId,
+    first_name:     String(data.first_name || '').trim(),
+    last_name:      String(data.last_name || '').trim(),
+    email:          email,
+    phone:          String(data.phone || '').trim(),
+    job_title:      String(data.job_title || 'Primary Contact').trim(),
+    contact_type:   'PRIMARY',
+    is_portal_user: true,
+    password_hash:  hashed,
+    status:         'ACTIVE',
+    created_by:     actorId || 'SUPER_ADMIN',
+    created_at:     now,
+    updated_at:     now,
+  });
+
+  try {
+    MailApp.sendEmail({
+      to:       email,
+      subject:  'Welcome to Hass Petroleum Portal — Account Created',
+      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">'
+        + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
+        + '<p>Hi ' + (data.first_name || company) + ',</p>'
+        + '<p>An account has been created for <strong>' + company + '</strong>. Please use the temporary password below to log in for the first time and change it immediately.</p>'
+        + '<div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;">'
+        + '<p style="margin:4px 0;"><strong>Account No:</strong> ' + accountNum + '</p>'
+        + '<p style="margin:4px 0;"><strong>Email:</strong> ' + email + '</p>'
+        + '<p style="margin:4px 0;"><strong>Temporary Password:</strong> ' + tempPassword + '</p>'
+        + '</div>'
+        + '<p style="color:#dc2626;font-weight:600;">You will be required to change this password on first login.</p>'
+        + '<p>Best regards,<br>Hass Petroleum Group</p>'
+        + '</div>',
+    });
+  } catch(e) { Logger.log('[UserService] createCustomer email failed: ' + e.message); }
+
+  try { clearSheetCache('Customers'); clearSheetCache('Contacts'); } catch(e) {}
+
+  return {
+    success: true,
+    customerId: customerId,
+    contactId: contactId,
+    accountNumber: accountNum,
+    tempPassword: tempPassword,
+    message: 'Customer account created. Credentials emailed to ' + email + '.',
+  };
 }
 
 // ============================================================================
