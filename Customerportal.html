@@ -207,6 +207,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <a class="hp-nav-item" onclick="showPage('tickets')" data-page="tickets">&#127915; Tickets</a>
     <a class="hp-nav-item" onclick="showPage('documents')" data-page="documents">&#128196; Documents</a>
     <a class="hp-nav-item" onclick="showPage('consumption')" data-page="consumption"><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='12' width='4' height='8'/><rect x='9' y='8' width='4' height='12'/><rect x='15' y='4' width='4' height='16'/><path d='M3 3l18 0'/></svg> <span>My Consumption</span></a>
+    <a class="hp-nav-item" onclick="showPage('statements')" data-page="statements">&#128202; Statements</a>
     <a class="hp-nav-item" onclick="showPage('account')" data-page="account">&#9881; Account</a>
   </nav>
   <div class="sidebar-footer"><a class="hp-nav-item" onclick="doLogout()">&#10140; Logout</a></div>
@@ -332,6 +333,37 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     </div>
 
     <!-- Account -->
+    <!-- ══════════ STATEMENTS PAGE ══════════ -->
+    <div class="hp-page" id="page-statements">
+      <div class="hp-card">
+        <div class="hp-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <span>Account Statement</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <label style="font-size:12px;color:#64748b;">From</label>
+            <input type="date" id="stmtFrom" class="form-control form-control-sm" style="width:150px;">
+            <label style="font-size:12px;color:#64748b;">To</label>
+            <input type="date" id="stmtTo" class="form-control form-control-sm" style="width:150px;">
+            <button class="btn btn-sm btn-hp-primary" onclick="runStatement()">Run Statement</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="downloadStatementCsv()">Download CSV</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="printStatement()">Print</button>
+          </div>
+        </div>
+        <div class="p-3" id="stmtSource" style="font-size:12px;color:#64748b;"></div>
+        <div class="p-3" id="stmtSummary" style="display:none;"></div>
+        <div id="stmtLoading" style="display:none;padding:20px;text-align:center;color:#64748b;">Pulling statement from Oracle EBS...</div>
+        <div class="table-responsive p-3">
+          <table class="table table-sm" id="stmtTable" style="display:none;">
+            <thead style="background:#f8fafc;">
+              <tr><th>Date</th><th>Type</th><th>Reference</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr>
+            </thead>
+            <tbody id="stmtBody"></tbody>
+          </table>
+          <div id="stmtEmpty" style="display:none;color:#94a3b8;text-align:center;padding:30px;">No transactions found in this period.</div>
+        </div>
+        <div class="p-3" id="stmtAgeing"></div>
+      </div>
+    </div>
+
     <div class="hp-page" id="page-account">
       <h5 class="mb-4 fw-bold">My Account</h5>
       <div class="row g-4">
@@ -567,7 +599,137 @@ function showPage(id){
   if(id==='tickets') loadAllTickets();
   if(id==='documents') loadDocuments();
   if(id==='account') loadAccountDetails();
+  if(id==='statements') initStatementPage();
   stopChatPolling();
+}
+
+/* ══════════ STATEMENTS ══════════ */
+window._lastStatement = null;
+
+function initStatementPage() {
+  var to = new Date();
+  var from = new Date(to.getFullYear(), to.getMonth() - 2, 1);
+  var fromEl = document.getElementById('stmtFrom');
+  var toEl   = document.getElementById('stmtTo');
+  if (fromEl && !fromEl.value) fromEl.value = from.toISOString().slice(0, 10);
+  if (toEl && !toEl.value)     toEl.value   = to.toISOString().slice(0, 10);
+  if (!window._lastStatement) runStatement();
+}
+
+function runStatement() {
+  var from = document.getElementById('stmtFrom').value;
+  var to   = document.getElementById('stmtTo').value;
+  if (!from || !to) { showToast('Please pick a date range', 'error'); return; }
+  document.getElementById('stmtLoading').style.display = 'block';
+  document.getElementById('stmtTable').style.display = 'none';
+  document.getElementById('stmtEmpty').style.display = 'none';
+  document.getElementById('stmtSummary').style.display = 'none';
+  document.getElementById('stmtAgeing').innerHTML = '';
+  document.getElementById('stmtSource').textContent = '';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      document.getElementById('stmtLoading').style.display = 'none';
+      if (!r || !r.success) { showToast(r && r.error || 'Failed to load statement', 'error'); return; }
+      window._lastStatement = r.statement;
+      renderStatement(r.statement);
+    })
+    .withFailureHandler(function(e) {
+      document.getElementById('stmtLoading').style.display = 'none';
+      showToast('Error: ' + e.message, 'error');
+    })
+    .processRequest({ service:'statements', action:'run', token: SESSION.token,
+      customerId: SESSION.customerId, range: { from: from, to: to } });
+}
+
+function renderStatement(stmt) {
+  var src = document.getElementById('stmtSource');
+  var srcLabel = stmt.source === 'ORACLE_EBS' ? 'Oracle EBS (live)'
+               : stmt.source === 'CACHE_FALLBACK' ? 'Cached (Oracle unavailable)'
+               : 'Local CMS data';
+  src.innerHTML = 'Source: <strong>' + srcLabel + '</strong> · Generated ' + new Date(stmt.generated_at).toLocaleString()
+    + (stmt.warnings && stmt.warnings.length ? '<div style="color:#d97706;margin-top:4px;">' + stmt.warnings.join('; ') + '</div>' : '');
+
+  // Summary cards
+  var sm = stmt.summary;
+  var cur = stmt.currency_code || 'KES';
+  var fmt = function(n) { return cur + ' ' + Number(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  var summaryEl = document.getElementById('stmtSummary');
+  summaryEl.style.display = 'block';
+  summaryEl.innerHTML = '<div class="row g-3">'
+    + '<div class="col-md-3"><div class="hp-kpi"><div class="label">Opening Balance</div><div class="value" style="font-size:18px;">' + fmt(sm.opening_balance) + '</div></div></div>'
+    + '<div class="col-md-3"><div class="hp-kpi"><div class="label">Total Invoiced</div><div class="value" style="font-size:18px;">' + fmt(sm.total_invoiced) + '</div></div></div>'
+    + '<div class="col-md-3"><div class="hp-kpi"><div class="label">Total Paid</div><div class="value" style="font-size:18px;">' + fmt(sm.total_paid) + '</div></div></div>'
+    + '<div class="col-md-3"><div class="hp-kpi"><div class="label">Closing Balance</div><div class="value" style="font-size:18px;color:' + (sm.closing_balance > 0 ? '#dc2626' : '#15803d') + ';">' + fmt(sm.closing_balance) + '</div></div></div>'
+    + '</div>';
+
+  // Lines
+  var lines = stmt.lines || [];
+  if (!lines.length) {
+    document.getElementById('stmtEmpty').style.display = 'block';
+  } else {
+    var rows = lines.map(function(l) {
+      return '<tr>'
+        + '<td>' + (l.date ? new Date(l.date).toLocaleDateString() : '-') + '</td>'
+        + '<td><span class="hp-badge hp-badge-' + (l.type === 'INVOICE' ? 'open' : 'done') + '">' + l.type + '</span></td>'
+        + '<td>' + (l.reference || '-') + '</td>'
+        + '<td>' + (l.description || '') + '</td>'
+        + '<td class="text-end">' + (l.debit  ? fmt(l.debit)  : '') + '</td>'
+        + '<td class="text-end">' + (l.credit ? fmt(l.credit) : '') + '</td>'
+        + '<td class="text-end" style="font-weight:600;">' + fmt(l.running_balance) + '</td>'
+        + '</tr>';
+    }).join('');
+    document.getElementById('stmtBody').innerHTML = rows;
+    document.getElementById('stmtTable').style.display = 'table';
+  }
+
+  // Ageing
+  var a = stmt.ageing || {};
+  document.getElementById('stmtAgeing').innerHTML =
+    '<h6 style="margin-top:14px;">Ageing</h6>'
+    + '<div class="row g-2" style="font-size:12px;">'
+    + '<div class="col"><div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;">Current</div><div style="font-weight:700;">' + fmt(a.current) + '</div></div></div>'
+    + '<div class="col"><div style="background:#fefce8;border:1px solid #fef08a;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;">1–30 days</div><div style="font-weight:700;">' + fmt(a.days_30) + '</div></div></div>'
+    + '<div class="col"><div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;">31–60 days</div><div style="font-weight:700;">' + fmt(a.days_60) + '</div></div></div>'
+    + '<div class="col"><div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;text-align:center;"><div style="color:#64748b;">61–90 days</div><div style="font-weight:700;">' + fmt(a.days_90) + '</div></div></div>'
+    + '<div class="col"><div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:8px;text-align:center;"><div style="color:#991b1b;">90+ days</div><div style="font-weight:700;">' + fmt(a.days_over_90) + '</div></div></div>'
+    + '</div>';
+}
+
+function downloadStatementCsv() {
+  if (!window._lastStatement) { showToast('Run the statement first', 'error'); return; }
+  var stmt = window._lastStatement;
+  var rows = [];
+  rows.push(['Date','Type','Reference','Description','Debit','Credit','Balance']);
+  stmt.lines.forEach(function(l) {
+    rows.push([l.date, l.type, l.reference, l.description, l.debit || '', l.credit || '', l.running_balance]);
+  });
+  var csv = rows.map(function(r) {
+    return r.map(function(c) {
+      var v = (c == null) ? '' : String(c);
+      if (v.indexOf(',') !== -1 || v.indexOf('"') !== -1) v = '"' + v.replace(/"/g,'""') + '"';
+      return v;
+    }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'statement-' + (stmt.account_number || 'account') + '-' + stmt.range.from + '_to_' + stmt.range.to + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+function printStatement() {
+  if (!window._lastStatement) { showToast('Run the statement first', 'error'); return; }
+  var html = document.getElementById('page-statements').innerHTML;
+  var w = window.open('', '_blank');
+  w.document.write('<html><head><title>Statement</title>'
+    + '<style>body{font-family:Arial,sans-serif;padding:20px;} table{width:100%;border-collapse:collapse;font-size:12px;} '
+    + 'th,td{padding:6px;border-bottom:1px solid #ddd;text-align:left;} .text-end{text-align:right;} '
+    + '.hp-badge{padding:2px 6px;border-radius:4px;font-size:11px;background:#eee;} '
+    + 'button,input{display:none !important;}</style></head><body>' + html + '</body></html>');
+  w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 200);
 }
 
 function showToast(msg,type){
@@ -1760,13 +1922,46 @@ function stopChatPolling() {
 function onNewChatMessages(result) {
   if (!result || !result.success || !result.newComments || !result.newComments.length) return;
   var filtered = result.newComments.filter(function(c){ return !c.is_internal && c.author_type !== 'CUSTOMER'; });
-  filtered.forEach(function(msg){ appendChatMessage(msg); });
+  filtered.forEach(function(msg){
+    appendChatMessage(msg);
+    showChatBrowserNotification(msg.author_name || 'Hass Petroleum', msg.body || msg.comment || '');
+  });
   if (filtered.length > 0 && !chatPanelOpen) {
     unreadChatCount += filtered.length;
     updateChatBadge();
   }
   lastChatFetchTime = result.checkedAt || new Date().toISOString();
 }
+
+/* ── Windows tray notifications (browser Notification API) ── */
+window.desktopNotifEnabled = (localStorage.getItem('hass_chat_notif') !== 'off');
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch(e) {}
+  }
+}
+
+function showChatBrowserNotification(senderName, messageContent) {
+  if (!window.desktopNotifEnabled) return;
+  if (document.visibilityState === 'visible' && chatPanelOpen) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  var preview = (messageContent || '').length > 60 ? messageContent.substring(0, 60) + '...' : (messageContent || '');
+  try {
+    var n = new Notification('Hass Petroleum — New message', {
+      body: (senderName || 'Support') + ': ' + preview,
+      tag: 'hass-customer-chat',
+      renotify: true,
+      requireInteraction: false
+    });
+    n.onclick = function() { window.focus(); if (typeof openChatPanel === 'function') openChatPanel(); n.close(); };
+  } catch(e) {}
+}
+
+// Request once on portal load
+try { requestNotificationPermission(); } catch(e) {}
 
 function updateChatBadge() {
   var badge = document.getElementById('chatBadge');

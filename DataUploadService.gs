@@ -9,10 +9,21 @@
 // ============================================================================
 function handleDataUploadRequest(params) {
   try {
+    var s = params._session;
     switch(params.action) {
+      // New canonical names
+      case 'importLaRows':
+        if (s) requirePermission(s, 'uploads.la');
+        return importSalesRows(params.rows, params.affiliateCountryCode);
+      case 'importPoRows':
+        if (s) requirePermission(s, 'uploads.po');
+        return importPurRows(params.rows, params.affiliateCountryCode);
+      // Legacy aliases (kept until front-end migrates)
       case 'importSalesRows':
+        if (s) requirePermission(s, 'uploads.la');
         return importSalesRows(params.rows, params.affiliateCountryCode);
       case 'importPurRows':
+        if (s) requirePermission(s, 'uploads.po');
         return importPurRows(params.rows, params.affiliateCountryCode);
       default:
         return { success: false, error: 'Unknown upload action: ' + params.action };

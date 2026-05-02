@@ -132,7 +132,7 @@ function include(filename) {
 var AUTHENTICATED_SERVICES_ = [
   'tickets', 'orders', 'customers', 'documents', 'knowledge',
   'notifications', 'integrations', 'sla', 'chat', 'settings',
-  'upload', 'dashboard', 'users',
+  'upload', 'dashboard', 'users', 'permissions', 'statements',
 ];
 
 function doPost(e) {
@@ -169,6 +169,8 @@ function doPost(e) {
       case 'upload':        result = handleDataUploadRequest(params);   break;
       case 'dashboard':     result = handleDashboardRequest(params);    break;
       case 'users':         result = handleUserRequest(params);         break;
+      case 'permissions':   result = handlePermissionRequest(params);   break;
+      case 'statements':    result = handleStatementRequest(params);    break;
       default:
         result = { success: false, error: 'Unknown service: ' + service };
     }
