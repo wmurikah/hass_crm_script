@@ -9,24 +9,53 @@
 function handleUserRequest(params) {
   try {
     var action = params.action;
+    var s = params._session;
     switch (action) {
-      case 'getAllStaff':            return getAllStaff();
-      case 'getAllCustomers':         return getAllCustomers();
-      case 'addStaffUser':           return addStaffUser(params.data);
-      case 'updateStaffRole':        return updateStaffRole(params.userId, params.newRole);
-      case 'setUserStatus':          return setUserStatus(params.userId, params.status);
-      case 'resetUserPassword':      return resetUserPassword(params.userId, params.userType);
-      case 'getCustomerContacts':    return getCustomerContacts(params.customerId);
-      case 'setContactPortalAccess': return setContactPortalAccess(params.contactId, params.hasAccess);
-      case 'getPendingSignups':      return getPendingSignups();
-      case 'approveSignup':          return approveSignup(params.requestId, params.approvedBy);
-      case 'rejectSignup':           return rejectSignup(params.requestId, params.reason);
+      case 'getAllStaff':
+        if (s) requirePermission(s, 'users.view');
+        return getAllStaff();
+      case 'getAllCustomers':
+        if (s) requirePermission(s, 'customers.view');
+        return getAllCustomers();
+      case 'getStaffUser':
+        if (s) requirePermission(s, 'users.view');
+        return getStaffUser(params.userId);
+      case 'addStaffUser':
+        if (s) requirePermission(s, 'users.create');
+        return addStaffUser(params.data);
+      case 'updateStaffUser':
+        if (s) requirePermission(s, 'users.edit');
+        return updateStaffUser(params.userId, params.data);
+      case 'updateStaffRole':
+        if (s) requirePermission(s, 'roles.assign');
+        return updateStaffRole(params.userId, params.newRole);
+      case 'setUserStatus':
+        if (s) requirePermission(s, 'users.delete');
+        return setUserStatus(params.userId, params.status);
+      case 'resetUserPassword':
+        if (s) requirePermission(s, 'users.reset_password');
+        return resetUserPassword(params.userId, params.userType);
+      case 'getCustomerContacts':
+        if (s) requirePermission(s, 'customers.view');
+        return getCustomerContacts(params.customerId);
+      case 'setContactPortalAccess':
+        if (s) requirePermission(s, 'customers.edit');
+        return setContactPortalAccess(params.contactId, params.hasAccess);
+      case 'getPendingSignups':
+        if (s) requirePermission(s, 'users.view');
+        return getPendingSignups();
+      case 'approveSignup':
+        if (s) requirePermission(s, 'users.create');
+        return approveSignup(params.requestId, params.approvedBy);
+      case 'rejectSignup':
+        if (s) requirePermission(s, 'users.create');
+        return rejectSignup(params.requestId, params.reason);
       default:
         return { success: false, error: 'Unknown user action: ' + action };
     }
   } catch(e) {
     Logger.log('[UserService] error: ' + e.message);
-    return { success: false, error: 'User service error: ' + e.message };
+    return { success: false, error: e.message };
   }
 }
 
@@ -106,16 +135,74 @@ function addStaffUser(data) {
   return { success: true, userId: userId, message: 'Staff user created. Welcome email sent.' };
 }
 
+function getStaffUser(userId) {
+  if (!userId) return { success: false, error: 'userId required' };
+  var row = findRow('Users', 'user_id', userId);
+  if (!row) return { success: false, error: 'User not found' };
+  var safe = Object.assign({}, row);
+  delete safe.password_hash;
+  // Attach roles & permissions
+  try {
+    var roles = tursoSelect('SELECT role_code FROM user_roles WHERE user_id = ?', [userId]);
+    safe.assigned_roles = roles.map(function(r) { return r.role_code; });
+    safe.permissions    = userPermissions(userId);
+  } catch(e) {
+    safe.assigned_roles = [];
+    safe.permissions    = [];
+  }
+  return { success: true, user: safe };
+}
+
+/**
+ * Edits arbitrary user details (Super Admin power).
+ * Whitelisted fields only — never password_hash, never user_id.
+ */
+function updateStaffUser(userId, data) {
+  if (!userId || !data) return { success: false, error: 'userId and data required' };
+  var ALLOWED = ['first_name','last_name','email','phone','team_id','country_code',
+                 'countries_access','reports_to','can_approve_orders','approval_limit',
+                 'max_tickets','status','role'];
+  var updates = {};
+  ALLOWED.forEach(function(k) {
+    if (data[k] !== undefined && data[k] !== null) updates[k] = data[k];
+  });
+  if (Object.keys(updates).length === 0) return { success: false, error: 'No editable fields provided' };
+
+  // Email uniqueness check
+  if (updates.email) {
+    updates.email = String(updates.email).trim().toLowerCase();
+    var dup = findRow('Users', 'email', updates.email);
+    if (dup && dup.user_id !== userId) return { success: false, error: 'Email already in use by another user' };
+  }
+  var ok = updateRow('Users', 'user_id', userId, updates);
+  if (!ok) return { success: false, error: 'User not found' };
+  try { _invalidatePermissionCache(userId); } catch(e) {}
+  return { success: true, message: 'User updated' };
+}
+
 function updateStaffRole(userId, newRole) {
   if (!userId || !newRole) return { success: false, error: 'userId and newRole required' };
-  var validRoles = ['SUPER_ADMIN', 'ADMIN', 'CS_MANAGER', 'CS_SUPERVISOR', 'CS_AGENT', 'BD_MANAGER', 'BD_REP',
-                    'FINANCE_OFFICER', 'COUNTRY_MANAGER', 'REGIONAL_MANAGER', 'GROUP_HEAD', 'VIEWER'];
-  if (validRoles.indexOf(newRole) === -1) return { success: false, error: 'Invalid role: ' + newRole };
+  // Validate against Turso roles table (single source of truth)
+  try {
+    var found = tursoSelect('SELECT role_code FROM roles WHERE role_code = ?', [newRole]);
+    if (!found.length) return { success: false, error: 'Invalid role: ' + newRole };
+  } catch(e) {
+    return { success: false, error: 'Could not validate role: ' + e.message };
+  }
 
   var success = updateRow('Users', 'user_id', userId, { role: newRole });
-  return success
-    ? { success: true,  message: 'Role updated to ' + newRole }
-    : { success: false, error:   'User not found' };
+  if (!success) return { success: false, error: 'User not found' };
+
+  // Mirror to user_roles: clear other assignments, set this one as primary
+  try {
+    tursoWrite('DELETE FROM user_roles WHERE user_id = ?', [userId]);
+    tursoWrite('INSERT INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
+      [userId, newRole, 'STAFF_UI', new Date().toISOString()]);
+    _invalidatePermissionCache(userId);
+  } catch(e) {
+    Logger.log('[UserService] user_roles sync failed: ' + e.message);
+  }
+  return { success: true, message: 'Role updated to ' + newRole };
 }
 
 function setUserStatus(userId, status) {

@@ -544,6 +544,14 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 @media(max-width:900px){.upload-grid{grid-template-columns:1fr;}}
 .upload-section h3 { font-size:15px; font-weight:700; color:#0D1442; margin-bottom:4px; }
 .upload-section .upload-desc { font-size:12px; color:#64748b; margin-bottom:14px; line-height:1.5; }
+.upload-schema-collapsed { margin:8px 0 14px; padding:8px 12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; font-size:12px; }
+.upload-schema-collapsed summary { cursor:pointer; font-weight:600; color:#1e293b; outline:none; }
+.upload-schema-collapsed[open] { padding-bottom:12px; }
+.upload-schema-collapsed .schema-table { margin-top:8px; width:100%; border-collapse:collapse; }
+.upload-schema-collapsed .schema-table th { font-size:11px; padding:4px 6px; background:#fff; text-align:left; border-bottom:1px solid #e2e8f0; }
+.upload-schema-collapsed .schema-table td { font-size:11px; padding:3px 6px; border-bottom:1px solid #f1f5f9; }
+.upload-schema-collapsed .col-required { color:#dc2626; font-family:monospace; font-weight:600; }
+.upload-schema-collapsed .col-optional { color:#1A237E; font-family:monospace; }
 .upload-schema { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin-bottom:16px; font-size:12px; }
 .schema-header { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:10px; }
 .schema-table { width:100%; border-collapse:collapse; }
@@ -1353,7 +1361,13 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
               <div class="thread-room-name" id="threadRoomName"># general</div>
               <div class="thread-room-desc" id="threadRoomDesc">All staff</div>
             </div>
-            <div class="thread-member-count" id="threadMemberCount"></div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button id="notifToggleBtn" onclick="toggleDesktopNotifications()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:#64748b;" title="Toggle Windows desktop notifications">
+                <span id="notifToggleLabel">Enable Notifications</span>
+              </button>
+              <button onclick="testDesktopNotification()" style="background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;color:#64748b;" title="Send a test notification">Test</button>
+              <div class="thread-member-count" id="threadMemberCount"></div>
+            </div>
           </div>
           <div class="chat-messages-area" id="chatMessagesArea"></div>
           <div class="chat-typing" id="chatTyping" style="display:none">
@@ -1380,11 +1394,12 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
     <!-- ══════════ USERS & ROLES PAGE ══════════ -->
     <div class="page-section" id="page-users">
 
-      <!-- Tabs: Staff / Customers -->
+      <!-- Tabs: Staff / Customers / Roles -->
       <div class="users-tabs">
         <button class="users-tab active" id="tabStaff" onclick="switchUserTab('staff')">Staff Users</button>
         <button class="users-tab" id="tabCustomers" onclick="switchUserTab('customers')">Customer Accounts</button>
         <button class="users-tab" id="tabPendingSignups" onclick="switchUserTab('pending')">Pending Signups <span id="pendingSignupsBadge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">0</span></button>
+        <button class="users-tab" id="tabRoles" onclick="switchUserTab('roles')">Roles &amp; Permissions</button>
         <div style="flex:1"></div>
         <input type="text" id="userSearch" class="users-search" placeholder="Search by name or email..." oninput="filterUserTable()">
         <button class="btn-add-staff" onclick="openAddStaffModal()">+ Add Staff</button>
@@ -1430,6 +1445,93 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </div>
         <div class="users-empty" id="pendingSignupsEmpty" style="display:none">No pending signup requests</div>
         <div class="users-loading" id="pendingSignupsLoading">Loading...</div>
+      </div>
+
+      <!-- Roles & Permissions Tab -->
+      <div id="rolesPanel" class="user-panel" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-size:13px;color:#64748b;">Roles and their permissions are stored in Turso. Toggle checkboxes to grant/revoke. Click <strong>Verify &amp; Migrate</strong> to (re)create the schema and seed defaults.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-secondary" onclick="openCreateRoleModal()">+ New Role</button>
+            <button class="btn-primary" onclick="runVerifyMigrateRBAC()">Verify &amp; Migrate</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="rolesMatrixWrap" style="overflow-x:auto;max-height:560px;">
+          <div class="users-loading" id="rolesLoading">Loading roles...</div>
+          <table class="users-table" id="rolesMatrixTable" style="display:none;font-size:12px;">
+            <thead id="rolesMatrixHead"></thead>
+            <tbody id="rolesMatrixBody"></tbody>
+          </table>
+        </div>
+        <div id="rbacMigrateResult" style="display:none;margin-top:10px;padding:10px;border-radius:6px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:12px;font-family:monospace;white-space:pre-wrap;"></div>
+      </div>
+    </div>
+
+    <!-- Edit User Modal (Super Admin) -->
+    <div class="modal-overlay" id="editUserModal" style="display:none">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Edit User</h3>
+          <button class="modal-close" onclick="closeModal('editUserModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="editUserId">
+          <div class="form-row">
+            <div class="form-group"><label>First Name</label><input id="editUserFirst" class="form-input" type="text"></div>
+            <div class="form-group"><label>Last Name</label><input id="editUserLast" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Email</label><input id="editUserEmail" class="form-input" type="email"></div>
+            <div class="form-group"><label>Phone</label><input id="editUserPhone" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Country</label><input id="editUserCountry" class="form-input" type="text" placeholder="KE, UG..."></div>
+            <div class="form-group"><label>Team ID</label><input id="editUserTeam" class="form-input" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Status</label>
+              <select id="editUserStatus" class="form-input">
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Approval Limit</label>
+              <input id="editUserApprovalLimit" class="form-input" type="number">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Assigned Roles <span style="font-size:11px;color:#64748b;font-weight:400;">(check to assign)</span></label>
+            <div id="editUserRolesList" style="max-height:180px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;padding:8px;"></div>
+          </div>
+          <div id="editUserError" class="form-error" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('editUserModal')">Cancel</button>
+          <button class="btn-primary" id="editUserSaveBtn" onclick="submitEditUser()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Role Modal -->
+    <div class="modal-overlay" id="createRoleModal" style="display:none">
+      <div class="modal-card" style="max-width:440px">
+        <div class="modal-header">
+          <h3>Create Role</h3>
+          <button class="modal-close" onclick="closeModal('createRoleModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group"><label>Role Code *</label><input id="newRoleCode" class="form-input" type="text" placeholder="e.g. DEPOT_MANAGER"></div>
+          <div class="form-group"><label>Role Name *</label><input id="newRoleName" class="form-input" type="text" placeholder="Depot Manager"></div>
+          <div class="form-group"><label>Description</label><input id="newRoleDesc" class="form-input" type="text"></div>
+          <div id="newRoleError" class="form-error" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" onclick="closeModal('createRoleModal')">Cancel</button>
+          <button class="btn-primary" onclick="submitCreateRole()">Create</button>
+        </div>
       </div>
     </div>
 
@@ -1709,80 +1811,69 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </div>
       </div>
 
-      <!-- Data Upload Tab (SUPER_ADMIN / GROUP_HEAD only) -->
+      <!-- Data Upload Tab (requires uploads.la or uploads.po permission) -->
       <div class="settings-panel" id="tab-upload" style="display:none">
         <div class="settings-card">
-          <div class="settings-help">Upload Oracle EBS SALES and PUR export files (.xls, .xlsx, .csv) to import order approval data directly into the portal. Data is parsed client-side and sent to the server in batches.</div>
+          <div class="settings-help">Upload Oracle EBS export files. Two upload types are supported: <strong>LA</strong> (Loading Authority &amp; Finance approval data) and <strong>PO</strong> (Purchase Order approval chains). Files are parsed in your browser and sent to the server in batches.</div>
           <div class="upload-grid">
 
-            <!-- SALES Upload -->
+            <!-- LA Upload (was SALES) -->
             <div class="upload-section">
-              <h3>SALES File Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Finance Approval &amp; Loading Authority SLA)</span></h3>
-              <p class="upload-desc">Oracle EBS order approval data. Export from Oracle using the SALES report for any affiliate and any period.</p>
-              <div class="upload-schema">
-                <div class="schema-header">Required columns in your SALES file:</div>
+              <h3>LA Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Loading Authority &amp; Finance SLA)</span></h3>
+              <p class="upload-desc">Drop your Oracle LA export here. Country is auto-detected from the filename (e.g. <code>LA-KE.xlsx</code>).</p>
+              <details class="upload-schema-collapsed">
+                <summary>Column requirements <span style='color:#94a3b8;font-weight:400;'>(click to expand)</span></summary>
                 <table class="schema-table">
-                  <thead><tr><th>Column Name</th><th>Description</th><th>Example</th></tr></thead>
+                  <thead><tr><th>Column</th><th>Description</th></tr></thead>
                   <tbody>
-                    <tr><td class="col-required">AFFILIATE</td><td>Full affiliate name</td><td>Hass Petroleum Tanzania</td></tr>
-                    <tr><td class="col-required">DOCUMENT_NUMBER</td><td>Oracle order/document number</td><td>246004369</td></tr>
-                    <tr><td class="col-required">CUSTOMER_CODE</td><td>Oracle customer code</td><td>376380</td></tr>
-                    <tr><td class="col-required">CUSTOMER_NAME</td><td>Customer company name</td><td>SANGO ENERGY GROUP LIMITED</td></tr>
-                    <tr><td class="col-required">CREATE_DATE_TIME</td><td>Order creation datetime</td><td>2025-10-01 12:06:27</td></tr>
-                    <tr><td class="col-required">APPROVAL_DATE_TIME</td><td>Finance approval datetime</td><td>2025-10-01 14:49:50</td></tr>
-                    <tr><td class="col-required">FINANCE_VARIANCE</td><td>Minutes from creation to finance approval</td><td>163.38</td></tr>
-                    <tr><td class="col-required">APPROVER</td><td>Staff username who approved</td><td>HILLARY.KARIUKI</td></tr>
-                    <tr><td class="col-required">APPROVAL_STATUS</td><td>APPROVE or REJECT</td><td>APPROVE</td></tr>
-                    <tr><td class="col-required">ORDERED_ITEM</td><td>Product code (AGO, PMS, etc)</td><td>AGO</td></tr>
-                    <tr><td class="col-required">LOADING_AUTHORITY_DATE</td><td>LA issued datetime</td><td>2025-10-01 17:02:18</td></tr>
-                    <tr><td class="col-required">LOADING_AUTHORITY_VARIANCE</td><td>Minutes from approval to LA</td><td>295.85</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">USER_NAME</td><td>Staff who raised the order</td><td>JUDITH.MWEU</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">POSTING_DATE</td><td>Oracle posting date</td><td>2025-10-01 12:06:27</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">INVOICE_VARIANCE</td><td>Minutes to invoice creation</td><td>324.72</td></tr>
+                    <tr><td class="col-required">DOCUMENT_NUMBER</td><td>Oracle order/document number</td></tr>
+                    <tr><td class="col-required">CUSTOMER_NAME</td><td>Customer company name</td></tr>
+                    <tr><td class="col-required">CREATE_DATE_TIME</td><td>Order creation datetime</td></tr>
+                    <tr><td class="col-required">APPROVAL_DATE_TIME</td><td>Finance approval datetime</td></tr>
+                    <tr><td class="col-required">FINANCE_VARIANCE</td><td>Minutes to finance approval</td></tr>
+                    <tr><td class="col-required">APPROVER</td><td>Staff who approved</td></tr>
+                    <tr><td class="col-required">APPROVAL_STATUS</td><td>APPROVE or REJECT</td></tr>
+                    <tr><td class="col-required">LOADING_AUTHORITY_DATE</td><td>LA issued datetime</td></tr>
+                    <tr><td class="col-required">LOADING_AUTHORITY_VARIANCE</td><td>Minutes to LA issuance</td></tr>
+                    <tr><td class="col-optional">AFFILIATE</td><td>Optional — falls back to filename detection</td></tr>
+                    <tr><td class="col-optional">ORDERED_ITEM</td><td>Optional — product code</td></tr>
                   </tbody>
                 </table>
-                <div class="schema-legend"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional, used if present</div>
-              </div>
+                <div class="schema-legend" style="margin-top:6px;"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
+              </details>
               <div class="upload-drop-zone" id="salesDropZone">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-                <p>Drag and drop SALES .xls/.xlsx/.csv here</p>
+                <p>Drop your LA file here (.xls / .xlsx / .csv)</p>
                 <p style="font-size:11px;color:#94a3b8;">or</p>
                 <button class="btn-upload-choose" onclick="document.getElementById('salesFileInput').click()">Choose File</button>
                 <input type="file" id="salesFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handleSalesFile(this)">
                 <div class="upload-file-name" id="salesFileName"></div>
               </div>
               <div id='salesProgressWrap' style='display:none;margin-top:10px;'><div style='font-size:12px;color:#64748b;margin-bottom:4px;' id='salesProgressLabel'>Processing...</div><div style='background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;'><div id='salesProgressBar' style='background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;'></div></div></div>
-              <button class="btn-process-upload" id="btnProcessSales" onclick="processSalesUpload()" disabled>Process SALES File</button>
+              <button class="btn-process-upload" id="btnProcessSales" onclick="processSalesUpload()" disabled>Process LA File</button>
             </div>
 
-            <!-- PUR Upload -->
+            <!-- PO Upload (was PUR) -->
             <div class="upload-section">
-              <h3>PUR File Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Purchase Order Approval Chain SLA)</span></h3>
-              <p class="upload-desc">Oracle EBS purchase order approval data. Export from Oracle using the PUR report. Supports multi-sheet files (Product, LPG, Lubes, Local, Export).</p>
-              <div class="upload-schema">
-                <div class="schema-header">Required columns in your PUR file:</div>
+              <h3>PO Upload <span style='font-size:11px;font-weight:400;color:#64748b;'>(Purchase Order Approval Chain)</span></h3>
+              <p class="upload-desc">Drop your Oracle PO export here. Supports multi-sheet workbooks (Product, LPG, Lubes, Local, Export).</p>
+              <details class="upload-schema-collapsed">
+                <summary>Column requirements <span style='color:#94a3b8;font-weight:400;'>(click to expand)</span></summary>
                 <table class="schema-table">
-                  <thead><tr><th>Column Name</th><th>Description</th><th>Example</th></tr></thead>
+                  <thead><tr><th>Column</th><th>Description</th></tr></thead>
                   <tbody>
-                    <tr><td class="col-required">purchase Number</td><td>Oracle PO number</td><td>250</td></tr>
-                    <tr><td class="col-required">Req Description</td><td>Purchase description</td><td>MT BLUE INTEGRITY-PMS KG 17-2025</td></tr>
-                    <tr><td class="col-required">NATURE</td><td>Product type (PRODUCT, LPG, LUBES)</td><td>PRODUCT</td></tr>
-                    <tr><td class="col-required">ORIGINAL_CREATION_DATE</td><td>PO creation datetime</td><td>2025-10-13 12:08:01</td></tr>
-                    <tr><td class="col-required">SUBMISSION_FOR_APPROVAL_DATE</td><td>Submitted for approval datetime</td><td>2025-10-13 12:10:49</td></tr>
-                    <tr><td class="col-required">TIME_DIFF_RAISEPO_TOAPROVALSUBMIT</td><td>Minutes from creation to submission</td><td>2.8</td></tr>
-                    <tr><td class="col-required">PURCHASE_ORDER_CREATED_BY</td><td>Staff username</td><td>ADAN.ABDILLAHI</td></tr>
-                    <tr><td class="col-required">FIRST_APPROVAL_DATE</td><td>First approver datetime</td><td>2025-10-13 14:10:50</td></tr>
-                    <tr><td class="col-required">FIRST_APPROVER</td><td>First approver full name</td><td>Mr. Otieno Bernard Michael</td></tr>
-                    <tr><td class="col-required">FIRST_APPROVALS_VARIANCE</td><td>Minutes for first approval</td><td>120.02</td></tr>
-                    <tr><td class="col-required">AUTHORIZATION_STATUS</td><td>APPROVED or REJECTED</td><td>APPROVED</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVAL_DATE</td><td>Second approver datetime</td><td>2025-10-13 14:42:26</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVER</td><td>Second approver name</td><td>Mr. Musembi Gabriel Musyoka</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">SECOND_APPROVALS_VARIANCE</td><td>Minutes for second approval</td><td>151.62</td></tr>
-                    <tr class="col-optional-row"><td class="col-optional">THIRD through SEVENTH</td><td>Additional approver chain columns</td><td>(same pattern)</td></tr>
+                    <tr><td class="col-required">purchase Number</td><td>Oracle PO number</td></tr>
+                    <tr><td class="col-required">ORIGINAL_CREATION_DATE</td><td>PO creation datetime</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVAL_DATE</td><td>First approver datetime</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVER</td><td>First approver name</td></tr>
+                    <tr><td class="col-required">FIRST_APPROVALS_VARIANCE</td><td>Minutes for first approval</td></tr>
+                    <tr><td class="col-required">AUTHORIZATION_STATUS</td><td>APPROVED or REJECTED</td></tr>
+                    <tr><td class="col-optional">SECOND..SEVENTH_APPROVER / _DATE / _VARIANCE</td><td>Optional — additional chain steps</td></tr>
+                    <tr><td class="col-optional">Req Description, NATURE, PURCHASE_ORDER_CREATED_BY</td><td>Optional metadata</td></tr>
                   </tbody>
                 </table>
-                <div class="schema-legend"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
-              </div>
+                <div class="schema-legend" style="margin-top:6px;"><span class="col-required">Red</span> = required &nbsp; <span class="col-optional">Blue</span> = optional</div>
+              </details>
               <div class='form-group' style='margin-bottom:12px;'>
                 <label class='filter-label'>Affiliate (which country is this PUR file for?)</label>
                 <select id='purAffiliate' class='filter-select' style='width:100%;'>
@@ -1800,14 +1891,14 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
               </div>
               <div class="upload-drop-zone" id="purDropZone">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>
-                <p>Drag and drop PUR .xls/.xlsx/.csv here</p>
+                <p>Drop your PO file here (.xls / .xlsx / .csv)</p>
                 <p style="font-size:11px;color:#94a3b8;">or</p>
                 <button class="btn-upload-choose" onclick="document.getElementById('purFileInput').click()">Choose File</button>
                 <input type="file" id="purFileInput" accept=".xls,.xlsx,.csv" style="display:none" onchange="handlePurFile(this)">
                 <div class="upload-file-name" id="purFileName"></div>
               </div>
               <div id='purProgressWrap' style='display:none;margin-top:10px;'><div style='font-size:12px;color:#64748b;margin-bottom:4px;' id='purProgressLabel'>Processing...</div><div style='background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;'><div id='purProgressBar' style='background:#FF6F00;height:100%;width:0%;transition:width 0.3s;border-radius:6px;'></div></div></div>
-              <button class="btn-process-upload" id="btnProcessPur" onclick="processPurUpload()" disabled>Process PUR File</button>
+              <button class="btn-process-upload" id="btnProcessPur" onclick="processPurUpload()" disabled>Process PO File</button>
             </div>
 
           </div>
@@ -1824,24 +1915,85 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         </div>
       </div>
 
-      <!-- Oracle EBS Tab -->
+      <!-- Oracle EBS Tab — Multi-transport Wizard -->
       <div class="settings-panel" id="tab-erp" style="display:none">
         <div class="settings-card">
-          <div class="settings-help">Used to sync Orders, Approvals, and Customer data from Oracle EBS. The portal calls Oracle REST APIs for FINANCE_VARIANCE and LOADING_AUTHORITY_VARIANCE data.</div>
-          <div class="form-group"><label>EBS Host URL</label><input data-setting-key="ORACLE_HOST" type="url" class="form-input" placeholder="https://erp.hasspetroleum.com:8080"></div>
-          <div class="form-row">
-            <div class="form-group"><label>API Username</label><input data-setting-key="ORACLE_USER" type="text" class="form-input" placeholder="hass_api_user"></div>
-            <div class="form-group"><label>API Password / Key</label><input data-setting-key="ORACLE_PASSWORD" type="password" class="form-input" placeholder="Enter password or API key"></div>
+          <div class="settings-help">
+            Oracle EBS lives in AWS. The portal supports several transports — pick whichever your EBS team has exposed.
+            The wizard below guides non-technical users through configuration and tests each transport.
           </div>
-          <div class="form-row">
-            <div class="form-group"><label>Database SID</label><input data-setting-key="ORACLE_DB" type="text" class="form-input" placeholder="PROD"></div>
-            <div class="form-group"><label>Port</label><input data-setting-key="ORACLE_PORT" type="text" class="form-input" placeholder="1521"></div>
+
+          <!-- Transport status badges -->
+          <div id="oracleTransportBadges" style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0;"></div>
+
+          <div style="display:flex;gap:10px;margin:10px 0;">
+            <button class="btn-secondary" onclick="loadOracleWizard()">Load Wizard</button>
+            <button class="btn-secondary" onclick="runOracleConnectionTest()">Test All Transports</button>
+            <button class="btn-primary"   onclick="runOracleSyncNow()">Run Sync Now</button>
           </div>
-          <div class="settings-actions">
-            <button class="btn-secondary" onclick="testSettingsConnection('testOracleConnection')">Test EBS Connection</button>
-            <button class="btn-primary" onclick="saveCurrentSettings()">Save Settings</button>
-          </div>
-          <div class="settings-test-result" id="testResult-testOracleConnection" style="display:none"></div>
+
+          <!-- Wizard steps -->
+          <div id="oracleWizardSteps" style="margin-top:8px;"></div>
+
+          <!-- Transport-specific config (always visible) -->
+          <details class="upload-schema-collapsed" style="margin-top:18px;">
+            <summary>Advanced — Edit raw transport settings</summary>
+            <div style="margin-top:10px;">
+              <h4 style="font-size:13px;margin:12px 0 6px;color:#0D1442;">Transport selection</h4>
+              <div class="form-group">
+                <label>Priority order (comma-separated)</label>
+                <input data-oracle-key="ORACLE_TRANSPORT" type="text" class="form-input" placeholder="REST,DB_GATEWAY,FILE_DROP">
+              </div>
+
+              <h4 style="font-size:13px;margin:14px 0 6px;color:#0D1442;">REST / OIC</h4>
+              <div class="form-group"><label>Base URL</label><input data-oracle-key="ORACLE_API_URL" type="url" class="form-input" placeholder="https://oic-prod-xxxxx.integration.eu-west-1.ocp.oraclecloud.com"></div>
+              <div class="form-row">
+                <div class="form-group"><label>Username</label><input data-oracle-key="ORACLE_USERNAME" type="text" class="form-input"></div>
+                <div class="form-group"><label>Password</label><input data-oracle-key="ORACLE_PASSWORD" type="password" class="form-input" placeholder="(leave blank to keep)"></div>
+              </div>
+              <div class="form-group"><label>API Key (optional)</label><input data-oracle-key="ORACLE_API_KEY" type="password" class="form-input" placeholder="(leave blank to keep)"></div>
+
+              <h4 style="font-size:13px;margin:14px 0 6px;color:#0D1442;">DB Gateway (REST proxy in AWS)</h4>
+              <div class="form-row">
+                <div class="form-group"><label>Gateway URL</label><input data-oracle-key="ORACLE_DB_GATEWAY_URL" type="url" class="form-input" placeholder="https://oracle-gateway.your-aws.com"></div>
+                <div class="form-group"><label>Bearer Token</label><input data-oracle-key="ORACLE_DB_GATEWAY_TOKEN" type="password" class="form-input" placeholder="(leave blank to keep)"></div>
+              </div>
+
+              <h4 style="font-size:13px;margin:14px 0 6px;color:#0D1442;">DBLink Bridge (Cloud Function)</h4>
+              <div class="form-row">
+                <div class="form-group"><label>Function URL</label><input data-oracle-key="ORACLE_DBLINK_URL" type="url" class="form-input"></div>
+                <div class="form-group"><label>API Key</label><input data-oracle-key="ORACLE_DBLINK_KEY" type="password" class="form-input" placeholder="(leave blank to keep)"></div>
+              </div>
+
+              <h4 style="font-size:13px;margin:14px 0 6px;color:#0D1442;">S3 file drops (nightly extracts)</h4>
+              <div class="form-row">
+                <div class="form-group"><label>Bucket</label><input data-oracle-key="ORACLE_S3_BUCKET" type="text" class="form-input" placeholder="hass-oracle-extracts"></div>
+                <div class="form-group"><label>Prefix</label><input data-oracle-key="ORACLE_S3_PREFIX" type="text" class="form-input" placeholder="ebs/daily/"></div>
+                <div class="form-group"><label>Region</label><input data-oracle-key="ORACLE_S3_REGION" type="text" class="form-input" placeholder="eu-west-1"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>AWS Access Key</label><input data-oracle-key="ORACLE_AWS_KEY" type="text" class="form-input"></div>
+                <div class="form-group"><label>AWS Secret</label><input data-oracle-key="ORACLE_AWS_SECRET" type="password" class="form-input" placeholder="(leave blank to keep)"></div>
+              </div>
+
+              <h4 style="font-size:13px;margin:14px 0 6px;color:#0D1442;">Auto-sync schedule</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Enable auto-sync</label>
+                  <select data-oracle-key="ORACLE_AUTOSYNC_ENABLED" class="form-input"><option value="false">Disabled</option><option value="true">Enabled</option></select>
+                </div>
+                <div class="form-group"><label>Interval (minutes)</label><input data-oracle-key="ORACLE_AUTOSYNC_INTERVAL_MIN" type="number" class="form-input" placeholder="15"></div>
+              </div>
+
+              <div class="settings-actions" style="margin-top:14px;">
+                <button class="btn-primary" onclick="saveOracleAdvanced()">Save Advanced Settings</button>
+                <button class="btn-secondary" onclick="installOracleSyncTrigger()">Install / Refresh Trigger</button>
+              </div>
+              <div id="oracleAdvancedResult" style="margin-top:10px;font-size:12px;"></div>
+            </div>
+          </details>
+
+          <div id="oracleWizardResult" style="display:none;margin-top:14px;padding:10px;border-radius:6px;font-size:12px;"></div>
         </div>
       </div>
 
@@ -2972,12 +3124,254 @@ function switchUserTab(tab) {
   document.getElementById('tabCustomers').classList.toggle('active', tab === 'customers');
   var pendingTab = document.getElementById('tabPendingSignups');
   if (pendingTab) pendingTab.classList.toggle('active', tab === 'pending');
+  var rolesTab = document.getElementById('tabRoles');
+  if (rolesTab) rolesTab.classList.toggle('active', tab === 'roles');
   document.getElementById('staffPanel').style.display = tab === 'staff' ? 'block' : 'none';
   document.getElementById('customersPanel').style.display = tab === 'customers' ? 'block' : 'none';
   var pendingPanel = document.getElementById('pendingSignupsPanel');
   if (pendingPanel) pendingPanel.style.display = tab === 'pending' ? 'block' : 'none';
+  var rolesPanel = document.getElementById('rolesPanel');
+  if (rolesPanel) rolesPanel.style.display = tab === 'roles' ? 'block' : 'none';
   if (tab === 'customers' && usersCustomerData.length === 0) loadCustomersData();
   if (tab === 'pending') loadPendingSignups();
+  if (tab === 'roles') loadRolesMatrix();
+}
+
+/* ── Roles & Permissions UI ── */
+window.rbacRoles = [];
+window.rbacPermissions = [];
+window.rbacMyPermissions = [];
+
+function loadRolesMatrix() {
+  var loader = document.getElementById('rolesLoading');
+  var tbl = document.getElementById('rolesMatrixTable');
+  if (loader) loader.style.display = 'block';
+  if (tbl) tbl.style.display = 'none';
+
+  var doneRoles = false, donePerms = false, doneMine = false;
+  var rolesResult, permsResult;
+
+  function maybeRender() {
+    if (!doneRoles || !donePerms || !doneMine) return;
+    if (loader) loader.style.display = 'none';
+    if (tbl) tbl.style.display = 'table';
+    renderRolesMatrix(rolesResult, permsResult);
+  }
+
+  google.script.run.withSuccessHandler(function(r) {
+    rbacRoles = (r && r.roles) || [];
+    rolesResult = r;
+    doneRoles = true; maybeRender();
+  }).withFailureHandler(function() { doneRoles = true; maybeRender(); })
+    .processRequest({ service:'permissions', action:'listRoles', token: SESSION.token });
+
+  google.script.run.withSuccessHandler(function(r) {
+    rbacPermissions = (r && r.permissions) || [];
+    permsResult = r;
+    donePerms = true; maybeRender();
+  }).withFailureHandler(function() { donePerms = true; maybeRender(); })
+    .processRequest({ service:'permissions', action:'listPermissions', token: SESSION.token });
+
+  google.script.run.withSuccessHandler(function(r) {
+    rbacMyPermissions = (r && r.permissions) || [];
+    doneMine = true; maybeRender();
+  }).withFailureHandler(function() { doneMine = true; maybeRender(); })
+    .processRequest({ service:'permissions', action:'getMyPermissions', token: SESSION.token });
+}
+
+function _hasPerm(code) {
+  return rbacMyPermissions.indexOf('*') !== -1 || rbacMyPermissions.indexOf(code) !== -1;
+}
+
+function renderRolesMatrix(rolesResult, permsResult) {
+  var head = document.getElementById('rolesMatrixHead');
+  var body = document.getElementById('rolesMatrixBody');
+  if (!head || !body) return;
+  var roles = rbacRoles, perms = rbacPermissions;
+  if (!roles.length) {
+    head.innerHTML = ''; body.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#64748b;padding:20px;">No roles found. Click <strong>Verify &amp; Migrate</strong> to seed.</td></tr>';
+    document.getElementById('rolesMatrixTable').style.display = 'table';
+    return;
+  }
+  // Build header: Permission | Role1 | Role2 ...
+  var h = '<tr><th style="position:sticky;left:0;background:#f8fafc;min-width:240px;">Permission</th>';
+  roles.forEach(function(r) {
+    h += '<th style="text-align:center;min-width:90px;" title="' + escapeHtml(r.description||'') + '">'
+      + escapeHtml(r.role_name)
+      + (r.is_system ? ' <span style="font-size:9px;color:#94a3b8;">(system)</span>' : '')
+      + '<div style="font-size:10px;color:#94a3b8;font-weight:400;">' + r.user_count + ' users</div>'
+      + '</th>';
+  });
+  h += '</tr>';
+  head.innerHTML = h;
+
+  // Group permissions by category
+  var byCat = {};
+  perms.forEach(function(p) { (byCat[p.category||'Other'] = byCat[p.category||'Other'] || []).push(p); });
+
+  var rowsHtml = '';
+  Object.keys(byCat).sort().forEach(function(cat) {
+    rowsHtml += '<tr><td colspan="' + (roles.length + 1) + '" style="background:#eef2ff;font-weight:700;color:#1e293b;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;padding:6px 10px;">' + escapeHtml(cat) + '</td></tr>';
+    byCat[cat].forEach(function(p) {
+      rowsHtml += '<tr><td style="position:sticky;left:0;background:#fff;font-family:monospace;font-size:11px;">'
+        + escapeHtml(p.permission_code)
+        + '<div style="font-family:inherit;color:#64748b;font-size:10px;">' + escapeHtml(p.label) + '</div>'
+        + '</td>';
+      roles.forEach(function(r) {
+        var has = (r.permissions || []).indexOf(p.permission_code) !== -1
+                || (r.permissions || []).indexOf('*') !== -1;
+        var disabled = (r.role_code === 'SUPER_ADMIN') || !_hasPerm('permissions.manage');
+        rowsHtml += '<td style="text-align:center;">'
+          + '<input type="checkbox" '
+          + (has ? 'checked ' : '')
+          + (disabled ? 'disabled ' : '')
+          + 'onchange="toggleRolePermission(\'' + r.role_code + '\',\'' + p.permission_code + '\',this.checked)" />'
+          + '</td>';
+      });
+      rowsHtml += '</tr>';
+    });
+  });
+  body.innerHTML = rowsHtml;
+}
+
+function toggleRolePermission(roleCode, permissionCode, granted) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r.success) { showSettingsToast('Failed: ' + r.error, false); loadRolesMatrix(); }
+    })
+    .withFailureHandler(function(e) { showSettingsToast('Error: ' + e.message, false); loadRolesMatrix(); })
+    .processRequest({ service:'permissions', action:'setRolePermission', token: SESSION.token,
+      roleCode: roleCode, permissionCode: permissionCode, granted: granted });
+}
+
+function runVerifyMigrateRBAC() {
+  var box = document.getElementById('rbacMigrateResult');
+  if (box) { box.style.display = 'block'; box.textContent = 'Running...'; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (box) box.textContent = JSON.stringify(r, null, 2);
+      loadRolesMatrix();
+    })
+    .withFailureHandler(function(e) {
+      if (box) box.textContent = 'Error: ' + e.message;
+    })
+    .processRequest({ service:'permissions', action:'verifyAndMigrate', token: SESSION.token });
+}
+
+function openCreateRoleModal() {
+  ['newRoleCode','newRoleName','newRoleDesc'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('newRoleError').style.display = 'none';
+  document.getElementById('createRoleModal').style.display = 'flex';
+}
+
+function submitCreateRole() {
+  var code = document.getElementById('newRoleCode').value.trim();
+  var name = document.getElementById('newRoleName').value.trim();
+  var desc = document.getElementById('newRoleDesc').value.trim();
+  if (!code || !name) {
+    document.getElementById('newRoleError').textContent = 'Role Code and Role Name are required.';
+    document.getElementById('newRoleError').style.display = 'block';
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r.success) { closeModal('createRoleModal'); loadRolesMatrix(); showSettingsToast('Role created', true); }
+      else { document.getElementById('newRoleError').textContent = r.error; document.getElementById('newRoleError').style.display = 'block'; }
+    })
+    .processRequest({ service:'permissions', action:'createRole', token: SESSION.token,
+      data: { role_code: code, role_name: name, description: desc } });
+}
+
+/* ── Edit User (Super Admin) ── */
+function openEditUserModal(userId) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r.success) { showSettingsToast(r.error, false); return; }
+      var u = r.user || {};
+      document.getElementById('editUserId').value = u.user_id || '';
+      document.getElementById('editUserFirst').value = u.first_name || '';
+      document.getElementById('editUserLast').value  = u.last_name || '';
+      document.getElementById('editUserEmail').value = u.email || '';
+      document.getElementById('editUserPhone').value = u.phone || '';
+      document.getElementById('editUserCountry').value = u.country_code || '';
+      document.getElementById('editUserTeam').value = u.team_id || '';
+      document.getElementById('editUserStatus').value = u.status || 'ACTIVE';
+      document.getElementById('editUserApprovalLimit').value = u.approval_limit || '';
+      // Render role checkboxes
+      var assigned = u.assigned_roles || [];
+      var rolesHtml = '';
+      (rbacRoles.length ? rbacRoles : []).forEach(function(r) {
+        var checked = assigned.indexOf(r.role_code) !== -1;
+        rolesHtml += '<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px;">'
+          + '<input type="checkbox" data-role="' + r.role_code + '" ' + (checked ? 'checked' : '') + '> '
+          + escapeHtml(r.role_name) + ' <span style="color:#94a3b8;font-size:11px;">(' + r.role_code + ')</span>'
+          + '</label>';
+      });
+      if (!rolesHtml) rolesHtml = '<div style="color:#94a3b8;font-size:12px;">Roles not loaded yet — open the Roles tab first.</div>';
+      document.getElementById('editUserRolesList').innerHTML = rolesHtml;
+      document.getElementById('editUserError').style.display = 'none';
+      document.getElementById('editUserModal').style.display = 'flex';
+    })
+    .processRequest({ service:'users', action:'getStaffUser', token: SESSION.token, userId: userId });
+}
+
+function submitEditUser() {
+  var btn = document.getElementById('editUserSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  var userId = document.getElementById('editUserId').value;
+  var data = {
+    first_name:      document.getElementById('editUserFirst').value.trim(),
+    last_name:       document.getElementById('editUserLast').value.trim(),
+    email:           document.getElementById('editUserEmail').value.trim(),
+    phone:           document.getElementById('editUserPhone').value.trim(),
+    country_code:    document.getElementById('editUserCountry').value.trim(),
+    team_id:         document.getElementById('editUserTeam').value.trim(),
+    status:          document.getElementById('editUserStatus').value,
+    approval_limit:  document.getElementById('editUserApprovalLimit').value || 0,
+  };
+
+  // Compute role diffs
+  var checked = Array.from(document.querySelectorAll('#editUserRolesList input[type=checkbox]'));
+  var desiredRoles = checked.filter(function(c){return c.checked;}).map(function(c){return c.getAttribute('data-role');});
+  var initialRoles = checked.filter(function(c){return c.defaultChecked;}).map(function(c){return c.getAttribute('data-role');});
+  var toAdd    = desiredRoles.filter(function(r){return initialRoles.indexOf(r) === -1;});
+  var toRemove = initialRoles.filter(function(r){return desiredRoles.indexOf(r) === -1;});
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r.success) {
+        btn.disabled = false; btn.textContent = 'Save Changes';
+        document.getElementById('editUserError').textContent = r.error;
+        document.getElementById('editUserError').style.display = 'block';
+        return;
+      }
+      // Now apply role diffs sequentially
+      var queue = []
+        .concat(toAdd.map(function(rc){ return { action:'assignRole', roleCode: rc }; }))
+        .concat(toRemove.map(function(rc){ return { action:'removeRole', roleCode: rc }; }));
+      function next() {
+        if (!queue.length) {
+          btn.disabled = false; btn.textContent = 'Save Changes';
+          closeModal('editUserModal');
+          usersLoaded = false; loadUsersData();
+          showSettingsToast('User updated', true);
+          return;
+        }
+        var op = queue.shift();
+        google.script.run
+          .withSuccessHandler(next)
+          .withFailureHandler(next)
+          .processRequest({ service:'permissions', action: op.action, token: SESSION.token,
+            userId: userId, roleCode: op.roleCode });
+      }
+      next();
+    })
+    .withFailureHandler(function(e) {
+      btn.disabled = false; btn.textContent = 'Save Changes';
+      document.getElementById('editUserError').textContent = e.message;
+      document.getElementById('editUserError').style.display = 'block';
+    })
+    .processRequest({ service:'users', action:'updateStaffUser', token: SESSION.token, userId: userId, data: data });
 }
 
 function loadPendingSignups() {
@@ -3081,6 +3475,7 @@ function renderStaffTable(staff) {
       + '<td><span class="status-badge ' + statusClass + '">' + u.status + '</span></td>'
       + '<td style="font-size:11px;color:#94a3b8;">' + (u.last_login ? new Date(u.last_login).toLocaleDateString() : '-') + '</td>'
       + '<td style="text-align:right;white-space:nowrap;">'
+      + '<button class="action-btn" onclick="openEditUserModal(\'' + u.user_id + '\')">Edit</button>'
       + '<button class="action-btn" onclick="openResetPwModal(\'' + u.user_id + '\',\'' + (u.first_name||'')+' '+(u.last_name||'') + '\',\'STAFF\')">Reset PW</button>'
       + '<button class="action-btn" onclick="openChangeRoleModal(\'' + u.user_id + '\',\'' + (u.first_name||'')+' '+(u.last_name||'') + '\',\'' + u.role + '\')">Role</button>'
       + '<button class="action-btn danger" onclick="toggleUserStatus(\'' + u.user_id + '\',\'' + toggleStatus + '\')">' + toggleLabel + '</button>'
@@ -4239,17 +4634,68 @@ function exportReport(reportId) {
 }
 
 
-/* ══════════ CHAT BROWSER NOTIFICATIONS ══════════ */
+/* ══════════ CHAT WINDOWS / DESKTOP NOTIFICATIONS ══════════
+ * Browser Notification API surfaces alerts in the Windows action center
+ * (Action Center / system tray) on Windows 10/11 when running in Chrome
+ * or Edge. The notification persists until the user dismisses it.
+ *
+ * Limitation: this only works while the dashboard tab is open. For true
+ * always-on background tray push, the app must be served as a PWA with
+ * a service worker (not possible inside the Apps Script HtmlService
+ * iframe — see ServiceWorker.html / Manifest.html for the scaffold to
+ * use when serving this UI from a custom domain).
+ */
 window.unreadChatCount = window.unreadChatCount || 0;
+window.desktopNotifEnabled = (localStorage.getItem('hass_chat_notif') !== 'off');
 
 function requestNotificationPermission() {
   if (!('Notification' in window)) return;
   if (Notification.permission === 'default') {
-    try { Notification.requestPermission(); } catch (e) {}
+    try { Notification.requestPermission().then(updateNotifToggleLabel); } catch (e) {}
   }
+  updateNotifToggleLabel();
+}
+
+function updateNotifToggleLabel() {
+  var lbl = document.getElementById('notifToggleLabel');
+  if (!lbl) return;
+  if (!('Notification' in window)) { lbl.textContent = 'Not supported'; return; }
+  if (Notification.permission === 'denied') { lbl.textContent = 'Blocked in browser'; return; }
+  if (Notification.permission !== 'granted') { lbl.textContent = 'Enable Notifications'; return; }
+  lbl.textContent = window.desktopNotifEnabled ? 'Notifications: On' : 'Notifications: Off';
+}
+
+function toggleDesktopNotifications() {
+  if (!('Notification' in window)) { showToast('Browser does not support notifications'); return; }
+  if (Notification.permission !== 'granted') {
+    Notification.requestPermission().then(function(p) {
+      if (p === 'granted') {
+        window.desktopNotifEnabled = true;
+        localStorage.setItem('hass_chat_notif', 'on');
+      }
+      updateNotifToggleLabel();
+    });
+    return;
+  }
+  window.desktopNotifEnabled = !window.desktopNotifEnabled;
+  localStorage.setItem('hass_chat_notif', window.desktopNotifEnabled ? 'on' : 'off');
+  updateNotifToggleLabel();
+}
+
+function testDesktopNotification() {
+  if (!('Notification' in window)) { showToast('Browser does not support notifications'); return; }
+  if (Notification.permission !== 'granted') {
+    Notification.requestPermission().then(function(p) {
+      if (p === 'granted') showChatBrowserNotification('System', 'Test notification — chat alerts will appear in your Windows tray.', 'Hass CMS');
+    });
+    return;
+  }
+  showChatBrowserNotification('System', 'Test notification — chat alerts will appear in your Windows tray.', 'Hass CMS');
 }
 
 function showChatBrowserNotification(senderName, messageContent, roomName) {
+  if (!window.desktopNotifEnabled) return;
+  // Skip if user is actively viewing chat
   if (document.visibilityState === 'visible' && currentPage === 'chat') return;
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
@@ -4258,12 +4704,14 @@ function showChatBrowserNotification(senderName, messageContent, roomName) {
     var n = new Notification('Hass CMS — ' + (roomName || 'Team Chat'), {
       body: (senderName || 'Team') + ': ' + preview,
       icon: 'https://lh3.googleusercontent.com/d/1AL9fUgYXM9DXj9-X_0YonrloqCXat2wq',
-      tag: 'hass-chat',
-      requireInteraction: false
+      tag: 'hass-chat-' + (roomName || 'general'),
+      renotify: true,
+      requireInteraction: false,
+      silent: false
     });
     n.onclick = function() { window.focus(); showPage('chat'); n.close(); };
-    setTimeout(function() { n.close(); }, 6000);
-  } catch (e) {}
+    // Don't auto-close — let Windows action center retain it until dismissed
+  } catch (e) { Logger && Logger.log && Logger.log('notif: ' + e.message); }
 }
 
 function updateTabTitle() {
@@ -4307,6 +4755,197 @@ function onNewChatMessages(result) {
   if (result.checkedAt) chatLastFetch = result.checkedAt;
 }
 
+
+/* ══════════ ORACLE EBS WIZARD ══════════ */
+function loadOracleWizard() {
+  google.script.run
+    .withSuccessHandler(function(r) { renderOracleWizard(r); })
+    .withFailureHandler(function(e) { showOracleResult('Error: ' + e.message, false); })
+    .processRequest({ service:'integrations', action:'oracleWizardSteps', token: SESSION.token });
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success && r.config) populateOracleAdvanced(r.config);
+    })
+    .processRequest({ service:'integrations', action:'oracleConfig', token: SESSION.token });
+}
+
+function populateOracleAdvanced(cfg) {
+  var els = document.querySelectorAll('[data-oracle-key]');
+  els.forEach(function(el) {
+    var k = el.getAttribute('data-oracle-key');
+    var v = cfg[oracleKeyToCamel(k)];
+    if (typeof v === 'boolean') v = v ? 'true' : 'false';
+    if (v !== undefined && v !== null && el.type !== 'password') el.value = v;
+  });
+}
+
+function oracleKeyToCamel(k) {
+  // ORACLE_API_URL -> oracleApiUrl
+  return k.toLowerCase().replace(/_([a-z])/g, function(_, c) { return c.toUpperCase(); });
+}
+
+function renderOracleWizard(r) {
+  var box = document.getElementById('oracleWizardSteps');
+  if (!box) return;
+  if (!r || !r.success) { box.innerHTML = '<div style="color:#dc2626;">Failed to load wizard.</div>'; return; }
+  var html = '';
+  (r.steps || []).forEach(function(s, i) {
+    html += '<div style="border:1px solid ' + (s.done ? '#bbf7d0' : '#e2e8f0') + ';background:' + (s.done ? '#f0fdf4' : '#fff') + ';border-radius:8px;padding:14px;margin-bottom:10px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+      + '<div><strong>Step ' + (i+1) + ':</strong> ' + escapeHtml(s.title)
+      + (s.done ? ' <span style="color:#15803d;font-size:11px;">DONE</span>' : '') + '</div>'
+      + '</div>'
+      + '<div style="font-size:12px;color:#64748b;margin-top:6px;line-height:1.5;">' + escapeHtml(s.help) + '</div>';
+
+    if (s.fields && s.fields.length) {
+      html += '<div style="margin-top:10px;">';
+      s.fields.forEach(function(f) {
+        var optTag = f.optional ? ' <span style="color:#94a3b8;font-size:11px;">(optional)</span>' : '';
+        if (f.type === 'checkbox') {
+          html += '<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:4px 0;">'
+            + '<input type="checkbox" data-wizard-key="' + f.key + '"> ' + escapeHtml(f.label) + optTag + '</label>';
+        } else {
+          html += '<div class="form-group"><label>' + escapeHtml(f.label) + optTag + '</label>'
+            + '<input type="' + (f.type || 'text') + '" data-wizard-key="' + f.key + '" class="form-input" placeholder="' + escapeHtml(f.placeholder || '') + '"></div>';
+        }
+      });
+      html += '<button class="btn-primary" onclick="saveWizardFields(this)">Save Step</button>';
+      html += '</div>';
+    }
+    if (s.actions && s.actions.length) {
+      html += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">';
+      s.actions.forEach(function(a) {
+        if (a.setKey) {
+          html += '<button class="btn-secondary" onclick="quickSetSetting(\'' + a.setKey + '\',\'' + a.setValue + '\')">' + escapeHtml(a.label) + '</button>';
+        } else if (a.call) {
+          html += '<button class="btn-secondary" onclick="callWizardAction(\'' + a.call + '\')">' + escapeHtml(a.label) + '</button>';
+        }
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function quickSetSetting(key, value) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      showOracleResult(r.message || 'Saved.', !!r.success);
+      loadOracleWizard();
+    })
+    .processRequest({ service:'integrations', action:'saveOracleSetting', token: SESSION.token, key: key, value: value });
+}
+
+function saveWizardFields(btn) {
+  var card = btn.parentNode;
+  var inputs = card.querySelectorAll('[data-wizard-key]');
+  var queue = [];
+  inputs.forEach(function(el) {
+    var key = el.getAttribute('data-wizard-key');
+    var val = (el.type === 'checkbox') ? (el.checked ? 'true' : 'false') : el.value;
+    if (val !== '') queue.push({ key: key, value: val });
+  });
+  if (!queue.length) { showOracleResult('Nothing to save.', false); return; }
+  var done = 0;
+  queue.forEach(function(item) {
+    google.script.run.withSuccessHandler(function() {
+      done++;
+      if (done === queue.length) { showOracleResult('Saved ' + done + ' setting(s).', true); loadOracleWizard(); }
+    }).processRequest({ service:'integrations', action:'saveOracleSetting', token: SESSION.token, key: item.key, value: item.value });
+  });
+}
+
+function callWizardAction(action) {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (action === 'testOracleAllTransports') renderTransportBadges(r);
+      showOracleResult(JSON.stringify(r, null, 2), !!r.success);
+    })
+    .withFailureHandler(function(e) { showOracleResult('Error: ' + e.message, false); })
+    .processRequest({ service:'integrations', action: action, token: SESSION.token });
+}
+
+function runOracleConnectionTest() {
+  showOracleResult('Testing all transports...', true);
+  google.script.run
+    .withSuccessHandler(function(r) {
+      renderTransportBadges(r);
+      showOracleResult(r.suggestion || JSON.stringify(r, null, 2), !!r.success);
+    })
+    .withFailureHandler(function(e) { showOracleResult('Error: ' + e.message, false); })
+    .processRequest({ service:'integrations', action:'testOracleAllTransports', token: SESSION.token });
+}
+
+function renderTransportBadges(report) {
+  var box = document.getElementById('oracleTransportBadges');
+  if (!box || !report || !report.transports) return;
+  var html = '';
+  Object.keys(report.transports).forEach(function(name) {
+    var t = report.transports[name];
+    var color, label;
+    if (!t.configured) { color = '#94a3b8'; label = 'not configured'; }
+    else if (t.ok === true) { color = '#15803d'; label = 'OK'; }
+    else if (t.ok === false) { color = '#dc2626'; label = 'fail'; }
+    else { color = '#d97706'; label = '—'; }
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:18px;background:#fff;border:1px solid #e2e8f0;font-size:12px;">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:' + color + ';"></span>'
+      + '<strong>' + name + '</strong> <span style="color:#64748b;">' + label + '</span>'
+      + '</div>';
+  });
+  box.innerHTML = html;
+}
+
+function showOracleResult(msg, ok) {
+  var box = document.getElementById('oracleWizardResult');
+  if (!box) return;
+  box.style.display = 'block';
+  box.style.background = ok ? '#f0fdf4' : '#fef2f2';
+  box.style.border = '1px solid ' + (ok ? '#bbf7d0' : '#fecaca');
+  box.style.color = ok ? '#166534' : '#991b1b';
+  box.style.fontFamily = 'monospace';
+  box.style.whiteSpace = 'pre-wrap';
+  box.textContent = msg;
+}
+
+function saveOracleAdvanced() {
+  var els = document.querySelectorAll('[data-oracle-key]');
+  var queue = [];
+  els.forEach(function(el) {
+    var key = el.getAttribute('data-oracle-key');
+    if (el.type === 'password' && !el.value) return; // skip blank passwords
+    queue.push({ key: key, value: el.value });
+  });
+  var done = 0;
+  queue.forEach(function(item) {
+    google.script.run.withSuccessHandler(function() {
+      done++;
+      if (done === queue.length) {
+        var r = document.getElementById('oracleAdvancedResult');
+        if (r) { r.style.color = '#15803d'; r.textContent = 'Saved ' + queue.length + ' settings.'; }
+        loadOracleWizard();
+      }
+    }).processRequest({ service:'integrations', action:'saveOracleSetting', token: SESSION.token, key: item.key, value: item.value });
+  });
+}
+
+function installOracleSyncTrigger() {
+  google.script.run
+    .withSuccessHandler(function(r) {
+      var el = document.getElementById('oracleAdvancedResult');
+      if (el) { el.style.color = r.success ? '#15803d' : '#dc2626'; el.textContent = r.message || r.error || ''; }
+    })
+    .processRequest({ service:'integrations', action:'installOracleSyncTrigger', token: SESSION.token });
+}
+
+function runOracleSyncNow() {
+  showOracleResult('Triggering sync...', true);
+  google.script.run
+    .withSuccessHandler(function(r) { showOracleResult(r.message || JSON.stringify(r), !!r.success); })
+    .withFailureHandler(function(e) { showOracleResult('Error: ' + e.message, false); })
+    .processRequest({ service:'integrations', action:'runOracleSyncNow', token: SESSION.token });
+}
 
 /* ══════════ SETTINGS ══════════ */
 var settingsLoaded = false;
@@ -4546,8 +5185,9 @@ function processSalesUpload() {
   logUpload('File: ' + filename + ' | Country detected: ' + (countryCode || 'UNKNOWN'));
 
   // Validate prefix
-  if (!filename.toUpperCase().startsWith('SALES')) {
-    logUpload('WARNING: File does not start with SALES. This upload slot is for LA/Finance data.');
+  var upper = filename.toUpperCase();
+  if (!upper.startsWith('LA') && !upper.startsWith('SALES')) {
+    logUpload('Note: filename does not start with LA. Continuing — make sure this is a Loading Authority / Finance file.');
   }
 
   var reader = new FileReader();
@@ -4569,7 +5209,7 @@ function processSalesUpload() {
       var missing = required.filter(function(c){ return !(c in firstRow); });
       if (missing.length) {
         logUpload('ERROR: Missing columns: ' + missing.join(', '));
-        btn.disabled = false; btn.textContent = 'Process SALES File';
+        btn.disabled = false; btn.textContent = 'Process LA File';
         return;
       }
 
@@ -4579,7 +5219,7 @@ function processSalesUpload() {
 
       if (!approveRows.length) {
         logUpload('No APPROVE rows found. Nothing to import.');
-        btn.disabled = false; btn.textContent = 'Process SALES File';
+        btn.disabled = false; btn.textContent = 'Process LA File';
         return;
       }
 
@@ -4594,9 +5234,9 @@ function processSalesUpload() {
           showProgressBar('salesProgressBar','salesProgressWrap','salesProgressLabel', 100, 'Complete');
           logUpload('Import complete: ' + totalImported + ' new records, ' + totalSkipped + ' duplicates skipped.');
           var summary = document.getElementById('uploadSummary');
-          summary.textContent = '✅ SALES import complete: ' + totalImported + ' Finance/LA records added to SLAData.';
+          summary.textContent = 'LA import complete: ' + totalImported + ' Finance/LA records added.';
           summary.style.display = 'block';
-          btn.textContent = 'Process SALES File'; btn.disabled = false;
+          btn.textContent = 'Process LA File'; btn.disabled = false;
           return;
         }
         var pct = Math.round((idx / batches.length) * 100);
@@ -4618,13 +5258,13 @@ function processSalesUpload() {
             logUpload('Server error on batch ' + (idx+1) + ': ' + e.message);
             sendBatch(idx + 1);
           })
-          .handleDataUploadRequest({ action:'importSalesRows', rows: batches[idx], affiliateCountryCode: countryCode });
+          .handleDataUploadRequest({ action:'importLaRows', rows: batches[idx], affiliateCountryCode: countryCode });
       }
       sendBatch(0);
 
     } catch(ex) {
       logUpload('Parse error: ' + ex.message);
-      btn.disabled = false; btn.textContent = 'Process SALES File';
+      btn.disabled = false; btn.textContent = 'Process LA File';
     }
   };
   reader.readAsBinaryString(window._salesFile);
@@ -4655,8 +5295,9 @@ function processPurUpload() {
   }
   logUpload('File: ' + filename + ' | Country detected: ' + (countryCode || 'UNKNOWN'));
 
-  if (!filename.toUpperCase().startsWith('PUR')) {
-    logUpload('WARNING: File does not start with PUR. This upload slot is for PO approval data.');
+  var upperPo = filename.toUpperCase();
+  if (!upperPo.startsWith('PO') && !upperPo.startsWith('PUR')) {
+    logUpload('Note: filename does not start with PO. Continuing — make sure this is a Purchase Order approval file.');
   }
 
   var reader = new FileReader();
@@ -4678,7 +5319,7 @@ function processPurUpload() {
       var missing = required.filter(function(c){ return !(c in firstRow); });
       if (missing.length) {
         logUpload('ERROR: Missing columns: ' + missing.join(', '));
-        btn.disabled = false; btn.textContent = 'Process PUR File';
+        btn.disabled = false; btn.textContent = 'Process PO File';
         return;
       }
 
@@ -4688,7 +5329,7 @@ function processPurUpload() {
 
       if (!approvedRows.length) {
         logUpload('No APPROVED rows found. Nothing to import.');
-        btn.disabled = false; btn.textContent = 'Process PUR File';
+        btn.disabled = false; btn.textContent = 'Process PO File';
         return;
       }
 
@@ -4703,9 +5344,9 @@ function processPurUpload() {
           showProgressBar('purProgressBar','purProgressWrap','purProgressLabel', 100, 'Complete');
           logUpload('Import complete: ' + totalImported + ' approval step records, ' + totalSkipped + ' duplicates skipped.');
           var summary = document.getElementById('uploadSummary');
-          summary.textContent = '✅ PUR import complete: ' + totalImported + ' PO approval steps added to POApprovals.';
+          summary.textContent = 'PO import complete: ' + totalImported + ' PO approval steps added.';
           summary.style.display = 'block';
-          btn.textContent = 'Process PUR File'; btn.disabled = false;
+          btn.textContent = 'Process PO File'; btn.disabled = false;
           return;
         }
         var pct = Math.round((idx / batches.length) * 100);
@@ -4727,13 +5368,13 @@ function processPurUpload() {
             logUpload('Server error on batch ' + (idx+1) + ': ' + e.message);
             sendBatch(idx + 1);
           })
-          .handleDataUploadRequest({ action:'importPurRows', rows: batches[idx], affiliateCountryCode: countryCode });
+          .handleDataUploadRequest({ action:'importPoRows', rows: batches[idx], affiliateCountryCode: countryCode });
       }
       sendBatch(0);
 
     } catch(ex) {
       logUpload('Parse error: ' + ex.message);
-      btn.disabled = false; btn.textContent = 'Process PUR File';
+      btn.disabled = false; btn.textContent = 'Process PO File';
     }
   };
   reader.readAsBinaryString(window._purFile);

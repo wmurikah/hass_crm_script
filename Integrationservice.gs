@@ -24,22 +24,281 @@ var INTEGRATION_CONFIG = {
 
 /**
  * Gets integration configuration from Script Properties.
+ *
+ * Oracle EBS (AWS-hosted) supports several transports — configure whichever
+ * the EBS team has exposed. Transports are tried in the order listed in
+ * ORACLE_TRANSPORT (comma-separated, e.g. "REST,DB_GATEWAY,FILE_DROP").
+ *
+ *   REST          — Oracle REST Adapter / OIC.  Set ORACLE_API_URL + creds.
+ *   DB_GATEWAY    — A thin REST proxy in front of Oracle DB (read-only views).
+ *                   Set ORACLE_DB_GATEWAY_URL + ORACLE_DB_GATEWAY_TOKEN.
+ *   FILE_DROP     — S3/SFTP file drop. Set ORACLE_S3_BUCKET, ORACLE_S3_PREFIX,
+ *                   ORACLE_S3_REGION (uses AWS Signature v4 when ORACLE_AWS_KEY set).
+ *   ICS / OIC     — Oracle Integration Cloud webhook endpoints (use REST keys).
+ *   DBLINK        — Database link via a small Cloud Function (set ORACLE_DBLINK_URL).
  */
 function getIntegrationConfig() {
   const props = PropertiesService.getScriptProperties();
   return {
-    // Oracle EBS
-    oracleApiUrl: props.getProperty('ORACLE_API_URL') || '',
-    oracleApiKey: props.getProperty('ORACLE_API_KEY') || '',
-    oracleUsername: props.getProperty('ORACLE_USERNAME') || '',
-    oraclePassword: props.getProperty('ORACLE_PASSWORD') || '',
-    
+    // Transport selection (comma-separated, in priority order)
+    oracleTransport: props.getProperty('ORACLE_TRANSPORT') || 'REST',
+
+    // Oracle EBS — REST / OIC
+    oracleApiUrl:    props.getProperty('ORACLE_API_URL') || '',
+    oracleApiKey:    props.getProperty('ORACLE_API_KEY') || '',
+    oracleUsername:  props.getProperty('ORACLE_USERNAME') || '',
+    oraclePassword:  props.getProperty('ORACLE_PASSWORD') || '',
+    oracleHost:      props.getProperty('ORACLE_HOST') || '',
+    oracleDb:        props.getProperty('ORACLE_DB')   || '',
+    oraclePort:      props.getProperty('ORACLE_PORT') || '',
+
+    // Oracle DB Gateway (custom REST proxy in AWS, fronts EBS read-only views)
+    oracleDbGatewayUrl:   props.getProperty('ORACLE_DB_GATEWAY_URL')   || '',
+    oracleDbGatewayToken: props.getProperty('ORACLE_DB_GATEWAY_TOKEN') || '',
+
+    // Oracle DBLink (Cloud Function bridge)
+    oracleDblinkUrl: props.getProperty('ORACLE_DBLINK_URL') || '',
+    oracleDblinkKey: props.getProperty('ORACLE_DBLINK_KEY') || '',
+
+    // S3 / SFTP file drop (Oracle daily extracts)
+    oracleS3Bucket:  props.getProperty('ORACLE_S3_BUCKET')  || '',
+    oracleS3Prefix:  props.getProperty('ORACLE_S3_PREFIX')  || '',
+    oracleS3Region:  props.getProperty('ORACLE_S3_REGION')  || 'eu-west-1',
+    oracleAwsKey:    props.getProperty('ORACLE_AWS_KEY')    || '',
+    oracleAwsSecret: props.getProperty('ORACLE_AWS_SECRET') || '',
+
+    oracleSftpHost:  props.getProperty('ORACLE_SFTP_HOST')  || '',
+    oracleSftpUser:  props.getProperty('ORACLE_SFTP_USER')  || '',
+    oracleSftpPath:  props.getProperty('ORACLE_SFTP_PATH')  || '',
+
+    // Auto-sync controls
+    oracleAutoSyncEnabled:   props.getProperty('ORACLE_AUTOSYNC_ENABLED') === 'true',
+    oracleAutoSyncIntervalM: parseInt(props.getProperty('ORACLE_AUTOSYNC_INTERVAL_MIN') || '15', 10),
+
     // Webhooks
     webhookSecret: props.getProperty('WEBHOOK_SECRET') || '',
-    
+
     // External APIs
     mapsApiKey: props.getProperty('GOOGLE_MAPS_API_KEY') || '',
   };
+}
+
+/**
+ * Saves a single integration setting (used by the non-tech wizard).
+ * Whitelisted keys only.
+ */
+function saveIntegrationSetting(key, value) {
+  var ALLOWED = [
+    'ORACLE_TRANSPORT','ORACLE_API_URL','ORACLE_API_KEY','ORACLE_USERNAME','ORACLE_PASSWORD',
+    'ORACLE_HOST','ORACLE_DB','ORACLE_PORT',
+    'ORACLE_DB_GATEWAY_URL','ORACLE_DB_GATEWAY_TOKEN',
+    'ORACLE_DBLINK_URL','ORACLE_DBLINK_KEY',
+    'ORACLE_S3_BUCKET','ORACLE_S3_PREFIX','ORACLE_S3_REGION','ORACLE_AWS_KEY','ORACLE_AWS_SECRET',
+    'ORACLE_SFTP_HOST','ORACLE_SFTP_USER','ORACLE_SFTP_PATH',
+    'ORACLE_AUTOSYNC_ENABLED','ORACLE_AUTOSYNC_INTERVAL_MIN',
+    'WEBHOOK_SECRET','GOOGLE_MAPS_API_KEY',
+  ];
+  if (ALLOWED.indexOf(key) === -1) return { success: false, error: 'Setting not allowed: ' + key };
+  PropertiesService.getScriptProperties().setProperty(key, String(value || ''));
+  return { success: true, message: 'Saved ' + key };
+}
+
+/**
+ * Runs a connection test for each configured Oracle transport.
+ * Returns a per-transport report so the non-tech wizard can show green/red badges.
+ */
+function testOracleAllTransports() {
+  var cfg = getIntegrationConfig();
+  var report = {
+    transports: {},
+    suggestion: '',
+    success: true,
+  };
+
+  // REST
+  if (cfg.oracleApiUrl) {
+    try {
+      var r = callOracleApi('/health', 'GET', null, cfg);
+      report.transports.REST = { configured: true, ok: !!r.success, latency_ms: null, error: r.error || '' };
+    } catch(e) { report.transports.REST = { configured: true, ok: false, error: e.message }; }
+  } else {
+    report.transports.REST = { configured: false };
+  }
+
+  // DB Gateway
+  if (cfg.oracleDbGatewayUrl) {
+    try {
+      var resp = UrlFetchApp.fetch(cfg.oracleDbGatewayUrl.replace(/\/$/, '') + '/health', {
+        method: 'get',
+        headers: { 'Authorization': 'Bearer ' + cfg.oracleDbGatewayToken },
+        muteHttpExceptions: true,
+      });
+      report.transports.DB_GATEWAY = { configured: true, ok: resp.getResponseCode() === 200, status: resp.getResponseCode() };
+    } catch(e) { report.transports.DB_GATEWAY = { configured: true, ok: false, error: e.message }; }
+  } else {
+    report.transports.DB_GATEWAY = { configured: false };
+  }
+
+  // DBLink
+  if (cfg.oracleDblinkUrl) {
+    try {
+      var resp2 = UrlFetchApp.fetch(cfg.oracleDblinkUrl.replace(/\/$/, '') + '/ping', {
+        method: 'get',
+        headers: cfg.oracleDblinkKey ? { 'X-API-Key': cfg.oracleDblinkKey } : {},
+        muteHttpExceptions: true,
+      });
+      report.transports.DBLINK = { configured: true, ok: resp2.getResponseCode() === 200, status: resp2.getResponseCode() };
+    } catch(e) { report.transports.DBLINK = { configured: true, ok: false, error: e.message }; }
+  } else {
+    report.transports.DBLINK = { configured: false };
+  }
+
+  // S3 file drop  (HEAD bucket)
+  if (cfg.oracleS3Bucket) {
+    try {
+      var s3url = 'https://' + cfg.oracleS3Bucket + '.s3.' + cfg.oracleS3Region + '.amazonaws.com/';
+      var headResp = UrlFetchApp.fetch(s3url, { method: 'get', muteHttpExceptions: true });
+      var code = headResp.getResponseCode();
+      report.transports.FILE_DROP_S3 = { configured: true, ok: code === 200 || code === 403, status: code,
+        note: code === 403 ? 'Bucket exists but list denied (expected for private buckets)' : '' };
+    } catch(e) { report.transports.FILE_DROP_S3 = { configured: true, ok: false, error: e.message }; }
+  } else {
+    report.transports.FILE_DROP_S3 = { configured: false };
+  }
+
+  // SFTP — Apps Script can't open SFTP directly; document only
+  if (cfg.oracleSftpHost) {
+    report.transports.FILE_DROP_SFTP = {
+      configured: true, ok: null,
+      note: 'SFTP cannot be tested from Apps Script. Use a Cloud Function bridge or use S3 instead.',
+    };
+  } else {
+    report.transports.FILE_DROP_SFTP = { configured: false };
+  }
+
+  // Suggestion engine for non-tech users
+  var configuredCount = Object.values(report.transports).filter(function(t) { return t.configured; }).length;
+  if (configuredCount === 0) {
+    report.suggestion = 'No Oracle transport configured. Start with REST: ask the EBS team for the AWS-hosted REST endpoint URL and a service account.';
+    report.success = false;
+  } else {
+    var working = Object.entries(report.transports).filter(function(e) { return e[1].ok === true; });
+    if (working.length === 0) {
+      report.suggestion = 'All configured transports failed connection tests. Verify credentials and that the AWS Security Group allows Apps Script IP ranges (Google data centers).';
+      report.success = false;
+    } else {
+      report.suggestion = working.length + ' transport(s) healthy: ' + working.map(function(e){return e[0];}).join(', ') + '. Set ORACLE_TRANSPORT priority to your preferred one.';
+    }
+  }
+
+  return report;
+}
+
+/**
+ * Returns suggested wizard steps for non-tech users to wire up Oracle EBS.
+ * Steps update dynamically based on what's already configured.
+ */
+function getOracleWizardSteps() {
+  var cfg = getIntegrationConfig();
+  var steps = [];
+
+  steps.push({
+    key: 'transport_choice',
+    title: 'Pick your transport',
+    done:  !!cfg.oracleApiUrl || !!cfg.oracleDbGatewayUrl || !!cfg.oracleDblinkUrl || !!cfg.oracleS3Bucket,
+    help:  'Most installs use REST (Oracle REST Adapter or OIC). If your EBS team only exposes the database, use DB_GATEWAY (a small REST proxy in AWS) or FILE_DROP (daily S3 extracts).',
+    actions: [
+      { label: 'I have a REST endpoint',     setKey: 'ORACLE_TRANSPORT', setValue: 'REST' },
+      { label: 'I only have DB access',      setKey: 'ORACLE_TRANSPORT', setValue: 'DB_GATEWAY' },
+      { label: 'I have nightly file drops',  setKey: 'ORACLE_TRANSPORT', setValue: 'FILE_DROP' },
+    ],
+  });
+
+  steps.push({
+    key: 'rest_creds',
+    title: 'Enter Oracle REST credentials',
+    done:  !!cfg.oracleApiUrl && !!cfg.oracleUsername,
+    help:  'Paste the AWS-hosted REST URL (e.g. https://oic-prod-xxxxx.integration.eu-west-1.ocp.oraclecloud.com). Username/password is the EBS service account.',
+    fields: [
+      { key: 'ORACLE_API_URL',  label: 'REST Base URL', type: 'url' },
+      { key: 'ORACLE_USERNAME', label: 'Username',      type: 'text' },
+      { key: 'ORACLE_PASSWORD', label: 'Password',      type: 'password' },
+      { key: 'ORACLE_API_KEY',  label: 'API Key (if used by OIC)', type: 'password', optional: true },
+    ],
+  });
+
+  steps.push({
+    key: 'test_connection',
+    title: 'Test the connection',
+    done:  false,
+    help:  'Click the button — we will try /health and report which transports are reachable. Green = working.',
+    actions: [{ label: 'Run connection test', call: 'testOracleAllTransports' }],
+  });
+
+  steps.push({
+    key: 'auto_sync',
+    title: 'Turn on auto-sync (optional)',
+    done:  cfg.oracleAutoSyncEnabled,
+    help:  'When enabled, the portal pulls order status / customer balance changes from Oracle every N minutes.',
+    fields: [
+      { key: 'ORACLE_AUTOSYNC_ENABLED',      label: 'Enable auto-sync', type: 'checkbox' },
+      { key: 'ORACLE_AUTOSYNC_INTERVAL_MIN', label: 'Interval (minutes)', type: 'number', placeholder: '15' },
+    ],
+  });
+
+  steps.push({
+    key: 'install_trigger',
+    title: 'Install the schedule',
+    done:  _hasOracleSyncTrigger_(),
+    help:  'Creates a time-based Apps Script trigger so the portal pulls from Oracle in the background.',
+    actions: [{ label: 'Install trigger', call: 'installOracleSyncTrigger' }],
+  });
+
+  return { success: true, steps: steps };
+}
+
+function _hasOracleSyncTrigger_() {
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    return triggers.some(function(t) { return t.getHandlerFunction() === 'oracleAutoSyncJob'; });
+  } catch(e) { return false; }
+}
+
+/**
+ * Installs (or removes) the Oracle auto-sync trigger based on config.
+ */
+function installOracleSyncTrigger() {
+  try {
+    var cfg = getIntegrationConfig();
+    // Remove existing
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getHandlerFunction() === 'oracleAutoSyncJob') ScriptApp.deleteTrigger(t);
+    });
+    if (!cfg.oracleAutoSyncEnabled) {
+      return { success: true, message: 'Auto-sync disabled — trigger removed.' };
+    }
+    ScriptApp.newTrigger('oracleAutoSyncJob')
+      .timeBased()
+      .everyMinutes(cfg.oracleAutoSyncIntervalM >= 5 ? cfg.oracleAutoSyncIntervalM : 15)
+      .create();
+    return { success: true, message: 'Trigger installed for every ' + cfg.oracleAutoSyncIntervalM + ' min.' };
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Combined sync job — pull order statuses + push pending orders.
+ * Wired to the trigger by installOracleSyncTrigger().
+ */
+function oracleAutoSyncJob() {
+  try {
+    var pull = syncOrderStatusesFromOracle();
+    var push = syncPendingOrdersToOracle();
+    Logger.log('[oracleAutoSyncJob] pull=' + JSON.stringify(pull) + ' push=' + JSON.stringify(push));
+  } catch(e) {
+    Logger.log('[oracleAutoSyncJob] ' + e.message);
+  }
 }
 
 // ============================================================================
@@ -1101,8 +1360,59 @@ function handleIntegrationRequest(params) {
       
     case 'syncOrderStatuses':
       return syncOrderStatusesFromOracle();
-      
+
+    // Oracle wizard / multi-transport
+    case 'oracleConfig':
+      return { success: true, config: _safeOracleConfig(getIntegrationConfig()) };
+
+    case 'saveOracleSetting':
+      if (params._session) requirePermission(params._session, 'integrations.configure');
+      return saveIntegrationSetting(params.key, params.value);
+
+    case 'testOracleAllTransports':
+      if (params._session) requirePermission(params._session, 'integrations.view');
+      return testOracleAllTransports();
+
+    case 'oracleWizardSteps':
+      if (params._session) requirePermission(params._session, 'integrations.view');
+      return getOracleWizardSteps();
+
+    case 'installOracleSyncTrigger':
+      if (params._session) requirePermission(params._session, 'integrations.configure');
+      return installOracleSyncTrigger();
+
+    case 'runOracleSyncNow':
+      if (params._session) requirePermission(params._session, 'integrations.run_sync');
+      oracleAutoSyncJob();
+      return { success: true, message: 'Sync triggered. Check Integration Log for results.' };
+
     default:
       return { success: false, error: 'Unknown action: ' + action };
   }
+}
+
+function _safeOracleConfig(cfg) {
+  // Strip secrets before returning to UI
+  return {
+    oracleTransport:        cfg.oracleTransport,
+    oracleApiUrl:           cfg.oracleApiUrl,
+    oracleUsername:         cfg.oracleUsername,
+    oracleHost:             cfg.oracleHost,
+    oracleDb:               cfg.oracleDb,
+    oraclePort:             cfg.oraclePort,
+    oracleDbGatewayUrl:     cfg.oracleDbGatewayUrl,
+    oracleDblinkUrl:        cfg.oracleDblinkUrl,
+    oracleS3Bucket:         cfg.oracleS3Bucket,
+    oracleS3Prefix:         cfg.oracleS3Prefix,
+    oracleS3Region:         cfg.oracleS3Region,
+    oracleSftpHost:         cfg.oracleSftpHost,
+    oracleSftpUser:         cfg.oracleSftpUser,
+    oracleSftpPath:         cfg.oracleSftpPath,
+    oracleAutoSyncEnabled:  cfg.oracleAutoSyncEnabled,
+    oracleAutoSyncIntervalM:cfg.oracleAutoSyncIntervalM,
+    has_password:           !!cfg.oraclePassword,
+    has_api_key:            !!cfg.oracleApiKey,
+    has_dbgateway_token:    !!cfg.oracleDbGatewayToken,
+    has_aws_secret:         !!cfg.oracleAwsSecret,
+  };
 }
