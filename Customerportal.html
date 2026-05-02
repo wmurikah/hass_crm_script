@@ -208,6 +208,8 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <a class="hp-nav-item" onclick="showPage('documents')" data-page="documents">&#128196; Documents</a>
     <a class="hp-nav-item" onclick="showPage('consumption')" data-page="consumption"><svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><rect x='3' y='12' width='4' height='8'/><rect x='9' y='8' width='4' height='12'/><rect x='15' y='4' width='4' height='16'/><path d='M3 3l18 0'/></svg> <span>My Consumption</span></a>
     <a class="hp-nav-item" onclick="showPage('statements')" data-page="statements">&#128202; Statements</a>
+    <a class="hp-nav-item" onclick="showPage('reports')" data-page="reports">&#128200; Reports</a>
+    <a class="hp-nav-item" onclick="showPage('contacts')" data-page="contacts">&#128101; Team / Contacts</a>
     <a class="hp-nav-item" onclick="showPage('account')" data-page="account">&#9881; Account</a>
   </nav>
   <div class="sidebar-footer"><a class="hp-nav-item" onclick="doLogout()">&#10140; Logout</a></div>
@@ -498,8 +500,117 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
       </div>
     </div>
 
+    <!-- Reports -->
+    <div class="hp-page" id="page-reports">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h5 class="mb-0 fw-bold">Reports</h5>
+          <span class="text-muted" style="font-size:13px;">Generate analytical reports for your account</span>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="hp-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:24px;">&#128202;</span>
+              <div style="font-weight:700;font-size:15px;color:#1e293b;">Consumption Trend</div>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Monthly volume and spend across products and locations.</div>
+            <button class="btn btn-hp-primary btn-sm" onclick="customerRunReport('consumption')">Run Report</button>
+            <div id="cust-rpt-progress-consumption" style="display:none;margin-top:14px;">
+              <div style="font-size:12px;color:#64748b;margin-bottom:6px;" id="cust-rpt-label-consumption">Preparing...</div>
+              <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="cust-rpt-bar-consumption" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+            </div>
+            <div id="cust-rpt-actions-consumption" style="display:none;margin-top:12px;gap:8px;">
+              <button class="btn btn-sm btn-hp-primary" onclick="customerOpenReport('consumption')">Open in new tab</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="customerDownloadReport('consumption')">Download CSV</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="hp-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:24px;">&#128181;</span>
+              <div style="font-weight:700;font-size:15px;color:#1e293b;">Cost Trend</div>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:14px;">Spend over time and price per unit by product.</div>
+            <button class="btn btn-hp-primary btn-sm" onclick="customerRunReport('cost')">Run Report</button>
+            <div id="cust-rpt-progress-cost" style="display:none;margin-top:14px;">
+              <div style="font-size:12px;color:#64748b;margin-bottom:6px;" id="cust-rpt-label-cost">Preparing...</div>
+              <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="cust-rpt-bar-cost" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+            </div>
+            <div id="cust-rpt-actions-cost" style="display:none;margin-top:12px;gap:8px;">
+              <button class="btn btn-sm btn-hp-primary" onclick="customerOpenReport('cost')">Open in new tab</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="customerDownloadReport('cost')">Download CSV</button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="hp-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:24px;">&#128230;</span>
+              <div style="font-weight:700;font-size:15px;color:#1e293b;">Order History</div>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:14px;">All orders with status, value, and delivery dates.</div>
+            <button class="btn btn-hp-primary btn-sm" onclick="customerRunReport('orders')">Run Report</button>
+            <div id="cust-rpt-progress-orders" style="display:none;margin-top:14px;">
+              <div style="font-size:12px;color:#64748b;margin-bottom:6px;" id="cust-rpt-label-orders">Preparing...</div>
+              <div style="background:#e2e8f0;border-radius:6px;height:8px;overflow:hidden;"><div id="cust-rpt-bar-orders" style="background:#1A237E;height:100%;width:0%;transition:width 0.3s;border-radius:6px;"></div></div>
+            </div>
+            <div id="cust-rpt-actions-orders" style="display:none;margin-top:12px;gap:8px;">
+              <button class="btn btn-sm btn-hp-primary" onclick="customerOpenReport('orders')">Open in new tab</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="customerDownloadReport('orders')">Download CSV</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Team / Contacts -->
+    <div class="hp-page" id="page-contacts">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h5 class="mb-0 fw-bold">Team / Contacts</h5>
+          <span class="text-muted" style="font-size:13px;">Manage who at your company can access this portal</span>
+        </div>
+        <button class="btn btn-hp-primary" id="btnAddTeamContact" onclick="openCustomerContactModal()" style="display:none;">+ Add Contact</button>
+      </div>
+      <div class="hp-card">
+        <div id="customerContactsBody" class="p-3"><div class="text-muted">Loading contacts...</div></div>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<!-- Customer Add/Edit Contact Modal -->
+<div class="modal fade" id="customerContactModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header hp-modal-header"><h6 class="modal-title fw-bold" id="custContactModalTitle">Add Contact</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="custContactId">
+    <div class="row g-2">
+      <div class="col-md-6 mb-2"><label class="hp-form-label">First Name *</label><input class="form-control form-control-sm" id="custContactFirst"></div>
+      <div class="col-md-6 mb-2"><label class="hp-form-label">Last Name</label><input class="form-control form-control-sm" id="custContactLast"></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-md-6 mb-2"><label class="hp-form-label">Email *</label><input class="form-control form-control-sm" type="email" id="custContactEmail"></div>
+      <div class="col-md-6 mb-2"><label class="hp-form-label">Phone</label><input class="form-control form-control-sm" id="custContactPhone"></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-md-6 mb-2"><label class="hp-form-label">Job Title</label><input class="form-control form-control-sm" id="custContactJob"></div>
+      <div class="col-md-6 mb-2"><label class="hp-form-label">Type</label>
+        <select class="form-select form-select-sm" id="custContactType">
+          <option value="CONTACT">Contact</option>
+          <option value="BILLING">Billing</option>
+          <option value="OPERATIONS">Operations</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="custContactPortal"><label class="form-check-label" for="custContactPortal" style="font-size:13px;">Grant portal access (a temporary password is emailed)</label></div>
+    <div id="custContactError" style="display:none;color:#dc2626;background:#fee2e2;border:1px solid #fecaca;border-radius:6px;padding:8px 10px;font-size:13px;margin-top:10px;"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" id="custContactSaveBtn" onclick="submitCustomerContact()">Save Contact</button></div>
+</div></div></div>
 
 <!-- New Ticket Modal -->
 <div class="modal fade" id="newTicketModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
@@ -585,7 +696,7 @@ function showPage(id){
   document.querySelectorAll('.hp-nav-item').forEach(n=>n.classList.remove('active'));
   var pg=document.getElementById('page-'+id); if(pg) pg.classList.add('active');
   var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
-  var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account'};
+  var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account',reports:'Reports',contacts:'Team / Contacts',statements:'Statements'};
   document.getElementById('pageTitle').textContent=t[id]||id;
   if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('year'); }
   if(id==='dashboard'){
@@ -600,7 +711,251 @@ function showPage(id){
   if(id==='documents') loadDocuments();
   if(id==='account') loadAccountDetails();
   if(id==='statements') initStatementPage();
+  if(id==='contacts') loadCustomerContacts();
   stopChatPolling();
+}
+
+/* ══════════ TEAM / CONTACTS (Customer Portal) ══════════
+ * The primary contact for the customer (contact_type === 'PRIMARY') can
+ * add new contacts and toggle portal access. Other contacts see a
+ * read-only list.
+ */
+function _isPrimaryContact() {
+  return currentContact && String(currentContact.contact_type || '').toUpperCase() === 'PRIMARY';
+}
+
+function loadCustomerContacts() {
+  var body = document.getElementById('customerContactsBody');
+  if (!body) return;
+  body.innerHTML = '<div class="text-muted">Loading contacts...</div>';
+  var addBtn = document.getElementById('btnAddTeamContact');
+  if (addBtn) addBtn.style.display = _isPrimaryContact() ? 'inline-block' : 'none';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { body.innerHTML = '<div class="text-muted p-3">Failed to load contacts.</div>'; return; }
+      var primary = _isPrimaryContact();
+      var rows = (r.contacts || []).map(function(c) {
+        var isOn = c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE' || c.is_portal_user === 1 || c.is_portal_user === '1';
+        var name = (c.first_name || '') + ' ' + (c.last_name || '');
+        var actions = '';
+        if (primary && c.contact_id !== (currentContact && currentContact.contact_id)) {
+          actions = '<button class="btn btn-sm btn-outline-secondary me-1" onclick="openCustomerContactModal(\'' + c.contact_id + '\')">Edit</button>'
+                  + '<button class="btn btn-sm ' + (isOn ? 'btn-outline-danger' : 'btn-outline-success') + '" onclick="customerTogglePortal(\'' + c.contact_id + '\',' + (!isOn) + ')">'
+                  + (isOn ? 'Disable Portal' : 'Enable Portal') + '</button>';
+        } else if (c.contact_id === (currentContact && currentContact.contact_id)) {
+          actions = '<span class="text-muted" style="font-size:12px;">You</span>';
+        }
+        return '<tr>'
+          + '<td><strong>' + escapeHtml(name) + '</strong>'
+          +   (c.job_title ? '<div style="font-size:11px;color:#64748b;">' + escapeHtml(c.job_title) + '</div>' : '')
+          + '</td>'
+          + '<td>' + escapeHtml(c.email || '') + '</td>'
+          + '<td>' + escapeHtml(c.phone || '') + '</td>'
+          + '<td>' + escapeHtml(c.contact_type || '') + '</td>'
+          + '<td>' + (isOn ? '<span class="hp-badge hp-badge-done">Yes</span>' : '<span class="hp-badge hp-badge-open">No</span>') + '</td>'
+          + '<td class="text-end">' + actions + '</td>'
+          + '</tr>';
+      }).join('');
+      body.innerHTML = '<table class="table hp-table mb-0"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Portal</th><th class="text-end">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="text-center text-muted">No contacts yet</td></tr>') + '</tbody></table>'
+        + (primary ? '' : '<div class="text-muted" style="font-size:12px;padding:10px;">Only the primary contact can add or change contacts.</div>');
+    })
+    .withFailureHandler(function() { body.innerHTML = '<div class="text-muted p-3">Failed to load contacts.</div>'; })
+    .handleUserRequest({ action:'getCustomerContacts', customerId: SESSION.customerId });
+}
+
+function openCustomerContactModal(contactId) {
+  if (!_isPrimaryContact()) { showToast('Only the primary contact can manage contacts.', 'error'); return; }
+  document.getElementById('custContactError').style.display = 'none';
+  document.getElementById('custContactId').value = contactId || '';
+  document.getElementById('custContactModalTitle').textContent = contactId ? 'Edit Contact' : 'Add Contact';
+  ['custContactFirst','custContactLast','custContactEmail','custContactPhone','custContactJob'].forEach(function(id) { document.getElementById(id).value = ''; });
+  document.getElementById('custContactType').value = 'CONTACT';
+  document.getElementById('custContactPortal').checked = false;
+  var saveBtn = document.getElementById('custContactSaveBtn');
+  saveBtn.disabled = false; saveBtn.textContent = 'Save Contact';
+
+  if (contactId) {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success) { showToast('Could not load contact', 'error'); return; }
+        var c = (r.contacts || []).filter(function(x){ return x.contact_id === contactId; })[0];
+        if (!c) { showToast('Contact not found', 'error'); return; }
+        document.getElementById('custContactFirst').value = c.first_name || '';
+        document.getElementById('custContactLast').value  = c.last_name  || '';
+        document.getElementById('custContactEmail').value = c.email      || '';
+        document.getElementById('custContactPhone').value = c.phone      || '';
+        document.getElementById('custContactJob').value   = c.job_title  || '';
+        document.getElementById('custContactType').value  = (c.contact_type || 'CONTACT').toUpperCase();
+        document.getElementById('custContactPortal').checked = (c.is_portal_user === true || c.is_portal_user === 'true' || c.is_portal_user === 'TRUE' || c.is_portal_user === 1);
+        new bootstrap.Modal(document.getElementById('customerContactModal')).show();
+      })
+      .handleUserRequest({ action:'getCustomerContacts', customerId: SESSION.customerId });
+  } else {
+    new bootstrap.Modal(document.getElementById('customerContactModal')).show();
+  }
+}
+
+function submitCustomerContact() {
+  if (!_isPrimaryContact()) { showToast('Only the primary contact can manage contacts.', 'error'); return; }
+  var saveBtn = document.getElementById('custContactSaveBtn');
+  var err = document.getElementById('custContactError');
+  err.style.display = 'none';
+  var data = {
+    first_name:    document.getElementById('custContactFirst').value.trim(),
+    last_name:     document.getElementById('custContactLast').value.trim(),
+    email:         document.getElementById('custContactEmail').value.trim(),
+    phone:         document.getElementById('custContactPhone').value.trim(),
+    job_title:     document.getElementById('custContactJob').value.trim(),
+    contact_type:  document.getElementById('custContactType').value,
+    is_portal_user: document.getElementById('custContactPortal').checked,
+  };
+  if (!data.first_name || !data.email) {
+    err.textContent = 'First name and email are required.';
+    err.style.display = 'block';
+    return;
+  }
+  var contactId = document.getElementById('custContactId').value;
+  saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+
+  var done = function(r) {
+    saveBtn.disabled = false; saveBtn.textContent = 'Save Contact';
+    if (r && r.success) {
+      bootstrap.Modal.getInstance(document.getElementById('customerContactModal')).hide();
+      showToast(r.message || 'Contact saved', 'success');
+      loadCustomerContacts();
+    } else {
+      err.textContent = (r && r.error) || 'Save failed';
+      err.style.display = 'block';
+    }
+  };
+
+  if (contactId) {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler(function(e){ err.textContent = (e && e.message) || 'Network error'; err.style.display = 'block'; saveBtn.disabled = false; saveBtn.textContent = 'Save Contact'; })
+      .handleUserRequest({ action:'updateCustomerContact', contactId: contactId, data: data });
+  } else {
+    google.script.run
+      .withSuccessHandler(done)
+      .withFailureHandler(function(e){ err.textContent = (e && e.message) || 'Network error'; err.style.display = 'block'; saveBtn.disabled = false; saveBtn.textContent = 'Save Contact'; })
+      .handleUserRequest({ action:'addCustomerContact', customerId: SESSION.customerId, data: data });
+  }
+}
+
+function customerTogglePortal(contactId, newAccess) {
+  if (!_isPrimaryContact()) { showToast('Only the primary contact can manage contacts.', 'error'); return; }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) { showToast(r.message || 'Updated', 'success'); loadCustomerContacts(); }
+      else showToast((r && r.error) || 'Failed', 'error');
+    })
+    .handleUserRequest({ action:'setContactPortalAccess', contactId: contactId, hasAccess: newAccess });
+}
+
+/* ══════════ CUSTOMER REPORTS ══════════ */
+window._customerReportData = window._customerReportData || {};
+
+function customerRunReport(rid) {
+  var bar = document.getElementById('cust-rpt-bar-' + rid);
+  var label = document.getElementById('cust-rpt-label-' + rid);
+  var progress = document.getElementById('cust-rpt-progress-' + rid);
+  var actions = document.getElementById('cust-rpt-actions-' + rid);
+  if (progress) progress.style.display = 'block';
+  if (actions) actions.style.display = 'none';
+  if (bar) bar.style.width = '0%';
+  if (label) label.textContent = 'Preparing data...';
+
+  // Animate the progress bar smoothly while the call is in flight.
+  var pct = 0;
+  var ticker = setInterval(function() {
+    pct = Math.min(85, pct + Math.max(2, 8 - pct / 12));
+    if (bar) bar.style.width = pct + '%';
+    if (label) label.textContent = pct < 30 ? 'Querying records...' : pct < 60 ? 'Aggregating...' : 'Building report...';
+  }, 250);
+  var finish = function(success) {
+    clearInterval(ticker);
+    if (bar) bar.style.width = success ? '100%' : '0%';
+    if (label) label.textContent = success ? 'Done.' : 'Failed.';
+    if (success && actions) actions.style.display = 'flex';
+  };
+
+  var onSuccess = function(r) {
+    var data = (r && r.success) ? (r.data || r) : null;
+    if (!data) { finish(false); showToast('Report failed', 'error'); return; }
+    window._customerReportData[rid] = data;
+    finish(true);
+  };
+  var onFail = function(e) { finish(false); showToast('Error: ' + (e && e.message || 'failed'), 'error'); };
+
+  if (rid === 'consumption') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .processRequest({ service:'customers', action:'getConsumption', token: SESSION.token, customerId: SESSION.customerId, period: 'year' });
+  } else if (rid === 'orders') {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .handleOrderRequest({ action:'list', conditions:{ customer_id: SESSION.customerId }, options:{ limit: 1000 } });
+  } else if (rid === 'cost') {
+    // Cost = consumption summary projected over time.
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
+      .processRequest({ service:'customers', action:'getConsumption', token: SESSION.token, customerId: SESSION.customerId, period: 'year' });
+  }
+}
+
+function _customerReportToTable(rid, data) {
+  var headers = [], rows = [];
+  if (rid === 'consumption' || rid === 'cost') {
+    headers = ['Period','Volume (L)','Spend','Orders'];
+    var monthly = (data && data.monthlyTrend) || (data && data.monthly) || [];
+    rows = monthly.map(function(m) {
+      return [m.period || m.month || '-', Number(m.volume || 0).toLocaleString(), Number(m.spend || 0).toLocaleString(), m.orders || ''];
+    });
+  } else if (rid === 'orders') {
+    headers = ['Order #','Date','Status','Total','Currency'];
+    rows = (Array.isArray(data) ? data : (data && data.orders) || []).map(function(o) {
+      return [o.order_number || o.order_id || '-', (o.created_at || '').substring(0,10), o.status || '-', Number(o.total_amount || 0).toLocaleString(), o.currency_code || ''];
+    });
+  }
+  return { headers: headers, rows: rows };
+}
+
+function customerOpenReport(rid) {
+  var data = window._customerReportData[rid];
+  if (!data) { showToast('Run the report first', 'error'); return; }
+  var t = _customerReportToTable(rid, data);
+  var title = rid === 'consumption' ? 'Consumption Report' : rid === 'cost' ? 'Cost Trend Report' : 'Order History';
+  var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title>'
+    + '<style>body{font-family:Arial,sans-serif;max-width:960px;margin:24px auto;padding:0 20px;color:#1e293b;}'
+    + 'h1{color:#1A237E;font-size:22px;margin:0 0 4px;} .meta{color:#64748b;font-size:12px;margin-bottom:18px;}'
+    + 'table{width:100%;border-collapse:collapse;font-size:13px;} th,td{border-bottom:1px solid #e2e8f0;padding:8px 10px;text-align:left;}'
+    + 'th{background:#f8fafc;color:#64748b;text-transform:uppercase;letter-spacing:.4px;font-size:11px;} .num{text-align:right;}'
+    + '.print-btn{background:#1A237E;color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;}'
+    + '@media print{.print-btn{display:none;}}</style></head><body>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    + '<h1>' + title + '</h1><button class="print-btn" onclick="window.print()">Print / Save PDF</button>'
+    + '</div>'
+    + '<div class="meta">' + escapeHtml((currentCustomer && currentCustomer.company_name) || '') + ' &middot; Generated ' + new Date().toLocaleString() + '</div>'
+    + '<table><thead><tr>' + t.headers.map(function(h){ return '<th>' + escapeHtml(h) + '</th>'; }).join('') + '</tr></thead>'
+    + '<tbody>' + (t.rows.length ? t.rows.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>' + escapeHtml(c) + '</td>'; }).join('') + '</tr>'; }).join('') : '<tr><td colspan="' + t.headers.length + '" style="text-align:center;color:#94a3b8;padding:30px;">No data for this report.</td></tr>') + '</tbody></table>'
+    + '</body></html>';
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Pop-up blocked. Please allow pop-ups for this site.', 'error'); return; }
+  w.document.write(html); w.document.close();
+}
+
+function customerDownloadReport(rid) {
+  var data = window._customerReportData[rid];
+  if (!data) { showToast('Run the report first', 'error'); return; }
+  var t = _customerReportToTable(rid, data);
+  var csv = [t.headers].concat(t.rows).map(function(r) {
+    return r.map(function(c){ return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\n');
+  var blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'hass-' + rid + '-' + new Date().toISOString().substring(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
 }
 
 /* ══════════ STATEMENTS ══════════ */
