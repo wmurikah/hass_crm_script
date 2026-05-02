@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — BackupService.gs
+ * HASS PETROLEUM CMS - BackupService.gs
  * Version: 1.0.0
  *
  * Turso is the primary database.
@@ -43,14 +43,14 @@ var BACKUP_ORDER_ = [
   'ChurnRiskFactors', 'RetentionActivities',
 ];
 
-// Tables without updated_at — use created_at for incremental
+// Tables without updated_at - use created_at for incremental
 var TABLES_USE_CREATED_AT_ = [
   'order_status_history', 'ticket_attachments', 'ticket_history',
   'order_lines', 'audit_log', 'integration_log', 'staff_messages',
   'holidays', 'price_list_items',
 ];
 
-// Tables with neither timestamp — skip in incremental, include in full
+// Tables with neither timestamp - skip in incremental, include in full
 var TABLES_NO_TIMESTAMP_ = [
   'countries', 'segments', 'products', 'depots', 'sla_config', 'business_hours',
 ];
@@ -171,7 +171,7 @@ function runIncrementalBackup() {
     BACKUP_ORDER_.forEach(function(sheetName) {
       var table = TABLE_MAP[sheetName] || sheetName.toLowerCase();
 
-      // Tables with no timestamps at all — skip in incremental
+      // Tables with no timestamps at all - skip in incremental
       if (TABLES_NO_TIMESTAMP_.indexOf(table) !== -1) return;
 
       try {
@@ -277,7 +277,7 @@ function backupTableToSheet(sheetName, rows, fullMode) {
     return { upserted: 0, appended: values.length, errors: [] };
   }
 
-  // Incremental: upsert — update matching rows in-place, append new rows
+  // Incremental: upsert - update matching rows in-place, append new rows
   var pkField  = PK_MAP[sheetName] || 'id';
   var existing = sheet.getLastRow() > 1
     ? sheet.getRange(1, 1, sheet.getLastRow(), headers.length).getValues()
@@ -300,7 +300,7 @@ function backupTableToSheet(sheetName, rows, fullMode) {
 function upsertRowsIntoSheet(sheet, headers, existingData, newRows, pkField) {
   var pkColIdx = headers.indexOf(pkField);
   if (pkColIdx === -1) {
-    // No PK column in sheet — just append
+    // No PK column in sheet - just append
     var appendValues = newRows.map(function(row) {
       return headers.map(function(h) { return (row[h] !== null && row[h] !== undefined) ? row[h] : ''; });
     });
@@ -332,7 +332,7 @@ function upsertRowsIntoSheet(sheet, headers, existingData, newRows, pkField) {
       existingData[pkIndex[pk]] = rowValues;
       upserted++;
     } else {
-      // New row — append
+      // New row - append
       if (pk) pkIndex[pk] = existingData.length;
       existingData.push(rowValues);
       toAppend.push(rowValues);
@@ -380,7 +380,7 @@ function getBackupStatus() {
 
 /**
  * Installs a 60-minute time-driven trigger for runIncrementalBackup_trigger.
- * Safe to call multiple times — skips if already installed.
+ * Safe to call multiple times - skips if already installed.
  */
 function installBackupTrigger() {
   var triggers = ScriptApp.getProjectTriggers();
@@ -426,7 +426,7 @@ function removeBackupTrigger() {
 function runIncrementalBackup_trigger() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) {
-    Logger.log('[BackupService] trigger skipped — backup already running');
+    Logger.log('[BackupService] trigger skipped - backup already running');
     return;
   }
   try {

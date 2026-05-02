@@ -1,5 +1,5 @@
 // ================================================================
-// HASS PETROLEUM CMS — AuthService.gs
+// HASS PETROLEUM CMS - AuthService.gs
 // Version: 3.0.0
 //
 // All data reads/writes go to Turso via DatabaseSetup helpers.
@@ -247,7 +247,7 @@ function signupCustomer(params) {
     if (adminEmail) {
       MailApp.sendEmail({
         to:      adminEmail,
-        subject: 'New Customer Portal Signup — Pending Approval',
+        subject: 'New Customer Portal Signup - Pending Approval',
         body:    'A new customer portal signup request has been submitted.\n\n'
           + 'Company: ' + (companyName || '(not provided)') + '\n'
           + 'Name: '    + name + '\n'
@@ -262,7 +262,7 @@ function signupCustomer(params) {
   try {
     MailApp.sendEmail({
       to:      email,
-      subject: 'Hass Petroleum Portal — Signup Received',
+      subject: 'Hass Petroleum Portal - Signup Received',
       body:    'Hello ' + firstName + ',\n\n'
         + 'Your portal signup request has been received and is pending approval by our team.\n'
         + 'You will receive an email once your account has been reviewed.\n\n'
@@ -327,7 +327,7 @@ function requestPasswordReset(params) {
   try {
     MailApp.sendEmail({
       to:      email,
-      subject: 'Hass Portal — Password reset code',
+      subject: 'Hass Portal - Password reset code',
       body:    'Your reset code is: ' + otp + '\n\nExpires in 15 minutes.\n\nHass Petroleum Group',
     });
   } catch(e) {

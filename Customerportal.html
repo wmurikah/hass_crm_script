@@ -670,7 +670,7 @@ const SESSION = (function() {
 
 /* Top-frame navigation back to the published script URL.
  * window.location.href inside Apps Script's IFRAME sandbox is the inner
- * googleusercontent.com URL — using it as a base produces a blank iframe.
+ * googleusercontent.com URL - using it as a base produces a blank iframe.
  */
 function _gotoLogin() {
   var url = (SESSION && SESSION.scriptUrl) || '';
@@ -684,7 +684,7 @@ function _gotoLogin() {
 
 // Redirect if no valid session
 if (!SESSION || !SESSION.token) {
-  if (window.console) console.warn('[SESSION] no token — returning to login');
+  if (window.console) console.warn('[SESSION] no token - returning to login');
   _gotoLogin();
 }
 
@@ -2105,7 +2105,7 @@ function sendChatMessage() {
     return;
   }
 
-  // Bot flow — no active ticket yet
+  // Bot flow - no active ticket yet
   appendChatMessage({ author_type:'CUSTOMER', content:content, created_at:new Date().toISOString() });
   setTimeout(function(){ botGuide(content); }, 500);
 }
@@ -2131,7 +2131,7 @@ function botGuide(userInput) {
     var upper = userInput.toUpperCase().trim();
     if(BOT_CATEGORIES.indexOf(upper) > -1) _botDraft.category = upper;
     _botState = 'subject';
-    appendBotMessage('Got it — **' + _botDraft.category + '**. Now, please give me a short title for your issue (e.g. "Delivery delayed for order #ORD-123")');
+    appendBotMessage('Got it - **' + _botDraft.category + '**. Now, please give me a short title for your issue (e.g. "Delivery delayed for order #ORD-123")');
     return;
   }
   if (_botState === 'subject') {
@@ -2170,7 +2170,7 @@ function appendBotMessage(text) {
 }
 
 function submitBotTicket() {
-  if(!currentCustomer){ appendBotMessage('Could not submit — customer profile not loaded. Please refresh and try again.'); return; }
+  if(!currentCustomer){ appendBotMessage('Could not submit - customer profile not loaded. Please refresh and try again.'); return; }
   google.script.run
     .withSuccessHandler(function(r){
       if(r && r.success) {
@@ -2305,7 +2305,7 @@ function showChatBrowserNotification(senderName, messageContent) {
   if (Notification.permission !== 'granted') return;
   var preview = (messageContent || '').length > 60 ? messageContent.substring(0, 60) + '...' : (messageContent || '');
   try {
-    var n = new Notification('Hass Petroleum — New message', {
+    var n = new Notification('Hass Petroleum - New message', {
       body: (senderName || 'Support') + ': ' + preview,
       tag: 'hass-customer-chat',
       renotify: true,

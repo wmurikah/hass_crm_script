@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — CACHE MANAGER
+ * HASS PETROLEUM CMS - CACHE MANAGER
  * Version: 1.0.0
  *
  * Multi-tier caching for Google Apps Script.
@@ -22,8 +22,8 @@
  */
 
 var CACHE_NS           = 'hass_cms_';
-var CACHE_TTL_DYNAMIC  = 300;    // 5 min — tickets, orders, notifications …
-var CACHE_TTL_STATIC   = 3600;   // 1 h  — products, countries, config …
+var CACHE_TTL_DYNAMIC  = 300;    // 5 min - tickets, orders, notifications …
+var CACHE_TTL_STATIC   = 3600;   // 1 h  - products, countries, config …
 var CACHE_CHUNK_BYTES  = 80000;  // 80 KB per chunk (100 KB hard limit)
 
 var STATIC_SHEETS_ = [
@@ -145,7 +145,7 @@ function cacheDeleteValue(key) {
 }
 
 // ============================================================================
-// L1 — CacheService (chunked for large payloads)
+// L1 - CacheService (chunked for large payloads)
 // ============================================================================
 
 function readL1_(sheetName) {
@@ -231,7 +231,7 @@ function clearL1_(sheetName) {
 }
 
 // ============================================================================
-// L2 — PropertiesService (persistent, small payloads)
+// L2 - PropertiesService (persistent, small payloads)
 // ============================================================================
 
 function readL2_(sheetName) {

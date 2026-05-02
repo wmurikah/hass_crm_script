@@ -1,16 +1,16 @@
 /**
- * HASS PETROLEUM CMS — DATABASE SETUP & CORE CRUD
+ * HASS PETROLEUM CMS - DATABASE SETUP & CORE CRUD
  * Version: 3.0.0
  *
  * ALL reads and writes go to Turso (libSQL).
- * Google Sheets is a read-only backup sink — written only by BackupService.gs.
+ * Google Sheets is a read-only backup sink - written only by BackupService.gs.
  *
  * Provides:
  * - Turso-backed CRUD helpers (getSheetData, appendRow, updateRow, deleteRow, findRow, findRows)
- * - Collection name mapping (COLLECTION_MAP — logical names, kept for backward compat)
- * - Schema definitions (SCHEMAS — reference / validation only)
+ * - Collection name mapping (COLLECTION_MAP - logical names, kept for backward compat)
+ * - Schema definitions (SCHEMAS - reference / validation only)
  * - Utility functions (ID generation, timestamps, audit logging, config)
- * - getSpreadsheet() / sheetToObjects() / getHeaders_() — kept for BackupService only
+ * - getSpreadsheet() / sheetToObjects() / getHeaders_() - kept for BackupService only
  */
 
 // ============================================================================
@@ -124,7 +124,7 @@ function getCollectionName(sheetName) {
 }
 
 // ============================================================================
-// CACHING  (delegates to CacheManager — now caches Turso results)
+// CACHING  (delegates to CacheManager - now caches Turso results)
 // ============================================================================
 
 /**
@@ -140,7 +140,7 @@ function clearSheetCache(sheetName) {
 }
 
 // ============================================================================
-// CORE CRUD — ALL READ/WRITE VIA TURSO
+// CORE CRUD - ALL READ/WRITE VIA TURSO
 // ============================================================================
 
 /**
@@ -419,7 +419,7 @@ function setConfig(key, value, updatedBy) {
 }
 
 // ============================================================================
-// SCHEMA DEFINITIONS  (reference / validation only — not used for DB creation)
+// SCHEMA DEFINITIONS  (reference / validation only - not used for DB creation)
 // ============================================================================
 
 const SCHEMAS = {

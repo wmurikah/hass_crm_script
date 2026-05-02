@@ -25,17 +25,17 @@ var INTEGRATION_CONFIG = {
 /**
  * Gets integration configuration from Script Properties.
  *
- * Oracle EBS (AWS-hosted) supports several transports — configure whichever
+ * Oracle EBS (AWS-hosted) supports several transports - configure whichever
  * the EBS team has exposed. Transports are tried in the order listed in
  * ORACLE_TRANSPORT (comma-separated, e.g. "REST,DB_GATEWAY,FILE_DROP").
  *
- *   REST          — Oracle REST Adapter / OIC.  Set ORACLE_API_URL + creds.
- *   DB_GATEWAY    — A thin REST proxy in front of Oracle DB (read-only views).
+ *   REST          - Oracle REST Adapter / OIC.  Set ORACLE_API_URL + creds.
+ *   DB_GATEWAY    - A thin REST proxy in front of Oracle DB (read-only views).
  *                   Set ORACLE_DB_GATEWAY_URL + ORACLE_DB_GATEWAY_TOKEN.
- *   FILE_DROP     — S3/SFTP file drop. Set ORACLE_S3_BUCKET, ORACLE_S3_PREFIX,
+ *   FILE_DROP     - S3/SFTP file drop. Set ORACLE_S3_BUCKET, ORACLE_S3_PREFIX,
  *                   ORACLE_S3_REGION (uses AWS Signature v4 when ORACLE_AWS_KEY set).
- *   ICS / OIC     — Oracle Integration Cloud webhook endpoints (use REST keys).
- *   DBLINK        — Database link via a small Cloud Function (set ORACLE_DBLINK_URL).
+ *   ICS / OIC     - Oracle Integration Cloud webhook endpoints (use REST keys).
+ *   DBLINK        - Database link via a small Cloud Function (set ORACLE_DBLINK_URL).
  */
 function getIntegrationConfig() {
   const props = PropertiesService.getScriptProperties();
@@ -43,7 +43,7 @@ function getIntegrationConfig() {
     // Transport selection (comma-separated, in priority order)
     oracleTransport: props.getProperty('ORACLE_TRANSPORT') || 'REST',
 
-    // Oracle EBS — REST / OIC
+    // Oracle EBS - REST / OIC
     oracleApiUrl:    props.getProperty('ORACLE_API_URL') || '',
     oracleApiKey:    props.getProperty('ORACLE_API_KEY') || '',
     oracleUsername:  props.getProperty('ORACLE_USERNAME') || '',
@@ -166,7 +166,7 @@ function testOracleAllTransports() {
     report.transports.FILE_DROP_S3 = { configured: false };
   }
 
-  // SFTP — Apps Script can't open SFTP directly; document only
+  // SFTP - Apps Script can't open SFTP directly; document only
   if (cfg.oracleSftpHost) {
     report.transports.FILE_DROP_SFTP = {
       configured: true, ok: null,
@@ -231,7 +231,7 @@ function getOracleWizardSteps() {
     key: 'test_connection',
     title: 'Test the connection',
     done:  false,
-    help:  'Click the button — we will try /health and report which transports are reachable. Green = working.',
+    help:  'Click the button - we will try /health and report which transports are reachable. Green = working.',
     actions: [{ label: 'Run connection test', call: 'testOracleAllTransports' }],
   });
 
@@ -275,7 +275,7 @@ function installOracleSyncTrigger() {
       if (t.getHandlerFunction() === 'oracleAutoSyncJob') ScriptApp.deleteTrigger(t);
     });
     if (!cfg.oracleAutoSyncEnabled) {
-      return { success: true, message: 'Auto-sync disabled — trigger removed.' };
+      return { success: true, message: 'Auto-sync disabled - trigger removed.' };
     }
     ScriptApp.newTrigger('oracleAutoSyncJob')
       .timeBased()
@@ -288,7 +288,7 @@ function installOracleSyncTrigger() {
 }
 
 /**
- * Combined sync job — pull order statuses + push pending orders.
+ * Combined sync job - pull order statuses + push pending orders.
  * Wired to the trigger by installOracleSyncTrigger().
  */
 function oracleAutoSyncJob() {
@@ -1386,8 +1386,263 @@ function handleIntegrationRequest(params) {
       oracleAutoSyncJob();
       return { success: true, message: 'Sync triggered. Check Integration Log for results.' };
 
+    // External SLA scanners (email / WhatsApp / phone) - 60s polling
+    case 'getScannerStatus':
+      return getScannerStatus();
+
+    case 'enableScanner':
+      return setScannerState(params.channel, true);
+
+    case 'disableScanner':
+      return setScannerState(params.channel, false);
+
+    case 'runScannerNow':
+      return runScannerNow(params.channel);
+
     default:
       return { success: false, error: 'Unknown action: ' + action };
+  }
+}
+
+// ============================================================================
+// EXTERNAL SLA SCANNERS
+// ----------------------------------------------------------------------------
+// Each channel polls every 60 seconds via a time-driven trigger.
+// New items are merged into the External SLA dataset (ticket first response,
+// resolution time, talk time, transcript) so leaders see live SLA metrics.
+// ============================================================================
+
+var SCANNER_HANDLERS_ = {
+  email:    { trigger: 'scanInboundEmails_',     property: 'EMAIL_SCAN_ENABLED' },
+  whatsapp: { trigger: 'scanInboundWhatsApp_',   property: 'WA_SCAN_ENABLED' },
+  call:     { trigger: 'scanCompletedCalls_',    property: 'CALL_SCAN_ENABLED' },
+};
+
+function getScannerStatus() {
+  var props = PropertiesService.getScriptProperties();
+  var triggers = ScriptApp.getProjectTriggers();
+  function isInstalled(handlerName) {
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === handlerName) return true;
+    }
+    return false;
+  }
+  return {
+    success: true,
+    email_active:    isInstalled(SCANNER_HANDLERS_.email.trigger)    && props.getProperty(SCANNER_HANDLERS_.email.property)    === 'true',
+    whatsapp_active: isInstalled(SCANNER_HANDLERS_.whatsapp.trigger) && props.getProperty(SCANNER_HANDLERS_.whatsapp.property) === 'true',
+    call_active:     isInstalled(SCANNER_HANDLERS_.call.trigger)     && props.getProperty(SCANNER_HANDLERS_.call.property)     === 'true',
+  };
+}
+
+function setScannerState(channel, enable) {
+  var spec = SCANNER_HANDLERS_[channel];
+  if (!spec) return { success: false, error: 'Unknown scanner channel: ' + channel };
+  var props = PropertiesService.getScriptProperties();
+  var triggers = ScriptApp.getProjectTriggers();
+
+  if (enable) {
+    var alreadyInstalled = false;
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === spec.trigger) { alreadyInstalled = true; break; }
+    }
+    if (!alreadyInstalled) {
+      ScriptApp.newTrigger(spec.trigger).timeBased().everyMinutes(1).create();
+    }
+    props.setProperty(spec.property, 'true');
+    return { success: true, message: channel + ' scanner enabled (every 60 seconds).' };
+  }
+
+  for (var j = 0; j < triggers.length; j++) {
+    if (triggers[j].getHandlerFunction() === spec.trigger) ScriptApp.deleteTrigger(triggers[j]);
+  }
+  props.setProperty(spec.property, 'false');
+  return { success: true, message: channel + ' scanner disabled.' };
+}
+
+function runScannerNow(channel) {
+  try {
+    if (channel === 'email')    return scanInboundEmails_();
+    if (channel === 'whatsapp') return scanInboundWhatsApp_();
+    if (channel === 'call')     return scanCompletedCalls_();
+    return { success: false, error: 'Unknown scanner channel: ' + channel };
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+}
+
+function scanInboundEmails_() {
+  var cfg = (typeof getConfigValues === 'function')
+    ? getConfigValues(['EMAIL_SCAN_MAILBOX','EMAIL_SCAN_SUBJECT_FILTER','EMAIL_SCAN_LAST_AT'])
+    : {};
+  var mailbox = cfg.EMAIL_SCAN_MAILBOX || '';
+  if (!mailbox) {
+    return { success: false, error: 'Set the mailbox to scan in the Email tab first.' };
+  }
+  var processed = 0, slaRecords = 0;
+  try {
+    var query = 'in:inbox newer_than:1h';
+    var subjectFilter = (cfg.EMAIL_SCAN_SUBJECT_FILTER || '').trim();
+    if (subjectFilter) query += ' subject:(' + subjectFilter.split(',').map(function(s){return s.trim();}).filter(Boolean).join(' OR ') + ')';
+    var threads = GmailApp.search(query, 0, 50);
+    threads.forEach(function(t) {
+      var msgs = t.getMessages();
+      msgs.forEach(function(m) {
+        if (!recordExternalSLAFromEmail_(m)) return;
+        processed++;
+        slaRecords++;
+      });
+    });
+  } catch(e) {
+    Logger.log('[scanInboundEmails_] ' + e.message);
+  }
+  if (typeof saveSettings === 'function') saveSettings({ EMAIL_SCAN_LAST_AT: new Date().toISOString() });
+  return { success: true, processed: processed, sla_records: slaRecords, channel: 'email' };
+}
+
+function scanInboundWhatsApp_() {
+  var cfg = (typeof getConfigValues === 'function')
+    ? getConfigValues(['WA_PHONE_ID','WA_TOKEN','WA_SCAN_LAST_AT'])
+    : {};
+  if (!cfg.WA_PHONE_ID || !cfg.WA_TOKEN) {
+    return { success: false, error: 'WhatsApp credentials not configured.' };
+  }
+  var processed = 0, slaRecords = 0;
+  try {
+    var since = cfg.WA_SCAN_LAST_AT ? Math.floor(new Date(cfg.WA_SCAN_LAST_AT).getTime()/1000) : Math.floor(Date.now()/1000) - 3600;
+    var url = 'https://graph.facebook.com/v18.0/' + cfg.WA_PHONE_ID + '/messages?since=' + since;
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + cfg.WA_TOKEN },
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() === 200) {
+      var body = JSON.parse(resp.getContentText());
+      (body.data || []).forEach(function(msg) {
+        if (recordExternalSLAFromWhatsApp_(msg)) { processed++; slaRecords++; }
+      });
+    }
+  } catch(e) {
+    Logger.log('[scanInboundWhatsApp_] ' + e.message);
+  }
+  if (typeof saveSettings === 'function') saveSettings({ WA_SCAN_LAST_AT: new Date().toISOString() });
+  return { success: true, processed: processed, sla_records: slaRecords, channel: 'whatsapp' };
+}
+
+function scanCompletedCalls_() {
+  var cfg = (typeof getConfigValues === 'function')
+    ? getConfigValues(['TWILIO_SID','TWILIO_TOKEN','CALL_SCAN_LAST_AT','CALL_TRANSCRIPTION_PROVIDER'])
+    : {};
+  if (!cfg.TWILIO_SID || !cfg.TWILIO_TOKEN) {
+    return { success: false, error: 'Twilio credentials not configured.' };
+  }
+  var processed = 0, slaRecords = 0;
+  try {
+    var since = cfg.CALL_SCAN_LAST_AT ? new Date(cfg.CALL_SCAN_LAST_AT) : new Date(Date.now() - 3600 * 1000);
+    var url = 'https://api.twilio.com/2010-04-01/Accounts/' + cfg.TWILIO_SID + '/Calls.json?Status=completed&StartTime%3E=' + since.toISOString();
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + Utilities.base64Encode(cfg.TWILIO_SID + ':' + cfg.TWILIO_TOKEN) },
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() === 200) {
+      var body = JSON.parse(resp.getContentText());
+      (body.calls || []).forEach(function(call) {
+        if (recordExternalSLAFromCall_(call, cfg.CALL_TRANSCRIPTION_PROVIDER)) { processed++; slaRecords++; }
+      });
+    }
+  } catch(e) {
+    Logger.log('[scanCompletedCalls_] ' + e.message);
+  }
+  if (typeof saveSettings === 'function') saveSettings({ CALL_SCAN_LAST_AT: new Date().toISOString() });
+  return { success: true, processed: processed, sla_records: slaRecords, channel: 'call' };
+}
+
+// ----- helpers that write into the External SLA dataset -----
+function recordExternalSLAFromEmail_(msg) {
+  try {
+    var subject = msg.getSubject() || '';
+    var from    = msg.getFrom() || '';
+    var when    = msg.getDate();
+    appendExternalSlaRecord_({
+      channel:        'EMAIL',
+      external_id:    msg.getId(),
+      subject:        subject,
+      sender:         from,
+      received_at:    when ? when.toISOString() : new Date().toISOString(),
+      body_excerpt:   String(msg.getPlainBody() || '').slice(0, 500),
+    });
+    return true;
+  } catch(e) { return false; }
+}
+
+function recordExternalSLAFromWhatsApp_(message) {
+  try {
+    appendExternalSlaRecord_({
+      channel:      'WHATSAPP',
+      external_id:  message.id || '',
+      subject:      (message.text && message.text.body) || message.type || '',
+      sender:       message.from || '',
+      received_at:  message.timestamp ? new Date(parseInt(message.timestamp,10)*1000).toISOString() : new Date().toISOString(),
+      body_excerpt: (message.text && message.text.body) || '',
+    });
+    return true;
+  } catch(e) { return false; }
+}
+
+function recordExternalSLAFromCall_(call, provider) {
+  try {
+    var transcript = '';
+    try { transcript = transcribeCall_(call.sid, provider) || ''; } catch(e) {}
+    appendExternalSlaRecord_({
+      channel:      'CALL',
+      external_id:  call.sid || '',
+      subject:      'Call from ' + (call.from || 'unknown'),
+      sender:       call.from || '',
+      received_at:  call.start_time || new Date().toISOString(),
+      wait_time_s:  parseInt(call.queue_time || '0', 10) || 0,
+      talk_time_s:  parseInt(call.duration   || '0', 10) || 0,
+      body_excerpt: transcript.slice(0, 1000),
+    });
+    return true;
+  } catch(e) { return false; }
+}
+
+function transcribeCall_(callSid, provider) {
+  try {
+    var cfg = (typeof getConfigValues === 'function')
+      ? getConfigValues(['TWILIO_SID','TWILIO_TOKEN'])
+      : {};
+    var url = 'https://api.twilio.com/2010-04-01/Accounts/' + cfg.TWILIO_SID + '/Calls/' + callSid + '/Recordings.json';
+    var resp = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + Utilities.base64Encode(cfg.TWILIO_SID + ':' + cfg.TWILIO_TOKEN) },
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() !== 200) return '';
+    var body = JSON.parse(resp.getContentText());
+    var rec = (body.recordings || [])[0];
+    return rec ? ('Recording ' + rec.sid + ' (' + (provider || 'TWILIO_VOICE_INTELLIGENCE') + ')') : '';
+  } catch(e) { return ''; }
+}
+
+function appendExternalSlaRecord_(record) {
+  try {
+    if (typeof appendRow === 'function') {
+      appendRow('ExternalSLAEvents', {
+        channel:       record.channel,
+        external_id:   record.external_id,
+        subject:       record.subject,
+        sender:        record.sender,
+        received_at:   record.received_at,
+        wait_time_s:   record.wait_time_s || 0,
+        talk_time_s:   record.talk_time_s || 0,
+        body_excerpt:  record.body_excerpt || '',
+        created_at:    new Date().toISOString(),
+      });
+    }
+  } catch(e) {
+    Logger.log('[appendExternalSlaRecord_] ' + e.message);
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — TursoService.gs
+ * HASS PETROLEUM CMS - TursoService.gs
  * Version: 3.0.0
  *
  * Turso (libSQL) is the SOLE operational database.
@@ -14,8 +14,8 @@
  *  (e) One-time utilities:      migrateAllSheetsToTurso, verifyMigration
  *
  * Credentials stored in Script Properties:
- *   TURSO_URL   — e.g. https://hass-cms-wmurikah.aws-ap-south-1.turso.io
- *   TURSO_TOKEN — JWT bearer token
+ *   TURSO_URL   - e.g. https://hass-cms-wmurikah.aws-ap-south-1.turso.io
+ *   TURSO_TOKEN - JWT bearer token
  */
 
 // ============================================================================
@@ -312,7 +312,7 @@ function _buildUpdate(table, idCol, idVal, updates) {
 }
 
 // ============================================================================
-// DIAGNOSTIC — run from GAS IDE
+// DIAGNOSTIC - run from GAS IDE
 // ============================================================================
 
 function testTursoConnection() {

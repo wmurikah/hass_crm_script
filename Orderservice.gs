@@ -823,7 +823,7 @@ function confirmDelivery(orderId, deliveryData, context) {
     // Get order lines
     const lines = findWhere('OrderLines', { order_id: orderId }).data || [];
 
-    // Build batch update map — one batchUpdateRows() call instead of N updateRow() calls.
+    // Build batch update map - one batchUpdateRows() call instead of N updateRow() calls.
     let isPartial = false;
     const lineUpdatesMap = {};
 

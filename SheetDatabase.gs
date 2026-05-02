@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — SHEET DATABASE ENGINE
+ * HASS PETROLEUM CMS - SHEET DATABASE ENGINE
  * Version: 3.0.0
  *
  * ============================================================
@@ -14,7 +14,7 @@
  *                   DashboardService | SLAService | NotificationService | ...
  *  4. Data-Access   DatabaseService.gs  (query engine, findWhere, search, pagination)
  *                   DatabaseSetup.gs    (CRUD, schema, id-gen, audit helpers)
- *                   SheetDatabase.gs    (batch engine — this file)
+ *                   SheetDatabase.gs    (batch engine - this file)
  *  5. Cache         CacheManager.gs     (L1 CacheService / L2 PropertiesService)
  *  6. Primary DB    Turso (libSQL)       via TursoService.gs HTTP helpers
  *  7. Backup        BackupService.gs    (Turso → Sheets, 60-min trigger)
@@ -52,7 +52,7 @@
  */
 
 // ============================================================================
-// BATCH INSERT  — Turso-backed
+// BATCH INSERT  - Turso-backed
 // ============================================================================
 
 /**
@@ -93,7 +93,7 @@ function batchInsertRows(sheetName, rowObjects, defaults) {
 }
 
 // ============================================================================
-// BATCH UPDATE  — Turso-backed
+// BATCH UPDATE  - Turso-backed
 // ============================================================================
 
 /**
@@ -235,7 +235,7 @@ function bulkSetFields(sheetName, idColumn, ids, fields) {
 }
 
 // ============================================================================
-// SCHEMA INITIALISATION  (Sheets side — for backup sheet structure)
+// SCHEMA INITIALISATION  (Sheets side - for backup sheet structure)
 // ============================================================================
 
 /**

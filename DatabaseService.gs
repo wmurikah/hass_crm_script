@@ -401,7 +401,7 @@ function bulkCreate(sheetName, records, context) {
       records[i].created_at  = now;
       records[i].updated_at  = now;
     }
-    // Single setValues() call via batch engine — ~10-100× faster than N appendRow() calls.
+    // Single setValues() call via batch engine - ~10-100× faster than N appendRow() calls.
     var result = batchInsertRows(sheetName, records);
     if (result.errors && result.errors.length > 0) {
       Logger.log('[DatabaseService] bulkCreate batch errors (' + sheetName + '): ' + result.errors.join(', '));

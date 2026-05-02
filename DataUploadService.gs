@@ -1,11 +1,11 @@
 /**
- * HASS CMS — DataUploadService.gs
+ * HASS CMS - DataUploadService.gs
  * =====================================================================
  */
 
 
 // ============================================================================
-// ROUTER — called by google.script.run from the upload UI
+// ROUTER - called by google.script.run from the upload UI
 // ============================================================================
 function handleDataUploadRequest(params) {
   try {
@@ -36,7 +36,7 @@ function handleDataUploadRequest(params) {
 
 
 // ============================================================================
-// 1. importSalesRows — writes to SLAData using actual sheet column names
+// 1. importSalesRows - writes to SLAData using actual sheet column names
 //    Confirmed headers: source_type | affiliate | document_number |
 //    customer_name | oracle_approver | finance_variance_min | la_variance_min |
 //    created_at | approved_at | dispatched_at | ordered_item | upload_batch_id
@@ -105,7 +105,7 @@ function importSalesRows(rows, affiliateCountryCode) {
 
 
 // ============================================================================
-// 2. importPurRows — writes to POApprovals using actual sheet column names
+// 2. importPurRows - writes to POApprovals using actual sheet column names
 //    Confirmed headers: po_number | description | nature | affiliate |
 //    created_by | original_creation_date | submission_date |
 //    submission_variance_min | first_approver | first_approval_date |
@@ -230,7 +230,7 @@ function extractCountryFromFilename(filename) {
 
 
 // ============================================================================
-// 4. backfillSLADataAffiliates — ONE-TIME repair for blank affiliate rows
+// 4. backfillSLADataAffiliates - ONE-TIME repair for blank affiliate rows
 // ============================================================================
 function backfillSLADataAffiliates() {
   var ss    = getSpreadsheet();
@@ -305,7 +305,7 @@ function backfillSLADataAffiliates() {
 
 
 // ============================================================================
-// 5. verifyAfterUpload — run after any upload to confirm data landed
+// 5. verifyAfterUpload - run after any upload to confirm data landed
 // ============================================================================
 function verifyAfterUpload() {
   var r = getSLAAnalytics({ year: String(new Date().getFullYear()), period: 'all' }, 'ALL');

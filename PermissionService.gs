@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — PermissionService.gs
+ * HASS PETROLEUM CMS - PermissionService.gs
  * Version: 1.0.0
  *
  * Role-Based Access Control (RBAC) backed by Turso.
@@ -18,13 +18,13 @@
  *   requirePermission(session, permissionCode)  - throws if missing (use in services)
  *
  * Notes:
- *   - SUPER_ADMIN role is treated as wildcard (*) — has every permission.
+ *   - SUPER_ADMIN role is treated as wildcard (*) - has every permission.
  *   - The legacy `users.role` column remains as a fallback when no rows exist
  *     in user_roles for that user. This keeps existing data working.
  */
 
 // ============================================================================
-// PERMISSION CATALOG  (default seed — editable by Super Admin via UI)
+// PERMISSION CATALOG  (default seed - editable by Super Admin via UI)
 // ============================================================================
 
 var DEFAULT_PERMISSIONS_ = [
@@ -111,12 +111,12 @@ var DEFAULT_ROLES_ = [
 ];
 
 // ============================================================================
-// SCHEMA VERIFY + MIGRATE  (idempotent — safe to re-run)
+// SCHEMA VERIFY + MIGRATE  (idempotent - safe to re-run)
 // ============================================================================
 
 /**
  * Verifies/creates the RBAC tables in Turso and seeds default roles/permissions.
- * Safe to call repeatedly — tables use IF NOT EXISTS, rows use INSERT OR IGNORE.
+ * Safe to call repeatedly - tables use IF NOT EXISTS, rows use INSERT OR IGNORE.
  *
  * Run once from the Apps Script IDE after deploy, OR call from the Super Admin
  * UI (action: 'verifyAndMigrateRBAC').

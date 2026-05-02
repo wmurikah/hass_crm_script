@@ -1,5 +1,5 @@
 /**
- * HASS PETROLEUM CMS — DebugDB.gs
+ * HASS PETROLEUM CMS - DebugDB.gs
  *
  * Run from the GAS editor to diagnose why Orders / Dashboard / SLA / Tickets
  * pages are not loading. Inspects the Turso database directly using the

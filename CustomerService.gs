@@ -1,5 +1,5 @@
 // ================================================================
-// HASS PETROLEUM CMS — CustomerService.gs
+// HASS PETROLEUM CMS - CustomerService.gs
 // Helpers used by the Customer Portal.
 // ================================================================
 
@@ -130,7 +130,7 @@ function getCustomerConsumption(customerId, period) {
     });
     var byLocation = Object.values(locBuckets);
 
-    // deliveryPerformance — simplified for normal users: bucket into On Time / Slight Delay / Late
+    // deliveryPerformance - simplified for normal users: bucket into On Time / Slight Delay / Late
     var onTime = 0, slightDelay = 0, late = 0;
     filtered.forEach(function(o) {
       var ordered = new Date(o.created_at || o.requested_date || '');
