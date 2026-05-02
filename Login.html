@@ -1127,6 +1127,29 @@ body {
 (function() {
   'use strict';
 
+  /* ── Canonical published script URL (injected by serveLoginPage) ──
+   * Used for all post-login redirects. We must NOT rely on
+   * window.location.href because, inside Apps Script's IFRAME web-app
+   * sandbox, that returns the inner googleusercontent.com userCodeAppPanel
+   * URL — a single-use token URL that does NOT route through doGet.
+   * Navigating window.location.href to that URL with a `?token=` query
+   * just produces a blank iframe (the symptom the user reported).
+   * Setting window.top.location.href to the published /dev or /exec URL
+   * is allowed cross-origin and triggers a fresh doGet.
+   */
+  var SCRIPT_URL = <?!= JSON.stringify(scriptUrl || '') ?>;
+
+  function gotoApp(query) {
+    var url = SCRIPT_URL + (query || '');
+    try {
+      // Navigate the top frame so doGet runs against the published URL.
+      window.top.location.href = url;
+    } catch (e) {
+      // Cross-origin write was blocked — fall back to navigating the iframe.
+      window.location.href = url;
+    }
+  }
+
   /* ── Page load: logo, session check, server error ── */
   document.addEventListener('DOMContentLoaded', function() {
     // Load logo from Drive
@@ -1158,8 +1181,10 @@ body {
         .handleAuthRequest({ action: 'checkSession', token: storedToken });
     }
 
-    // Show any server-side error passed via template
-    var serverError = '<?= errorMessage ?>';
+    // Show any server-side error passed via template.
+    // Emit as a JSON-encoded string so quotes/apostrophes/newlines in the
+    // message can never break the JS parser.
+    var serverError = <?!= JSON.stringify(errorMessage || '') ?>;
     if (serverError) showLoginError(serverError);
 
     setupStrengthMeter();
@@ -1334,11 +1359,10 @@ body {
 
   /* ── Redirect by role after valid session ── */
   function redirectByRole(session) {
-    var base = window.location.href.split('?')[0];
     if (session.userType === 'STAFF') {
-      window.location.href = base + '?page=staff&token=' + session.token;
+      gotoApp('?page=staff&token=' + encodeURIComponent(session.token));
     } else {
-      window.location.href = base + '?page=portal&token=' + session.token;
+      gotoApp('?page=portal&token=' + encodeURIComponent(session.token));
     }
   }
 
@@ -1348,8 +1372,7 @@ body {
       google.script.run
         .withSuccessHandler(function(result) {
           if (result && result.redirectUrl) {
-            var base = window.location.href.split('?')[0];
-            window.location.href = base + '?token=' + result.token;
+            gotoApp('?token=' + encodeURIComponent(result.token));
           } else if (result && result.error) {
             showLoginError(result.error);
           }
@@ -1910,10 +1933,10 @@ body {
     setTimeout(function() { bar.style.width='88%';  statusEl.textContent='Almost ready...'; },           6500);
     setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  8000);
 
-    // Redirect directly to the portal URL — no intermediate staging screen
+    // Redirect directly to the portal URL — no intermediate staging screen.
+    // gotoApp uses window.top.location so doGet runs against the published URL.
     setTimeout(function() {
-      var base = window.location.href.split('?')[0];
-      window.location.href = base + '?token=' + result.token;
+      gotoApp('?token=' + encodeURIComponent(result.token));
     }, 8600);
   };
 
