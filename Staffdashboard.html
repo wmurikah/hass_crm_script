@@ -4773,20 +4773,15 @@ function loadDashboardHome() {
 /* ══════════ INIT ══════════ */
 document.addEventListener('DOMContentLoaded', function(){
   try { feather.replace(); } catch(e) { console.warn('feather-icons failed:', e.message); }
-  try { initDashboard(); } catch(e) { console.error('initDashboard failed:', e.message); showPage('dashboard'); }
+
+  // Show dashboard immediately — do not wait for server round-trip
+  showPage('dashboard');
+
+  // Load user info and role in background
+  try { initDashboard(); } catch(e) { console.error('initDashboard failed:', e.message); }
+
   window._originalTitle = document.title;
   try { requestNotificationPermission(); } catch(e) {}
-
-  // Fallback — show dashboard after 8 seconds regardless
-  setTimeout(function() {
-    if (currentPage === 'dashboard') {
-      var dash = document.getElementById('page-dashboard');
-      if (dash && dash.style.display === 'none') {
-        console.warn('Fallback: forcing dashboard visible');
-        showPage('dashboard');
-      }
-    }
-  }, 8000);
 });
 </script>
 </body>
