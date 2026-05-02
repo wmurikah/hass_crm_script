@@ -4759,30 +4759,55 @@ function loadDashboardHome() {
   var hEl = document.getElementById('dashWelcomeHeading');
   if (hEl) hEl.textContent = greeting + (SESSION.name ? ', ' + SESSION.name.split(' ')[0] : '') + '.';
 
+  var emptyMsg = '<div style="padding:16px 0;color:#94a3b8;font-size:13px;">No recent activity.</div>';
+  var errorMsg = function(err){
+    return '<div style="padding:16px 0;color:#dc2626;font-size:13px;">Could not load — ' + String(err || 'server error') + '</div>';
+  };
+
   google.script.run
     .withSuccessHandler(function(data) {
-      if (!data.success) return;
+      var tl = document.getElementById('dashTicketList');
+      var ol = document.getElementById('dashOrderList');
+      if (!data || !data.success) {
+        if (tl) tl.innerHTML = errorMsg(data && data.error);
+        if (ol) ol.innerHTML = errorMsg(data && data.error);
+        return;
+      }
       var set = function(id, val){ var el=document.getElementById(id); if(el) el.textContent=val; };
       set('dStatOpenTickets',   data.openTickets);
       set('dStatPendingOrders', data.pendingOrders);
       set('dStatInTransit',     data.inTransit);
       set('dStatUnreadChat',    data.unreadMessages);
 
-      var tl = document.getElementById('dashTicketList');
-      if (tl && data.recentTickets.length > 0) {
-        tl.innerHTML = data.recentTickets.map(function(t){
-          var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
-          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+'</div><div style="font-size:12px;color:#64748b;">'+t.subject.substring(0,45)+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+t.priority+'</span></div>';
-        }).join('');
+      if (tl) {
+        if (data.recentTickets && data.recentTickets.length > 0) {
+          tl.innerHTML = data.recentTickets.map(function(t){
+            var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
+            return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+'</div><div style="font-size:12px;color:#64748b;">'+t.subject.substring(0,45)+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+t.priority+'</span></div>';
+          }).join('');
+        } else {
+          tl.innerHTML = emptyMsg;
+        }
       }
 
-      var ol = document.getElementById('dashOrderList');
-      if (ol && data.recentOrders.length > 0) {
-        ol.innerHTML = data.recentOrders.map(function(o){
-          var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
-          return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+o.country_code+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+o.status.replace('_',' ')+'</span></div>';
-        }).join('');
+      if (ol) {
+        if (data.recentOrders && data.recentOrders.length > 0) {
+          ol.innerHTML = data.recentOrders.map(function(o){
+            var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
+            return '<div style="padding:8px 0;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+o.country_code+'</div></div><span style="font-size:11px;font-weight:700;color:'+color+';">'+o.status.replace('_',' ')+'</span></div>';
+          }).join('');
+        } else {
+          ol.innerHTML = emptyMsg;
+        }
       }
+    })
+    .withFailureHandler(function(err) {
+      var tl = document.getElementById('dashTicketList');
+      var ol = document.getElementById('dashOrderList');
+      var msg = (err && err.message) || 'connection error';
+      if (tl) tl.innerHTML = errorMsg(msg);
+      if (ol) ol.innerHTML = errorMsg(msg);
+      if (window.console) console.error('loadDashboardHome failed:', err);
     })
     .handleDashboardRequest({ action:'getDashboardSummary', affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL' });
 }
