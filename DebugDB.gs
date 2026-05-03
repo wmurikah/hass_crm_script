@@ -111,31 +111,22 @@ var EXPECTED_SCHEMA = {
                       notes: 'composite PK; FK user_id -> users, FK role_code -> roles' },
 
   // ----- CUSTOMERS ---------------------------------------------------------
-  // The Staff dashboard reads MORE columns than the SCHEMAS object declares.
-  // See KNOWN_DUPLICATIONS below for the oracle_customer_id vs _code conflict.
   customers: {
     pk: 'customer_id',
     required: [
-      'customer_id','account_number','company_name','trading_name','segment_id','country_code',
-      'tax_pin','registration_number','email','phone','address','city','website',
-      'payment_terms','credit_limit','credit_used','currency_code',
-      // FRONT-END EXTRAS used in Staffdashboard.html lines 4823-4838 + 4774-4781:
-      'customer_type',          // B2B | B2C | GOVERNMENT
-      'industry',
-      'oracle_customer_code',   // FRONT-END NAME (back-end writes oracle_customer_id - CONFLICT)
-      'affiliate_code',         // dashboard expects this on customer row
-      'lifetime_value',
-      'risk_level',             // LOW | MEDIUM | HIGH
-      'notes',
-      'relationship_owner_id','status','onboarding_status','created_at','updated_at'
+      'customer_id','account_number','company_name','trading_name','customer_type',
+      'segment_id','country_code','currency_code','credit_limit','credit_used','payment_terms',
+      'tax_pin','registration_number','industry','website','status','onboarding_status',
+      'risk_score','risk_level','lifetime_value','relationship_owner_id','parent_customer_id',
+      'source','notes','created_by','oracle_customer_code','affiliate_code',
+      'email','phone','address','city','created_at','updated_at'
     ],
     indexes: [
       'ix_customers_country (country_code)',
       'ix_customers_status (status)',
-      'ix_customers_segment (segment_id)',
-      'ix_customers_account_number (account_number)'
+      'ix_customers_segment (segment_id)'
     ],
-    notes: 'UNIQUE(account_number); status CHECK (ACTIVE,SUSPENDED,ON_HOLD,CLOSED,DELETED); customer_type CHECK (B2B,B2C,GOVERNMENT); risk_level CHECK (LOW,MEDIUM,HIGH)'
+    notes: 'oracle_customer_code is canonical; risk_level + risk_score coexist (bucket + raw)'
   },
 
   // ----- ORDERS ------------------------------------------------------------
@@ -170,12 +161,16 @@ var EXPECTED_SCHEMA = {
   },
   order_status_history: {
     pk: 'history_id',
-    required: ['history_id','order_id','from_status','to_status','changed_by_type','changed_by_id','reason','created_at'],
+    required: ['history_id','order_id','from_status','to_status','changed_by_type','changed_by_id',
+               'changed_by_name','notes','gps_lat','gps_lng','created_at'],
     indexes: ['ix_osh_order (order_id)']
   },
   recurring_schedule: {
     pk: 'schedule_id',
-    required: ['schedule_id','customer_id','frequency','start_date','end_date','next_run_at','is_active','created_at','updated_at']
+    required: ['schedule_id','customer_id','name','delivery_location_id','frequency',
+               'frequency_interval','day_of_week','day_of_month','preferred_time_from','preferred_time_to',
+               'start_date','end_date','next_order_date','is_active','auto_submit',
+               'special_instructions','created_by','created_at','updated_at']
   },
   recurring_schedule_lines: {
     pk: 'line_id',
@@ -183,24 +178,35 @@ var EXPECTED_SCHEMA = {
   },
   delivery_locations: {
     pk: 'location_id',
-    required: ['location_id','customer_id','location_name','address','city','county','country_code','latitude','longitude','contact_name','contact_phone','is_default','is_active','created_at','updated_at'],
+    required: ['location_id','customer_id','location_name','address_line1','address_line2',
+               'city','region','country_code','postal_code','latitude','longitude',
+               'delivery_instructions','contact_name','contact_phone','access_hours',
+               'requires_appointment','tank_capacity','is_default','is_verified',
+               'verified_by','verified_at','status','created_at','updated_at'],
     indexes: ['ix_locations_customer (customer_id)']
   },
   price_list: {
     pk: 'price_id',
-    required: ['price_id','price_list_name','customer_id','segment_id','country_code','currency_code','effective_from','effective_to','is_active','created_at']
+    required: ['price_id','price_list_name','country_code','currency_code','segment_id',
+               'customer_id','is_default','effective_from','effective_to','status',
+               'approved_by','approved_at','notes','created_by','created_at','updated_at']
   },
   price_list_items: {
     pk: 'item_id',
-    required: ['item_id','price_list_id','product_id','unit_price','min_quantity','discount_percent','tax_rate','created_at']
+    required: ['item_id','price_list_id','product_id','depot_id','unit_price','min_quantity',
+               'max_quantity','discount_percent','tax_rate','effective_from','effective_to','created_at']
   },
   products: {
     pk: 'product_id',
-    required: ['product_id','sku','product_name','category','unit_of_measure','description','is_active','created_at','updated_at']
+    required: ['product_id','sku','product_name','description','category','subcategory',
+               'unit_of_measure','min_order_quantity','max_order_quantity','requires_special_handling',
+               'handling_instructions','image_url','is_active','created_at','updated_at']
   },
   depots: {
     pk: 'depot_id',
-    required: ['depot_id','depot_name','country_code','address','city','latitude','longitude','is_active','created_at']
+    required: ['depot_id','code','depot_name','country_code','city','address',
+               'latitude','longitude','depot_type','capacity','products_available',
+               'operating_hours','contact_phone','contact_email','is_active','created_at','updated_at']
   },
   vehicles: {
     pk: 'vehicle_id',
@@ -216,7 +222,9 @@ var EXPECTED_SCHEMA = {
   },
   payment_uploads: {
     pk: 'upload_id',
-    required: ['upload_id','customer_id','invoice_id','amount','currency_code','payment_method','reference_number','file_path','uploaded_by','status','created_at']
+    required: ['upload_id','customer_id','order_id','invoice_id','uploaded_by','file_id','file_name',
+               'amount','currency_code','reference_number','upload_date','reviewed_by','status',
+               'review_notes','payment_method','file_path','created_at']
   },
 
   // ----- TICKETS -----------------------------------------------------------
@@ -263,67 +271,103 @@ var EXPECTED_SCHEMA = {
   // ----- SLA ---------------------------------------------------------------
   sla_config: {
     pk: 'sla_id',
-    required: ['sla_id','name','priority','channel','category','country_code','acknowledge_minutes','response_minutes','resolve_minutes','is_active','created_at','updated_at']
+    required: ['sla_id','name','country_code','segment_id','priority','category',
+               'acknowledge_minutes','response_minutes','resolve_minutes',
+               'escalation_1_minutes','escalation_2_minutes','escalation_3_minutes',
+               'business_hours_only','is_active','effective_from','effective_to',
+               'created_by','created_at','updated_at','process_type','channel']
   },
   business_hours: {
     pk: 'hours_id',
-    required: ['hours_id','country_code','day_of_week','start_time','end_time','is_business_day','created_at']
+    required: ['hours_id','country_code','name','is_default',
+               'monday_start','monday_end','tuesday_start','tuesday_end',
+               'wednesday_start','wednesday_end','thursday_start','thursday_end',
+               'friday_start','friday_end','saturday_start','saturday_end',
+               'sunday_start','sunday_end','timezone','created_at','updated_at']
   },
   holidays: {
     pk: 'holiday_id',
-    required: ['holiday_id','country_code','holiday_date','holiday_name','is_recurring','created_at']
+    required: ['holiday_id','country_code','holiday_name','holiday_date','is_recurring','created_at']
   },
   sla_data: {
-    pk: 'log_id',
-    required: ['log_id','reference_type','reference_id','event_type','recorded_at','duration_min','breached','department','staff_id','country_code','created_at']
+    pk: 'document_number',
+    required: ['document_number','source_type','affiliate','customer_name','oracle_approver',
+               'finance_variance_min','la_variance_min','created_at','approved_at','dispatched_at',
+               'ordered_item','upload_batch_id'],
+    indexes: ['idx_sladata_affiliate (affiliate)','idx_sladata_approver (oracle_approver)','idx_sladata_created (created_at)']
   },
   po_approvals: {
     pk: 'po_number',
-    required: ['po_number','customer_id','amount','currency_code','requested_at','approver_name','approved_at','duration_hours','status','country_code','created_at']
+    required: ['po_number','description','nature','affiliate','created_by',
+               'original_creation_date','submission_date','submission_variance_min',
+               'first_approver','first_approval_date','first_variance_min',
+               'second_approver','second_approval_date','second_variance_min',
+               'third_approver','third_approval_date','third_variance_min',
+               'fourth_approver','fourth_approval_date','fourth_variance_min',
+               'fifth_approver','fifth_approval_date','fifth_variance_min',
+               'sixth_approver','sixth_approval_date','sixth_variance_min',
+               'seventh_approver','seventh_approval_date','seventh_variance_min',
+               'authorization_status','upload_batch_id']
   },
   approval_workflows: {
     pk: 'workflow_id',
-    required: ['workflow_id','workflow_name','entity_type','rules','is_active','created_at']
+    required: ['workflow_id','workflow_type','reference_id','affiliate_country_code','step_number',
+               'approver_user_id','approver_username','approver_name','sla_minutes',
+               'submitted_at','approved_at','variance_minutes','status','comments',
+               'upload_batch_id','created_at','workflow_name','entity_type','rules','is_active']
   },
 
   // ----- DOCUMENTS ---------------------------------------------------------
   documents: {
     pk: 'document_id',
-    required: ['document_id','customer_id','document_type','document_name','file_name','file_path','file_id','file_size','mime_type','issue_date','expiry_date','issuing_authority','document_number','status','verification_notes','verified_by','verified_at','uploaded_by_id','created_at','updated_at'],
-    indexes: ['ix_documents_customer (customer_id)','ix_documents_type (document_type)']
+    required: ['document_id','customer_id','document_type','document_name','file_id','file_path',
+               'file_size','mime_type','document_number','issue_date','expiry_date','issuing_authority',
+               'is_mandatory','status','verified_by','verified_at','rejection_reason',
+               'reminder_sent_at','uploaded_by_type','uploaded_by_id','version','previous_version_id',
+               'file_name','verification_notes','created_at','updated_at'],
+    indexes: ['ix_documents_customer (customer_id)']
   },
 
   // ----- CHAT --------------------------------------------------------------
   staff_messages: {
     pk: 'message_id',
-    required: ['message_id','room_id','room_type','sender_id','sender_name','content','read_by','created_at','updated_at'],
-    indexes: ['ix_staff_messages_room (room_id, created_at)'],
-    notes: 'Used by Staff dashboard chat polling; room_type CHECK (CHANNEL,DM,GROUP)'
+    required: ['message_id','room_id','room_type','sender_id','sender_name','content',
+               'is_internal','read_by','parent_message_id','edited_at','created_at'],
+    indexes: ['ix_staff_messages_room (room_id, created_at)']
   },
 
   // ----- NOTIFICATIONS -----------------------------------------------------
   notifications: {
     pk: 'notification_id',
-    required: ['notification_id','user_id','user_type','type','title','message','reference_type','reference_id','is_read','created_at'],
-    indexes: ['ix_notifications_user (user_id, is_read)']
+    required: ['notification_id','recipient_type','recipient_id','notification_type',
+               'reference_type','reference_id','title','message','priority',
+               'email_sent','sms_sent','is_read','in_app_read_at','action_url','expires_at','created_at'],
+    notes: 'recipient_id/recipient_type/notification_type are canonical (cover users + contacts)'
   },
   notification_preferences: {
     pk: 'preference_id',
-    required: ['preference_id','recipient_type','recipient_id','channel','event_type','enabled','created_at']
+    required: ['preference_id','recipient_type','recipient_id','notification_type',
+               'channel_email','channel_sms','channel_whatsapp','channel_push','channel_in_app',
+               'is_enabled','created_at','updated_at']
   },
   notification_templates: {
     pk: 'template_id',
-    required: ['template_id','event_type','channel','subject','body','language','is_active','created_at']
+    required: ['template_id','template_name','template_type','event_type','channel',
+               'subject','body_html','body_text','body','language','variables',
+               'is_active','country_code','created_at','updated_at']
   },
 
   // ----- KNOWLEDGE ---------------------------------------------------------
   knowledge_categories: {
     pk: 'category_id',
-    required: ['category_id','category_name','description','parent_category_id','sort_order','is_active','created_at']
+    required: ['category_id','category_name','slug','description','parent_category_id','icon',
+               'sort_order','is_public','is_active','created_at','updated_at']
   },
   knowledge_articles: {
     pk: 'article_id',
-    required: ['article_id','category_id','title','slug','content','tags','views','is_published','created_by','created_at','updated_at']
+    required: ['article_id','category_id','title','slug','summary','content','language','tags',
+               'is_public','is_featured','status','views','helpful_yes','helpful_no',
+               'created_by','published_at','created_at','updated_at']
   },
 
   // ----- LOGS / QUEUES -----------------------------------------------------
@@ -339,18 +383,21 @@ var EXPECTED_SCHEMA = {
   },
   job_queue: {
     pk: 'job_id',
-    required: ['job_id','type','payload','status','attempts','next_run_at','created_at','completed_at','error'],
+    required: ['job_id','type','payload','priority','status','attempts','max_attempts',
+               'error','next_run_at','started_at','completed_at','created_at'],
     indexes: ['ix_jobq_status (status, next_run_at)']
   },
 
   // ----- CHURN / RETENTION (referenced via TABLE_MAP) ----------------------
   churn_risk_factors: {
     pk: 'factor_id',
-    required: ['factor_id','customer_id','factor_type','score','recorded_at','notes','created_at']
+    required: ['factor_id','customer_id','factor_type','factor_weight','current_value',
+               'previous_value','threshold','notes','recorded_at','score','created_at']
   },
   retention_activities: {
     pk: 'activity_id',
-    required: ['activity_id','customer_id','activity_type','outcome','performed_by','performed_at','notes','created_at']
+    required: ['activity_id','customer_id','activity_type','subject','description','outcome',
+               'next_action','next_action_date','performed_by','performed_at','notes','created_at']
   }
 };
 
@@ -361,20 +408,10 @@ var EXPECTED_SCHEMA = {
 // ============================================================================
 
 var KNOWN_DUPLICATIONS = [
-  {
-    table: 'customers',
-    frontend_uses: 'oracle_customer_code',
-    backend_writes: 'oracle_customer_id',
-    seen_in: ['Staffdashboard.html:4826','DatabaseSetup.gs SCHEMAS.Customers'],
-    recommendation: 'Keep ONE column. Suggest: rename oracle_customer_id to oracle_customer_code (front-end name), then update DatabaseSetup.gs SCHEMAS + Orderservice.gs writers.'
-  },
-  {
-    table: 'tickets',
-    frontend_uses: 'sla_resolve_deadline',
-    backend_writes: 'sla_resolve_by',
-    seen_in: ['Staffdashboard.html:5138','Ticketservice.gs:115,275'],
-    recommendation: 'Keep sla_resolve_by (matches sla_acknowledge_by / sla_response_by family). Update Staffdashboard.html line 5138 to read t.sla_resolve_by.'
-  }
+  // RESOLVED 2026-05-03: customers.oracle_customer_code is canonical (DB matches FE).
+  //                      DatabaseSetup.gs SCHEMAS.Customers updated to match.
+  // RESOLVED 2026-05-03: tickets.sla_resolve_by is canonical.
+  //                      Staffdashboard.html line 5138 updated to read sla_resolve_by.
 ];
 
 // ============================================================================
@@ -405,9 +442,9 @@ var FRONTEND_QUERIES = {
   // Tickets page table load
   'tickets_page.list':
     'SELECT ticket_id,ticket_number,subject,description,customer_id,channel,category,priority,status,assigned_to,sla_resolve_by,sla_resolve_breached,created_at,resolved_at FROM tickets ORDER BY created_at DESC LIMIT 200',
-  // This is what the front-end ACTUALLY tries (note the mismatched column):
+  // Resolved 2026-05-03: HTML now reads sla_resolve_by (matches DB).
   'tickets_page.list_AS_FRONTEND_USES':
-    'SELECT ticket_id,ticket_number,sla_resolve_deadline,sla_resolve_breached FROM tickets LIMIT 1',
+    'SELECT ticket_id,ticket_number,sla_resolve_by,sla_resolve_breached FROM tickets LIMIT 1',
   'tickets_page.comments_for_one':
     'SELECT comment_id,ticket_id,author_type,author_id,author_name,content,is_internal,channel,created_at FROM ticket_comments LIMIT 1',
 
@@ -427,7 +464,7 @@ var FRONTEND_QUERIES = {
   'portal.documents_for_customer':
     "SELECT document_id,document_type,document_name,expiry_date,status,file_path FROM documents WHERE customer_id = '__none__' LIMIT 5",
   'portal.delivery_locations':
-    "SELECT location_id,location_name,address,city,country_code,is_default FROM delivery_locations WHERE customer_id = '__none__'",
+    "SELECT location_id,location_name,address_line1,city,country_code,is_default FROM delivery_locations WHERE customer_id = '__none__'",
   'portal.contacts_for_customer':
     "SELECT contact_id,first_name,last_name,email,phone,job_title,contact_type,is_portal_user FROM contacts WHERE customer_id = '__none__'",
 
@@ -435,11 +472,11 @@ var FRONTEND_QUERIES = {
   'sla.staff_list':
     "SELECT user_id,first_name,last_name,role FROM users WHERE status = 'ACTIVE' ORDER BY first_name",
   'sla.po_approvals':
-    'SELECT po_number,approver_name,duration_hours,country_code,created_at FROM po_approvals ORDER BY created_at DESC LIMIT 1',
+    'SELECT po_number,first_approver,submission_variance_min,affiliate FROM po_approvals LIMIT 1',
   'sla.business_hours':
-    'SELECT country_code,day_of_week,start_time,end_time,is_business_day FROM business_hours LIMIT 1',
+    'SELECT country_code,monday_start,monday_end,timezone FROM business_hours LIMIT 1',
   'sla.sla_data':
-    'SELECT log_id,reference_type,reference_id,event_type,recorded_at,duration_min,breached,department FROM sla_data LIMIT 1',
+    'SELECT document_number,affiliate,oracle_approver,finance_variance_min,la_variance_min,created_at FROM sla_data LIMIT 1',
 
   // Settings - backup is in Script Properties, but config is the table:
   'settings.config_backup_keys':
@@ -451,7 +488,7 @@ var FRONTEND_QUERIES = {
   'auth.session_lookup_shape':
     'SELECT session_id,user_id,user_type,role,token_hash,is_active,expires_at FROM sessions LIMIT 1',
   'auth.signup_requests':
-    "SELECT request_id,company_name,email,kyc_status,status FROM signup_requests WHERE status = 'PENDING_APPROVAL' LIMIT 5"
+    "SELECT request_id,company_name,email,kyc_status,status FROM signup_requests WHERE status = 'PENDING' LIMIT 5"
 };
 
 // ============================================================================

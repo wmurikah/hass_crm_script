@@ -5135,7 +5135,7 @@ function openTicketDetail(ticketId) {
   set('tktModalCategory', t.category || '-');
   setHtml('tktModalPriority', getPriorityBadge(t.priority));
   setHtml('tktModalStatus', getStatusBadge(t.status));
-  set('tktModalSLA', t.sla_resolve_deadline ? formatDate(t.sla_resolve_deadline) : '-');
+  set('tktModalSLA', t.sla_resolve_by ? formatDate(t.sla_resolve_by) : '-');
   set('tktModalAssigned', t.assigned_to || 'Unassigned');
 
   var box = document.getElementById('tktReplyBox'); if (box) box.value = '';
