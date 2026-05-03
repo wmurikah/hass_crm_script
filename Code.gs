@@ -6,24 +6,26 @@
 
 function doGet(e) {
   var params = e && e.parameter ? e.parameter : {};
-  var page   = String(params.page  || '').trim();
+  var page   = String(params.page  || '').trim().toLowerCase();
   var token  = String(params.token || '').trim();
   Logger.log('[Code] doGet page=' + page + ' tokenLen=' + token.length);
 
-  // No token and not explicitly requesting login - go to login
-  if (!token && page !== 'login') return serveLoginPage('');
+  // No token: always serve the login page (covers bare /exec, /exec?page=login,
+  // and any unrecognised page). The previous behaviour rendered a blank
+  // response when the redirect target dropped its query string mid-navigation.
+  if (!token) return serveLoginPage('');
 
-  // Validate token if present
-  if (token) {
-    var session = checkSession({ token: token });
-    Logger.log('[Code] doGet checkSession valid=' + session.valid + ' userType=' + session.userType + ' role=' + session.role);
-    if (!session.valid) return serveLoginPage('Your session has expired. Please sign in again.');
-    if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
-    if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
-    return serveLoginPage('Unknown account type.');
-  }
+  var session = checkSession({ token: token });
+  Logger.log('[Code] doGet checkSession valid=' + session.valid + ' userType=' + session.userType + ' role=' + session.role);
+  if (!session.valid) return serveLoginPage('Your session has expired. Please sign in again.');
 
-  return serveLoginPage('');
+  // If the URL forces a specific page, honour it as long as it matches the
+  // session's userType. Otherwise route by userType.
+  if (page === 'staff'  && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
+  if (page === 'portal' && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
+  if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
+  if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
+  return serveLoginPage('Unknown account type.');
 }
 
 // ---------------------------------------------------------------------------
@@ -95,15 +97,17 @@ function serveCustomerPortal(session, token) {
     }
 
     var tmpl = HtmlService.createTemplateFromFile('Customerportal');
+    var scriptUrl = ScriptApp.getService().getUrl();
     tmpl.SESSION = JSON.stringify({
       contactId:  session.userId,
       customerId: customerId,
       userType:   'CUSTOMER',
       role:       'CUSTOMER',
       token:      token,
-      name:       session.name || ''
+      name:       session.name || '',
+      scriptUrl:  scriptUrl
     });
-    tmpl.scriptUrl = ScriptApp.getService().getUrl();
+    tmpl.scriptUrl = scriptUrl;
     var output = tmpl.evaluate()
       .setTitle('Hass Petroleum - Customer Portal')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
