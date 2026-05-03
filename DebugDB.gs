@@ -701,3 +701,161 @@ function debugQuery() {
   Logger.log(JSON.stringify(rows, null, 2));
   return rows;
 }
+
+
+
+function runSmartCleanup() {
+  function colsOf(table) {
+    try { return tursoSelect("PRAGMA table_info('" + table + "')").map(function(c){ return c.name; }); }
+    catch(e) { return []; }
+  }
+  function has(table, col) { return colsOf(table).indexOf(col) >= 0; }
+  function tryRun(sql) {
+    try { tursoWrite(sql); return 'OK   ' + sql.substring(0,100); }
+    catch (e) { return 'FAIL ' + sql.substring(0,100) + ' -> ' + e.message; }
+  }
+  function rename(table, oldCol, newCol) {
+    if (has(table, oldCol) && !has(table, newCol)) {
+      return tryRun('ALTER TABLE ' + table + ' RENAME COLUMN "' + oldCol + '" TO "' + newCol + '"');
+    } else {
+      return 'SKIP ' + table + '.' + oldCol + ' -> ' + newCol + ' (already done or source missing)';
+    }
+  }
+  function drop(table, col) {
+    if (has(table, col)) return tryRun('ALTER TABLE ' + table + ' DROP COLUMN "' + col + '"');
+    return 'SKIP drop ' + table + '.' + col + ' (not present)';
+  }
+  function add(table, col, decl) {
+    if (!has(table, col)) return tryRun('ALTER TABLE ' + table + ' ADD COLUMN ' + col + ' ' + decl);
+    return 'SKIP add ' + table + '.' + col + ' (already present)';
+  }
+
+  var log = [];
+
+  // -------- holidays --------
+  log.push(rename('holidays', 'date', 'holiday_date'));
+  log.push(rename('holidays', 'name', 'holiday_name'));
+
+  // -------- payment_uploads (drop blocking index first) --------
+  log.push(tryRun('DROP INDEX IF EXISTS idx_payments_status'));
+  // If both old + new still exist, drop the new one then rename old -> new
+  if (has('payment_uploads','status') && has('payment_uploads','review_status')) {
+    log.push(drop('payment_uploads', 'status'));
+  }
+  log.push(rename('payment_uploads', 'amount_claimed',         'amount'));
+  log.push(rename('payment_uploads', 'bank_reference',         'reference_number'));
+  log.push(rename('payment_uploads', 'uploaded_by_contact_id', 'uploaded_by'));
+  log.push(rename('payment_uploads', 'review_status',          'status'));
+  log.push(tryRun('CREATE INDEX IF NOT EXISTS idx_payments_status ON payment_uploads(status)'));
+
+  // -------- documents --------
+  log.push(rename('documents', 'reviewed_by', 'verified_by'));
+  log.push(rename('documents', 'reviewed_at', 'verified_at'));
+
+  // -------- notifications --------
+  log.push(tryRun('DROP INDEX IF EXISTS idx_notif_read'));
+  log.push(drop('notifications', 'user_id'));
+  log.push(drop('notifications', 'user_type'));
+  log.push(drop('notifications', 'type'));
+  if (has('notifications','is_read') && has('notifications','in_app_read')) {
+    log.push(drop('notifications', 'is_read'));
+  }
+  log.push(rename('notifications', 'in_app_read', 'is_read'));
+  log.push(tryRun('CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(recipient_id, is_read)'));
+
+  // -------- knowledge_categories --------
+  log.push(rename('knowledge_categories', 'name',      'category_name'));
+  log.push(rename('knowledge_categories', 'parent_id', 'parent_category_id'));
+
+  // -------- knowledge_articles --------
+  log.push(drop('knowledge_articles', 'is_published'));
+  log.push(rename('knowledge_articles', 'view_count', 'views'));
+  log.push(rename('knowledge_articles', 'author_id',  'created_by'));
+
+  // -------- job_queue (drop blocking index first) --------
+  log.push(tryRun('DROP INDEX IF EXISTS idx_jobs_scheduled'));
+  if (has('job_queue','next_run_at') && has('job_queue','scheduled_at')) {
+    log.push(drop('job_queue', 'next_run_at'));
+  }
+  log.push(rename('job_queue', 'job_type',      'type'));
+  log.push(rename('job_queue', 'scheduled_at',  'next_run_at'));
+  log.push(rename('job_queue', 'error_message', 'error'));
+  log.push(tryRun('CREATE INDEX IF NOT EXISTS idx_jobs_scheduled ON job_queue(next_run_at)'));
+
+  // -------- churn_risk_factors --------
+  log.push(rename('churn_risk_factors', 'calculated_at', 'recorded_at'));
+  log.push(rename('churn_risk_factors', 'details',       'notes'));
+
+  // -------- delivery_locations --------
+  log.push(rename('delivery_locations', 'name',    'location_name'));
+  log.push(rename('delivery_locations', 'gps_lat', 'latitude'));
+  log.push(rename('delivery_locations', 'gps_lng', 'longitude'));
+
+  // -------- price_list --------
+  log.push(drop('price_list', 'is_active'));
+  log.push(rename('price_list', 'name', 'price_list_name'));
+
+  // -------- products --------
+  // sku has a UNIQUE constraint that survives DROP INDEX. Defer to a Phase-2 rebuild.
+  // For now just rename name -> product_name if possible.
+  log.push(rename('products', 'name', 'product_name'));
+  log.push('NOTE products.sku/code consolidation deferred — needs table rebuild (Phase 2)');
+
+  // -------- depots --------
+  log.push(rename('depots', 'name',    'depot_name'));
+  log.push(rename('depots', 'gps_lat', 'latitude'));
+  log.push(rename('depots', 'gps_lng', 'longitude'));
+
+  // -------- recurring_schedule --------
+  if (has('recurring_schedule','next_run_at') && has('recurring_schedule','next_order_date')) {
+    log.push(drop('recurring_schedule', 'next_run_at'));
+  }
+
+  // -------- sla_config --------
+  log.push(rename('sla_config', 'first_response_minutes', 'response_minutes'));
+  log.push(rename('sla_config', 'resolution_minutes',     'resolve_minutes'));
+
+  // -------- order_status_history --------
+  log.push(drop('order_status_history', 'reason'));
+
+  // ===== Pure renames that were never done =====
+  log.push(rename('countries', 'phone_code',     'dialing_code'));
+  log.push(rename('segments',  'name',           'segment_name'));
+  log.push(rename('segments',  'priority_order', 'priority_level'));
+  log.push(rename('teams',     'name',           'team_name'));
+
+  // ===== ADDs that were skipped =====
+  log.push(add('signup_requests', 'last_name',       'TEXT'));
+  log.push(add('signup_requests', 'phone',           'TEXT'));
+  log.push(add('signup_requests', 'job_title',       'TEXT'));
+  log.push(add('signup_requests', 'kra_pin',         'TEXT'));
+  log.push(add('signup_requests', 'tax_pin',         'TEXT'));
+  log.push(add('signup_requests', 'account_number',  'TEXT'));
+  log.push(add('signup_requests', 'company_address', 'TEXT'));
+  log.push(add('signup_requests', 'kyc_status',      "TEXT DEFAULT 'PENDING'"));
+
+  log.push(add('customers', 'email',   'TEXT'));
+  log.push(add('customers', 'phone',   'TEXT'));
+  log.push(add('customers', 'address', 'TEXT'));
+  log.push(add('customers', 'city',    'TEXT'));
+
+  log.push(add('recurring_schedule_lines', 'unit_price', 'REAL'));
+
+  // ===== Index hygiene =====
+  log.push(tryRun('DROP INDEX IF EXISTS idx_documents_customer'));   // dup of ix_documents_customer
+  log.push(tryRun('DROP INDEX IF EXISTS idx_locations_customer'));   // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_customers_status'));     // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_customers_country'));    // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_tickets_customer'));     // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_tickets_status'));       // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_tickets_assigned'));     // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_tickets_created'));      // dup
+  log.push(tryRun('DROP INDEX IF EXISTS idx_messages_room'));        // dup of ix_staff_messages_room
+
+  Logger.log(log.join('\n'));
+  var ok   = log.filter(function(l){return l.indexOf('OK')   === 0;}).length;
+  var fail = log.filter(function(l){return l.indexOf('FAIL') === 0;}).length;
+  var skip = log.filter(function(l){return l.indexOf('SKIP') === 0;}).length;
+  Logger.log('--- summary: ' + ok + ' OK, ' + fail + ' FAIL, ' + skip + ' SKIP ---');
+  return { ok: ok, fail: fail, skip: skip };
+}
