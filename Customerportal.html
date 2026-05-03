@@ -195,9 +195,23 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
 .btn-chat-ticket:hover { background:#283593; }
 .cp-logout-btn { display:flex; align-items:center; gap:6px; padding:7px 14px; border:1.5px solid #e2e8f0; border-radius:8px; background:#fff; color:#64748b; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; transition:all 0.15s; }
 .cp-logout-btn:hover { border-color:#dc2626; color:#dc2626; }
+/* Click feedback and skeleton loaders (Bug 2 / Bug 3) */
+.hp-nav-item.is-clicking, .hp-quick-action.is-clicking { transform: scale(0.97); opacity: 0.85; }
+.hp-nav-item, .hp-quick-action { transition: transform 0.12s ease, opacity 0.12s ease, background 0.15s, box-shadow 0.15s; }
+.hp-btn-busy { position: relative; pointer-events: none; opacity: 0.7; }
+.hp-btn-busy::after { content: ''; position: absolute; top: 50%; right: 10px; width: 12px; height: 12px; margin-top: -6px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
+.hp-skel-line { display: inline-block; height: 12px; border-radius: 4px; background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; vertical-align: middle; }
+.hp-skel-line.w-30 { width: 30%; } .hp-skel-line.w-50 { width: 50%; } .hp-skel-line.w-70 { width: 70%; } .hp-skel-line.w-90 { width: 90%; }
+.hp-skel-row td { padding: 14px; }
+.hp-page-progress { position: fixed; top: 0; left: var(--hp-sidebar-width); right: 0; height: 3px; background: transparent; z-index: 1050; pointer-events: none; }
+.hp-page-progress.active::after { content: ''; display: block; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, var(--hp-orange-500), transparent); animation: pageProgress 1.1s linear infinite; }
+@keyframes pageProgress { 0% { transform: translateX(-40%);} 100% { transform: translateX(300%);} }
+@media (max-width: 991.98px) { .hp-page-progress { left: 0; } }
 </style>
 </head>
 <body>
+<!-- Top progress bar shown while a page swap is loading data -->
+<div id="hpPageProgress" class="hp-page-progress" aria-hidden="true"></div>
 <!-- Sidebar -->
 <aside class="hp-sidebar">
   <div class="sidebar-brand"><div class="portal-badge">C</div><span class="portal-brand-name">Customer Portal</span></div>
@@ -307,7 +321,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
           </div>
           <div class="mt-3"><label class="hp-form-label">Special Instructions</label><textarea class="form-control form-control-sm" id="orderInstructions" rows="2"></textarea></div>
           <div id="orderFormError" style="display:none;color:#dc2626;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13px;"></div>
-          <div class="mt-3 text-end"><button class="btn btn-hp-primary" onclick="submitOrder()">Submit Order</button></div>
+          <div class="mt-3 text-end"><button class="btn btn-hp-primary" id="btnSubmitOrder" onclick="submitOrder(this)">Submit Order</button></div>
         </div>
       </div>
       <div class="hp-card"><div class="table-responsive"><table class="table hp-table mb-0"><thead><tr><th>Order #</th><th>Date</th><th>Amount</th><th>Status</th><th>Payment</th></tr></thead>
@@ -374,7 +388,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
           <div class="mb-3"><label class="hp-form-label">Current Password</label><input type="password" class="form-control form-control-sm" id="curPwd"></div>
           <div class="mb-3"><label class="hp-form-label">New Password</label><input type="password" class="form-control form-control-sm" id="newPwd"></div>
           <div class="mb-3"><label class="hp-form-label">Confirm Password</label><input type="password" class="form-control form-control-sm" id="conPwd"></div>
-          <button class="btn btn-hp-primary btn-sm" onclick="changePassword()">Update Password</button>
+          <button class="btn btn-hp-primary btn-sm" onclick="changePassword(this)">Update Password</button>
         </div></div></div>
       </div>
     </div>
@@ -621,7 +635,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <div class="mb-3"><label class="hp-form-label">Subject</label><input type="text" class="form-control form-control-sm" id="ticketSubject"></div>
     <div class="mb-3"><label class="hp-form-label">Description</label><textarea class="form-control form-control-sm" id="ticketDesc" rows="4"></textarea></div>
   </div>
-  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="submitTicket()">Submit</button></div>
+  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="submitTicket(this)">Submit</button></div>
 </div></div></div>
 
 <!-- Ticket Detail Modal -->
@@ -632,7 +646,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <div class="hp-thread" id="tdThread"></div>
     <div class="mt-3"><textarea class="form-control form-control-sm" id="tdReply" rows="3" placeholder="Type your reply..."></textarea></div>
   </div>
-  <div class="modal-footer"><button class="btn btn-sm btn-hp-primary" onclick="sendReply()">Send Reply</button></div>
+  <div class="modal-footer"><button class="btn btn-sm btn-hp-primary" onclick="sendReply(this)">Send Reply</button></div>
 </div></div></div>
 
 <!-- Upload Document Modal -->
@@ -644,7 +658,7 @@ body { font-family: var(--bs-font-sans-serif); background: var(--bs-body-bg); ma
     <div class="mb-3"><label class="hp-form-label">Document Number</label><input type="text" class="form-control form-control-sm" id="docNum"></div>
     <div class="mb-3"><label class="hp-form-label">Expiry Date</label><input type="date" class="form-control form-control-sm" id="docExpiry"></div>
   </div>
-  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="uploadDoc()">Upload</button></div>
+  <div class="modal-footer"><button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-sm btn-hp-primary" onclick="uploadDoc(this)">Upload</button></div>
 </div></div></div>
 
 <!-- Toast -->
@@ -691,27 +705,101 @@ if (!SESSION || !SESSION.token) {
 const AFFILIATE_MAP={KE:{code:'HPK',name:'Kenya'},UG:{code:'HPU',name:'Uganda'},TZ:{code:'HPT',name:'Tanzania'},RW:{code:'HPR',name:'Rwanda'},SS:{code:'HSS',name:'South Sudan'},ZM:{code:'HPZ',name:'Zambia'},DRC:{code:'HPC',name:'DR Congo'},HTW:{code:'HTW',name:'Terminal'}};
 let currentCustomer=null, currentContact=null;
 
+/* ── Click feedback + skeleton helpers (Bug 2 / Bug 3) ── */
+function flashClick(el) {
+  if (!el || !el.classList) return;
+  el.classList.add('is-clicking');
+  setTimeout(function(){ el.classList.remove('is-clicking'); }, 180);
+}
+function showLoadingState(el) {
+  if (!el) return;
+  el.classList.add('hp-btn-busy');
+  el.setAttribute('aria-busy', 'true');
+  if ('disabled' in el) el.disabled = true;
+}
+function hideLoadingState(el) {
+  if (!el) return;
+  el.classList.remove('hp-btn-busy');
+  el.removeAttribute('aria-busy');
+  if ('disabled' in el) el.disabled = false;
+}
+function startPageProgress() {
+  var bar = document.getElementById('hpPageProgress');
+  if (bar) bar.classList.add('active');
+}
+function stopPageProgress() {
+  var bar = document.getElementById('hpPageProgress');
+  if (bar) bar.classList.remove('active');
+}
+function renderSkeletonRows(tbody, cols, rows) {
+  if (!tbody) return;
+  cols = cols || 5;
+  rows = rows || 5;
+  var widths = ['w-70','w-50','w-90','w-30','w-70','w-50'];
+  var html = '';
+  for (var i = 0; i < rows; i++) {
+    html += '<tr class="hp-skel-row">';
+    for (var c = 0; c < cols; c++) {
+      html += '<td><span class="hp-skel-line ' + (widths[(i + c) % widths.length]) + '"></span></td>';
+    }
+    html += '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+/* Capture the originating element so showPage can flash visual feedback even
+ * when it's invoked programmatically (e.g. quick-action tile -> showPage). */
+document.addEventListener('click', function(e) {
+  var nav = e.target.closest && e.target.closest('.hp-nav-item, .hp-quick-action');
+  if (nav) flashClick(nav);
+}, true);
+
 function showPage(id){
+  // Step 1 - immediate UI swap so the user sees the new shell within one frame.
   document.querySelectorAll('.hp-page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.hp-nav-item').forEach(n=>n.classList.remove('active'));
   var pg=document.getElementById('page-'+id); if(pg) pg.classList.add('active');
   var nv=document.querySelector('[data-page="'+id+'"]'); if(nv) nv.classList.add('active');
   var t={dashboard:'Dashboard',orders:'My Orders',tickets:'My Tickets',documents:'My Documents',consumption:'My Consumption',account:'My Account',reports:'Reports',contacts:'Team / Contacts',statements:'Statements'};
   document.getElementById('pageTitle').textContent=t[id]||id;
-  if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('year'); }
+  // Scroll content area to top so a page swap never looks frozen mid-scroll.
+  try { window.scrollTo({ top: 0, behavior: 'instant' }); } catch(e) { window.scrollTo(0,0); }
+
+  // Step 2 - paint skeleton rows in tables that are about to be refilled, so
+  // the user always sees motion within ~50ms instead of a blank table.
+  var skel = {
+    dashboard: [['recentOrdersBody', 4, 3], ['openTicketsBody', 5, 3]],
+    orders:    [['allOrdersBody', 5, 6]],
+    tickets:   [['allTicketsBody', 6, 6]],
+    documents: [['allDocsBody', 5, 5]]
+  };
+  (skel[id] || []).forEach(function(s) {
+    renderSkeletonRows(document.getElementById(s[0]), s[1], s[2]);
+  });
+
+  // Step 3 - kick off any data fetch the page needs.
+  startPageProgress();
+  var done = function() { stopPageProgress(); };
+  if(id==='consumption' && !currentConsumptionData){ loadConsumptionData('year'); setTimeout(done, 400); return; }
   if(id==='dashboard'){
     var rob=document.getElementById('recentOrdersBody');
-    if(!rob || rob.querySelector('td.text-muted')) loadCustomerInfo();
+    if(!rob || rob.querySelector('.hp-skel-line') || rob.querySelector('td.text-muted')) loadCustomerInfo(done); else done();
+  } else if(id==='orders'){
+    loadAllOrders(done);
+  } else if(id==='tickets') {
+    loadAllTickets(done);
+  } else if(id==='documents') {
+    loadDocuments(done);
+  } else if(id==='account') {
+    loadAccountDetails(done);
+  } else if(id==='statements') {
+    initStatementPage(); done();
+  } else if(id==='contacts') {
+    loadCustomerContacts(done);
+  } else if(id==='reports') {
+    done();
+  } else {
+    done();
   }
-  if(id==='orders'){
-    var aob=document.getElementById('allOrdersBody');
-    if(!aob || aob.querySelector('td.text-muted')) loadAllOrders();
-  }
-  if(id==='tickets') loadAllTickets();
-  if(id==='documents') loadDocuments();
-  if(id==='account') loadAccountDetails();
-  if(id==='statements') initStatementPage();
-  if(id==='contacts') loadCustomerContacts();
   stopChatPolling();
 }
 
@@ -724,15 +812,20 @@ function _isPrimaryContact() {
   return currentContact && String(currentContact.contact_type || '').toUpperCase() === 'PRIMARY';
 }
 
-function loadCustomerContacts() {
+function loadCustomerContacts(done) {
   var body = document.getElementById('customerContactsBody');
-  if (!body) return;
-  body.innerHTML = '<div class="text-muted">Loading contacts...</div>';
+  if (!body) { if(done) done(); return; }
+  body.innerHTML = '<div class="p-3">'+
+    '<div class="mb-2"><span class="hp-skel-line w-70"></span></div>'+
+    '<div class="mb-2"><span class="hp-skel-line w-90"></span></div>'+
+    '<div class="mb-2"><span class="hp-skel-line w-50"></span></div>'+
+    '</div>';
   var addBtn = document.getElementById('btnAddTeamContact');
   if (addBtn) addBtn.style.display = _isPrimaryContact() ? 'inline-block' : 'none';
 
   google.script.run
     .withSuccessHandler(function(r) {
+     try {
       if (!r || !r.success) { body.innerHTML = '<div class="text-muted p-3">Failed to load contacts.</div>'; return; }
       var primary = _isPrimaryContact();
       var rows = (r.contacts || []).map(function(c) {
@@ -759,8 +852,9 @@ function loadCustomerContacts() {
       }).join('');
       body.innerHTML = '<table class="table hp-table mb-0"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Portal</th><th class="text-end">Actions</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="text-center text-muted">No contacts yet</td></tr>') + '</tbody></table>'
         + (primary ? '' : '<div class="text-muted" style="font-size:12px;padding:10px;">Only the primary contact can add or change contacts.</div>');
+     } finally { if (done) done(); }
     })
-    .withFailureHandler(function() { body.innerHTML = '<div class="text-muted p-3">Failed to load contacts.</div>'; })
+    .withFailureHandler(function() { body.innerHTML = '<div class="text-muted p-3">Failed to load contacts.</div>'; if (done) done(); })
     .handleUserRequest({ action:'getCustomerContacts', customerId: SESSION.customerId });
 }
 
@@ -1157,7 +1251,7 @@ function calcTotals(){
   document.getElementById('orderGrandTotal').textContent=(sub+vat+fee).toFixed(2);
 }
 
-function submitOrder(){
+function submitOrder(btn){
   var errorEl = document.getElementById('orderFormError');
   if (errorEl) { errorEl.style.display = 'none'; errorEl.innerHTML = ''; }
 
@@ -1195,8 +1289,10 @@ function submitOrder(){
     return;
   }
 
+  showLoadingState(btn || document.getElementById('btnSubmitOrder'));
   showToast('Submitting order...','info');
   google.script.run.withSuccessHandler(function(r){
+    hideLoadingState(btn || document.getElementById('btnSubmitOrder'));
     if(r && r.success){
       showToast('Order submitted: '+(r.orderNumber||''),'success');
       document.getElementById('orderFormCard').style.display='none';
@@ -1204,7 +1300,10 @@ function submitOrder(){
     } else {
       showToast((r&&r.error)||'Failed','error');
     }
-  }).withFailureHandler(function(e){showToast(e.message,'error');})
+  }).withFailureHandler(function(e){
+    hideLoadingState(btn || document.getElementById('btnSubmitOrder'));
+    showToast(e.message,'error');
+  })
   .handleOrderRequest({
     service:'orders',
     action:'create',
@@ -1223,29 +1322,31 @@ function submitOrder(){
 
 // ===== Customer Portal data-fetch functions =====
 
-function loadCustomerInfo(){
-  if(!SESSION || !SESSION.customerId) return;
+function loadCustomerInfo(done){
+  if(!SESSION || !SESSION.customerId) { if(done) done(); return; }
   google.script.run.withSuccessHandler(function(r){
-    if(!r || !r.success){ return; }
-    currentCustomer = r.customer || null;
-    currentContact = (r.contacts && r.contacts.length) ? r.contacts[0] : null;
-    if(!currentCustomer) return;
-    var c = currentCustomer;
-    var currency = c.currency_code || 'KES';
-    var used = parseFloat(c.credit_used) || 0;
-    var limit = parseFloat(c.credit_limit) || 0;
-    var available = Math.max(0, limit - used);
-    var pct = limit > 0 ? Math.round(used / limit * 100) : 0;
-    setText('kpiBalance', formatCurrency(used, currency));
-    setText('kpiCredit', pct + '%');
-    setText('ccAccount', c.account_number || '');
-    setText('ccCompanyLabel', c.company_name || c.trading_name || 'Your Account');
-    setText('ccLimit', formatCurrency(limit, currency));
-    setText('ccAvail', formatCurrency(available, currency));
-    setText('ccCountry', (AFFILIATE_MAP[c.country_code]||{}).code || c.country_code || '');
-    loadRecentOrders();
-    loadOpenTickets();
-  }).withFailureHandler(function(){})
+    try {
+      if(!r || !r.success){ return; }
+      currentCustomer = r.customer || null;
+      currentContact = (r.contacts && r.contacts.length) ? r.contacts[0] : null;
+      if(!currentCustomer) return;
+      var c = currentCustomer;
+      var currency = c.currency_code || 'KES';
+      var used = parseFloat(c.credit_used) || 0;
+      var limit = parseFloat(c.credit_limit) || 0;
+      var available = Math.max(0, limit - used);
+      var pct = limit > 0 ? Math.round(used / limit * 100) : 0;
+      setText('kpiBalance', formatCurrency(used, currency));
+      setText('kpiCredit', pct + '%');
+      setText('ccAccount', c.account_number || '');
+      setText('ccCompanyLabel', c.company_name || c.trading_name || 'Your Account');
+      setText('ccLimit', formatCurrency(limit, currency));
+      setText('ccAvail', formatCurrency(available, currency));
+      setText('ccCountry', (AFFILIATE_MAP[c.country_code]||{}).code || c.country_code || '');
+      loadRecentOrders();
+      loadOpenTickets();
+    } finally { if(done) done(); }
+  }).withFailureHandler(function(){ if(done) done(); })
   .handleCustomerRequest({ service:'customers', action:'customer360', customerId: SESSION.customerId });
 }
 
@@ -1299,46 +1400,50 @@ function loadOpenTickets(){
   .handleTicketRequest({ service:'tickets', action:'getByCustomer', customerId: SESSION.customerId, limit:5 });
 }
 
-function loadAllOrders(){
-  if(!SESSION || !SESSION.customerId) return;
+function loadAllOrders(done){
+  if(!SESSION || !SESSION.customerId) { if(done) done(); return; }
   google.script.run.withSuccessHandler(function(r){
-    var body = document.getElementById('allOrdersBody');
-    if(!body) return;
-    var orders = (r && r.data) || (r && r.orders) || [];
-    if(!orders.length){
-      body.innerHTML='<tr><td colspan="5" class="text-center text-muted py-4">No orders found</td></tr>';
-      return;
-    }
-    body.innerHTML = orders.map(function(o){
-      return '<tr><td class="cell-primary">'+(o.order_number||'')+'</td>'+
-             '<td>'+formatDate(o.created_at)+'</td>'+
-             '<td>'+formatCurrency(o.total_amount, o.currency_code)+'</td>'+
-             '<td>'+getStatusBadge(o.status||'')+'</td>'+
-             '<td>'+getStatusBadge(o.payment_status||'PENDING')+'</td></tr>';
-    }).join('');
-  }).withFailureHandler(function(){})
+    try {
+      var body = document.getElementById('allOrdersBody');
+      if(!body) return;
+      var orders = (r && r.data) || (r && r.orders) || [];
+      if(!orders.length){
+        body.innerHTML='<tr><td colspan="5" class="text-center text-muted py-4">No orders found</td></tr>';
+        return;
+      }
+      body.innerHTML = orders.map(function(o){
+        return '<tr><td class="cell-primary">'+(o.order_number||'')+'</td>'+
+               '<td>'+formatDate(o.created_at)+'</td>'+
+               '<td>'+formatCurrency(o.total_amount, o.currency_code)+'</td>'+
+               '<td>'+getStatusBadge(o.status||'')+'</td>'+
+               '<td>'+getStatusBadge(o.payment_status||'PENDING')+'</td></tr>';
+      }).join('');
+    } finally { if(done) done(); }
+  }).withFailureHandler(function(){ if(done) done(); })
   .handleOrderRequest({ service:'orders', action:'customerOrders', customerId: SESSION.customerId, options:{ limit:50 } });
 }
 
-function loadAllTickets(){
-  if(!SESSION || !SESSION.customerId) return;
+function loadAllTickets(done){
+  if(!SESSION || !SESSION.customerId) { if(done) done(); return; }
   google.script.run.withSuccessHandler(function(r){
-    var body = document.getElementById('allTicketsBody');
-    if(!body) return;
-    var tickets = (r && r.tickets) || [];
-    if(!tickets.length){
-      body.innerHTML='<tr><td colspan="6" class="text-center text-muted py-4">No tickets found</td></tr>';
-      return;
-    }
-    body.innerHTML = tickets.map(function(t){
-      return '<tr><td class="cell-primary"><a href="#" onclick="openTicketDetail(\''+(t.ticket_id||'')+'\');return false;">'+(t.ticket_number||'')+'</a></td>'+
-             '<td>'+(t.subject||'')+'</td>'+
-             '<td>'+(t.category||'')+'</td>'+
-             '<td>'+getPriorityBadge(t.priority||'MEDIUM')+'</td>'+
-             '<td>'+getStatusBadge(t.status||'')+'</td>'+
-             '<td>'+formatDate(t.created_at)+'</td></tr>';
-    }).join('');
-  }).withFailureHandler(function(){})
+    try {
+      var body = document.getElementById('allTicketsBody');
+      if(!body) return;
+      var tickets = (r && r.tickets) || [];
+      if(!tickets.length){
+        body.innerHTML='<tr><td colspan="6" class="text-center text-muted py-4">No tickets found</td></tr>';
+        return;
+      }
+      body.innerHTML = tickets.map(function(t){
+        return '<tr><td class="cell-primary"><a href="#" onclick="openTicketDetail(\''+(t.ticket_id||'')+'\');return false;">'+(t.ticket_number||'')+'</a></td>'+
+               '<td>'+(t.subject||'')+'</td>'+
+               '<td>'+(t.category||'')+'</td>'+
+               '<td>'+getPriorityBadge(t.priority||'MEDIUM')+'</td>'+
+               '<td>'+getStatusBadge(t.status||'')+'</td>'+
+               '<td>'+formatDate(t.created_at)+'</td></tr>';
+      }).join('');
+    } finally { if(done) done(); }
+  }).withFailureHandler(function(){ if(done) done(); })
   .handleTicketRequest({ service:'tickets', action:'getByCustomer', customerId: SESSION.customerId, limit:50 });
 }
 
@@ -1366,9 +1471,10 @@ function openTicketDetail(ticketId){
   }).handleTicketRequest({ service:'tickets', action:'get', ticketId: ticketId });
 }
 
-function loadDocuments(){
-  if(!SESSION || !SESSION.customerId) return;
+function loadDocuments(done){
+  if(!SESSION || !SESSION.customerId) { if(done) done(); return; }
   google.script.run.withSuccessHandler(function(r){
+   try {
     var body = document.getElementById('allDocsBody');
     if(!body) return;
     var docs = (r && r.data) || (r && r.documents) || [];
@@ -1412,11 +1518,12 @@ function loadDocuments(){
     } else {
       bannerEl.innerHTML = '<div style="background:#dcfce7;border:1px solid #16a34a;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:13px;color:#166534;">✅ All required documents are on file.</div>';
     }
-  }).withFailureHandler(function(){})
+   } finally { if(done) done(); }
+  }).withFailureHandler(function(){ if(done) done(); })
   .handleDocumentRequest({ service:'documents', action:'getCustomerDocuments', customerId: SESSION.customerId });
 }
 
-function loadAccountDetails(){
+function loadAccountDetails(done){
   var render = function(c){
     var el = document.getElementById('accountDetails');
     if(!el || !c) return;
@@ -1432,14 +1539,26 @@ function loadAccountDetails(){
       '<div class="mb-2"><strong>Credit Used:</strong> '+formatCurrency(c.credit_used, currency)+'</div>'+
       '<div class="mb-2"><strong>Segment:</strong> '+(c.segment_id||'')+'</div>';
   };
-  if(currentCustomer){ render(currentCustomer); return; }
-  if(!SESSION || !SESSION.customerId) return;
+  // Replace static "Loading..." with skeleton lines so the user sees motion.
+  var detEl = document.getElementById('accountDetails');
+  if (detEl && (!currentCustomer || !detEl.querySelector('strong'))) {
+    detEl.innerHTML = '<div class="mb-2"><span class="hp-skel-line w-70"></span></div>'+
+      '<div class="mb-2"><span class="hp-skel-line w-50"></span></div>'+
+      '<div class="mb-2"><span class="hp-skel-line w-90"></span></div>'+
+      '<div class="mb-2"><span class="hp-skel-line w-30"></span></div>'+
+      '<div class="mb-2"><span class="hp-skel-line w-70"></span></div>';
+  }
+  if(currentCustomer){ render(currentCustomer); if(done) done(); return; }
+  if(!SESSION || !SESSION.customerId) { if(done) done(); return; }
   google.script.run.withSuccessHandler(function(r){
-    if(r && r.success){
-      currentCustomer = r.customer || null;
-      render(currentCustomer);
-    }
-  }).handleCustomerRequest({ service:'customers', action:'customer360', customerId: SESSION.customerId });
+    try {
+      if(r && r.success){
+        currentCustomer = r.customer || null;
+        render(currentCustomer);
+      }
+    } finally { if(done) done(); }
+  }).withFailureHandler(function(){ if(done) done(); })
+    .handleCustomerRequest({ service:'customers', action:'customer360', customerId: SESSION.customerId });
 }
 
 function loadDeliveryLocations(){
@@ -1459,27 +1578,32 @@ function loadDeliveryLocations(){
   .getCustomerDeliveryLocations(SESSION.customerId);
 }
 
-function submitTicket(){
+function submitTicket(btn){
   var d={customer_id:currentCustomer?.customer_id,contact_id:currentContact?.contact_id,
     category:document.getElementById('ticketCategory').value,priority:document.getElementById('ticketPriority').value,
     subject:document.getElementById('ticketSubject').value,description:document.getElementById('ticketDesc').value};
+  showLoadingState(btn);
   google.script.run.withSuccessHandler(function(r){
-    if(r.success){showToast('Ticket created: '+r.ticketNumber,'success');bootstrap.Modal.getInstance(document.getElementById('newTicketModal')).hide();}
+    hideLoadingState(btn);
+    if(r.success){showToast('Ticket created: '+r.ticketNumber,'success');bootstrap.Modal.getInstance(document.getElementById('newTicketModal')).hide();loadAllTickets();}
     else showToast(r.error||'Failed','error');
-  }).withFailureHandler(function(e){showToast(e.message,'error');})
+  }).withFailureHandler(function(e){ hideLoadingState(btn); showToast(e.message,'error'); })
   .handleTicketRequest({action:'create',data:d,context:{actorType:'CUSTOMER',actorId:currentContact ? currentContact.contact_id : null}});
 }
 
-function uploadDoc(){
+function uploadDoc(btn){
   var fi=document.getElementById('docFile');
   if(!fi.files.length){showToast('Select a file','error');return;}
+  showLoadingState(btn);
   var reader=new FileReader();
   reader.onload=function(e){
     var b64=e.target.result.split(',')[1];
     google.script.run.withSuccessHandler(function(r){
-      if(r.success){showToast('Document uploaded','success');bootstrap.Modal.getInstance(document.getElementById('uploadDocModal')).hide();}
+      hideLoadingState(btn);
+      if(r.success){showToast('Document uploaded','success');bootstrap.Modal.getInstance(document.getElementById('uploadDocModal')).hide();loadDocuments();}
       else showToast(r.error||'Failed','error');
-    }).processRequest({service:'documents',action:'upload',data:{
+    }).withFailureHandler(function(err){ hideLoadingState(btn); showToast((err && err.message)||'Upload failed','error'); })
+    .processRequest({service:'documents',action:'upload',data:{
       customer_id:currentCustomer?.customer_id,document_type:document.getElementById('docType').value,
       file_name:fi.files[0].name,document_number:document.getElementById('docNum').value,expiry_date:document.getElementById('docExpiry').value
     },fileContent:b64,context:{actorType:'CUSTOMER',actorId:currentContact?.contact_id}});
@@ -1487,13 +1611,15 @@ function uploadDoc(){
   reader.readAsDataURL(fi.files[0]);
 }
 
-function sendReply(){
+function sendReply(btn){
   var content = document.getElementById('tdReply').value.trim();
   if(!content){ showToast('Type a reply first','error'); return; }
   if(!window._activeTicketId){ showToast('No ticket selected','error'); return; }
+  showLoadingState(btn);
   showToast('Sending...','info');
   google.script.run
     .withSuccessHandler(function(r){
+      hideLoadingState(btn);
       if(r && r.success){
         showToast('Reply sent','success');
         document.getElementById('tdReply').value = '';
@@ -1514,7 +1640,7 @@ function sendReply(){
         showToast((r&&r.error)||'Failed to send','error');
       }
     })
-    .withFailureHandler(function(e){ showToast(e.message,'error'); })
+    .withFailureHandler(function(e){ hideLoadingState(btn); showToast(e.message,'error'); })
     .handleTicketRequest({
       action: 'addComment',
       ticketId: window._activeTicketId,
@@ -1528,12 +1654,15 @@ function sendReply(){
       }
     });
 }
-function changePassword(){
+function changePassword(btn){
   var n=document.getElementById('newPwd').value,c=document.getElementById('conPwd').value;
   if(n!==c){showToast('Passwords do not match','error');return;}
+  showLoadingState(btn);
   google.script.run.withSuccessHandler(function(r){
+    hideLoadingState(btn);
     if(r.success)showToast('Password updated','success');else showToast(r.error||'Failed','error');
-  }).processRequest({service:'auth',action:'changePassword',currentPassword:document.getElementById('curPwd').value,newPassword:n});
+  }).withFailureHandler(function(e){ hideLoadingState(btn); showToast((e && e.message)||'Failed','error'); })
+    .processRequest({service:'auth',action:'changePassword',currentPassword:document.getElementById('curPwd').value,newPassword:n});
 }
 
 function doLogout(){

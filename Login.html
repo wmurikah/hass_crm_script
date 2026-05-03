@@ -1956,10 +1956,20 @@ body {
     setTimeout(function() { bar.style.width='88%';  statusEl.textContent='Almost ready...'; },           6500);
     setTimeout(function() { bar.style.width='100%'; statusEl.textContent='Welcome.'; },                  8000);
 
-    // Redirect directly to the portal URL - no intermediate staging screen.
-    // gotoApp uses window.top.location so doGet runs against the published URL.
+    // Redirect directly to the portal URL with an explicit page= route so
+    // doGet always knows where to send the user, even if checkSession is
+    // somehow racy. gotoApp uses window.top.location so doGet runs against
+    // the published URL.
     setTimeout(function() {
-      gotoApp('?token=' + encodeURIComponent(result.token));
+      var query;
+      if (result && result.redirectUrl) {
+        // Server-supplied URL already includes scriptUrl, page= and token=.
+        try { window.top.location.href = result.redirectUrl; return; }
+        catch (e) { window.location.href = result.redirectUrl; return; }
+      }
+      var page = (result && result.userType === 'STAFF') ? 'staff' : 'portal';
+      query = '?page=' + page + '&token=' + encodeURIComponent(result.token);
+      gotoApp(query);
     }, 8600);
   };
 

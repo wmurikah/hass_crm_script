@@ -239,23 +239,17 @@ function resetUserPassword(userId, userType) {
   updateRow(sheetName, idField, userId, { password_hash: hashedPassword });
 
   var email = String(row.email || '').trim();
-  var name  = String(row.first_name || 'User').trim();
+  var name  = String(row.first_name || '').trim() || 'there';
 
   if (email) {
     try {
+      var mail = renderPasswordResetEmail(name, tempPassword);
       MailApp.sendEmail({
         to:       email,
-        subject:  'Hass Petroleum Portal - Password Reset',
-        htmlBody: '<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;">'
-          + '<h2 style="color:#1A237E;">Password Reset</h2>'
-          + '<p>Hi ' + name + ',</p>'
-          + '<p>Your password has been reset. Your temporary password is:</p>'
-          + '<div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;text-align:center;">'
-          + '<span style="font-family:monospace;font-size:20px;font-weight:700;letter-spacing:2px;">' + tempPassword + '</span>'
-          + '</div>'
-          + '<p style="color:#dc2626;font-weight:600;">Please change on first login.</p>'
-          + '<p>Best regards,<br>Hass Petroleum IT Team</p>'
-          + '</div>',
+        name:     'Hass Petroleum Customer Experience',
+        subject:  mail.subject,
+        body:     mail.text,
+        htmlBody: mail.html,
       });
     } catch(e) {
       Logger.log('[UserService] Reset email failed: ' + e.message);
@@ -263,6 +257,156 @@ function resetUserPassword(userId, userType) {
   }
 
   return { success: true, message: 'Password reset. Email sent to ' + email };
+}
+
+/**
+ * Customer-experience-grade password reset email.
+ * Table-based HTML for Outlook compatibility, all CSS inlined, no <style>
+ * blocks. Plain-text fallback is written as a real plain-text email, not
+ * the HTML stripped of tags.
+ */
+function renderPasswordResetEmail(firstName, tempPassword) {
+  var greeting = firstName ? ('Hi ' + firstName + ',') : 'Hello,';
+  var supportPhone = 'Hass Petroleum Customer Experience: +254 709 906 000';
+  var supportEmail = 'support@hasspetroleum.com';
+  var brandNavy    = '#1A237E';
+  var brandOrange  = '#FF6F00';
+
+  var html =
+    '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;padding:24px 0;">' +
+        '<tr><td align="center">' +
+          '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px;max-width:560px;background:#ffffff;border-radius:10px;border:1px solid #e2e8f0;">' +
+            '<tr><td style="background:' + brandNavy + ';padding:18px 24px;border-radius:10px 10px 0 0;color:#ffffff;font-size:14px;font-weight:600;letter-spacing:0.5px;">' +
+              'Hass Petroleum Customer Experience' +
+            '</td></tr>' +
+            '<tr><td style="padding:28px 28px 8px 28px;font-size:18px;font-weight:600;color:#0f172a;">' +
+              'Your Hass Petroleum portal password has been reset' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 16px 28px;font-size:14px;line-height:1.6;color:#334155;">' +
+              greeting + '<br><br>' +
+              'We have reset your portal password at the request of an administrator on our team. ' +
+              'You can sign in with the temporary password below, and the portal will prompt you to choose a new password on your first login.' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 16px 28px;">' +
+              '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
+                '<tr><td style="padding:18px 20px;text-align:center;">' +
+                  '<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Temporary password</div>' +
+                  '<div style="font-family:Consolas,Menlo,monospace;font-size:22px;font-weight:700;letter-spacing:3px;color:' + brandNavy + ';">' + tempPassword + '</div>' +
+                '</td></tr>' +
+              '</table>' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 16px 28px;font-size:14px;line-height:1.6;color:#334155;">' +
+              'For your security, this password will only work once. Please change it as soon as you sign in.' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 20px 28px;font-size:13px;line-height:1.6;color:#475569;">' +
+              'If you did not ask for a reset, please reply to this email or call us on +254 709 906 000 ' +
+              'so we can secure your account right away.' +
+            '</td></tr>' +
+            '<tr><td style="padding:18px 28px 22px 28px;border-top:1px solid #e2e8f0;font-size:13px;color:#475569;">' +
+              'Warm regards,<br>' +
+              '<strong style="color:#0f172a;">Hass Petroleum Customer Experience Team</strong>' +
+            '</td></tr>' +
+            '<tr><td style="padding:14px 28px 22px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;border-radius:0 0 10px 10px;font-size:11px;color:#64748b;line-height:1.6;">' +
+              'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya<br>' +
+              supportPhone + ' &nbsp;|&nbsp; ' + supportEmail + '<br><br>' +
+              'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.' +
+            '</td></tr>' +
+          '</table>' +
+        '</td></tr>' +
+      '</table>' +
+    '</body></html>';
+
+  var text =
+    greeting + '\n\n' +
+    'We have reset your Hass Petroleum portal password at the request of an administrator on our team. ' +
+    'You can sign in with the temporary password below, and the portal will prompt you to choose a new password on your first login.\n\n' +
+    'Temporary password: ' + tempPassword + '\n\n' +
+    'For your security, this password will only work once. Please change it as soon as you sign in.\n\n' +
+    'If you did not ask for a reset, just reply to this email or call us on +254 709 906 000 ' +
+    'and we will secure your account right away.\n\n' +
+    'Warm regards,\n' +
+    'Hass Petroleum Customer Experience Team\n\n' +
+    '---\n' +
+    'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya\n' +
+    supportPhone + ' | ' + supportEmail + '\n' +
+    'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.\n';
+
+  return {
+    subject: 'Your Hass Petroleum portal password has been reset',
+    html:    html,
+    text:    text,
+  };
+}
+
+function renderWelcomeEmail(firstName, companyName, accountNumber, email, tempPassword) {
+  var greeting = firstName ? ('Hi ' + firstName + ',') : 'Hello,';
+  var brandNavy = '#1A237E';
+  var supportPhone = 'Hass Petroleum Customer Experience: +254 709 906 000';
+  var supportEmail = 'support@hasspetroleum.com';
+
+  var html =
+    '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">' +
+      '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;padding:24px 0;">' +
+        '<tr><td align="center">' +
+          '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px;max-width:560px;background:#ffffff;border-radius:10px;border:1px solid #e2e8f0;">' +
+            '<tr><td style="background:' + brandNavy + ';padding:18px 24px;border-radius:10px 10px 0 0;color:#ffffff;font-size:14px;font-weight:600;letter-spacing:0.5px;">' +
+              'Hass Petroleum Customer Experience' +
+            '</td></tr>' +
+            '<tr><td style="padding:28px 28px 8px 28px;font-size:18px;font-weight:600;color:#0f172a;">' +
+              'Welcome to your Hass Petroleum portal' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 16px 28px;font-size:14px;line-height:1.6;color:#334155;">' +
+              greeting + '<br><br>' +
+              'We have set up a portal account for ' + (companyName || 'your company') + '. ' +
+              'You can sign in with the details below, and the portal will prompt you to choose your own password on your first login.' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 16px 28px;">' +
+              '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
+                '<tr><td style="padding:14px 18px;font-size:13px;color:#475569;"><strong style="color:#0f172a;">Account number</strong></td><td style="padding:14px 18px;text-align:right;font-family:Consolas,Menlo,monospace;color:#0f172a;">' + (accountNumber || '') + '</td></tr>' +
+                '<tr><td style="padding:14px 18px;border-top:1px solid #e2e8f0;font-size:13px;color:#475569;"><strong style="color:#0f172a;">Email</strong></td><td style="padding:14px 18px;border-top:1px solid #e2e8f0;text-align:right;color:#0f172a;">' + (email || '') + '</td></tr>' +
+                '<tr><td style="padding:14px 18px;border-top:1px solid #e2e8f0;font-size:13px;color:#475569;"><strong style="color:#0f172a;">Temporary password</strong></td><td style="padding:14px 18px;border-top:1px solid #e2e8f0;text-align:right;font-family:Consolas,Menlo,monospace;font-weight:700;color:' + brandNavy + ';">' + (tempPassword || '') + '</td></tr>' +
+              '</table>' +
+            '</td></tr>' +
+            '<tr><td style="padding:0 28px 20px 28px;font-size:13px;line-height:1.6;color:#475569;">' +
+              'Once you are signed in, you can place fuel orders, raise tickets, view statements, and manage your team. ' +
+              'If anything looks off or you need a hand getting started, just reply to this email or call us on +254 709 906 000.' +
+            '</td></tr>' +
+            '<tr><td style="padding:18px 28px 22px 28px;border-top:1px solid #e2e8f0;font-size:13px;color:#475569;">' +
+              'Warm regards,<br>' +
+              '<strong style="color:#0f172a;">Hass Petroleum Customer Experience Team</strong>' +
+            '</td></tr>' +
+            '<tr><td style="padding:14px 28px 22px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;border-radius:0 0 10px 10px;font-size:11px;color:#64748b;line-height:1.6;">' +
+              'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya<br>' +
+              supportPhone + ' &nbsp;|&nbsp; ' + supportEmail + '<br><br>' +
+              'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.' +
+            '</td></tr>' +
+          '</table>' +
+        '</td></tr>' +
+      '</table>' +
+    '</body></html>';
+
+  var text =
+    greeting + '\n\n' +
+    'We have set up a Hass Petroleum portal account for ' + (companyName || 'your company') + '. ' +
+    'You can sign in with the details below, and the portal will prompt you to choose your own password on your first login.\n\n' +
+    'Account number: ' + (accountNumber || '') + '\n' +
+    'Email: ' + (email || '') + '\n' +
+    'Temporary password: ' + (tempPassword || '') + '\n\n' +
+    'Once you are signed in, you can place fuel orders, raise tickets, view statements, and manage your team. ' +
+    'If anything looks off or you need a hand getting started, just reply to this email or call us on +254 709 906 000.\n\n' +
+    'Warm regards,\n' +
+    'Hass Petroleum Customer Experience Team\n\n' +
+    '---\n' +
+    'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya\n' +
+    supportPhone + ' | ' + supportEmail + '\n' +
+    'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.\n';
+
+  return {
+    subject: 'Welcome to Hass Petroleum, ' + (firstName || 'and thank you for joining us'),
+    html:    html,
+    text:    text,
+  };
 }
 
 // ============================================================================
@@ -478,21 +622,13 @@ function createCustomerAccount(data, actorId) {
   });
 
   try {
+    var welcome = renderWelcomeEmail(data.first_name || company, company, accountNum, email, tempPassword);
     MailApp.sendEmail({
       to:       email,
-      subject:  'Welcome to Hass Petroleum Portal - Account Created',
-      htmlBody: '<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;">'
-        + '<h2 style="color:#1A237E;">Welcome to Hass Petroleum Portal</h2>'
-        + '<p>Hi ' + (data.first_name || company) + ',</p>'
-        + '<p>An account has been created for <strong>' + company + '</strong>. Please use the temporary password below to log in for the first time and change it immediately.</p>'
-        + '<div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;">'
-        + '<p style="margin:4px 0;"><strong>Account No:</strong> ' + accountNum + '</p>'
-        + '<p style="margin:4px 0;"><strong>Email:</strong> ' + email + '</p>'
-        + '<p style="margin:4px 0;"><strong>Temporary Password:</strong> ' + tempPassword + '</p>'
-        + '</div>'
-        + '<p style="color:#dc2626;font-weight:600;">You will be required to change this password on first login.</p>'
-        + '<p>Best regards,<br>Hass Petroleum Group</p>'
-        + '</div>',
+      name:     'Hass Petroleum Customer Experience',
+      subject:  welcome.subject,
+      body:     welcome.text,
+      htmlBody: welcome.html,
     });
   } catch(e) { Logger.log('[UserService] createCustomer email failed: ' + e.message); }
 
