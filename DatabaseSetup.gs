@@ -431,8 +431,18 @@ const SCHEMAS = {
     headers: ['segment_id', 'segment_name', 'description', 'min_volume', 'max_volume', 'credit_terms_days', 'discount_percentage', 'priority_level', 'is_active'],
   },
   Customers: {
-    headers: ['customer_id', 'account_number', 'company_name', 'trading_name', 'segment_id', 'country_code', 'tax_pin', 'registration_number', 'email', 'phone', 'address', 'city', 'website', 'payment_terms', 'credit_limit', 'credit_used', 'currency_code', 'oracle_customer_id', 'relationship_owner_id', 'status', 'onboarding_status', 'created_at', 'updated_at'],
-    validations: { status: ['ACTIVE', 'SUSPENDED', 'ON_HOLD', 'CLOSED', 'DELETED'], onboarding_status: ['PENDING', 'IN_PROGRESS', 'COMPLETED'] },
+    headers: ['customer_id','account_number','company_name','trading_name','customer_type',
+              'segment_id','country_code','currency_code','credit_limit','credit_used','payment_terms',
+              'tax_pin','registration_number','industry','website','status','onboarding_status',
+              'risk_score','risk_level','lifetime_value','relationship_owner_id','parent_customer_id',
+              'source','notes','created_by','oracle_customer_code','affiliate_code',
+              'email','phone','address','city','created_at','updated_at'],
+    validations: {
+      status:            ['ACTIVE','SUSPENDED','ON_HOLD','CLOSED','DELETED'],
+      customer_type:     ['B2B','B2C','GOVERNMENT'],
+      risk_level:        ['LOW','MEDIUM','HIGH'],
+      onboarding_status: ['PENDING','IN_PROGRESS','COMPLETE','COMPLETED']
+    },
   },
   Contacts: {
     headers: ['contact_id', 'customer_id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'department', 'contact_type', 'is_portal_user', 'password_hash', 'auth_provider', 'auth_uid', 'failed_login_attempts', 'locked_until', 'last_login_at', 'status', 'created_at', 'updated_at'],

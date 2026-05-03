@@ -267,19 +267,34 @@ var EXPECTED_SCHEMA = {
   },
   business_hours: {
     pk: 'hours_id',
-    required: ['hours_id','country_code','day_of_week','start_time','end_time','is_business_day','created_at']
+    required: ['hours_id','country_code','name','is_default',
+               'monday_start','monday_end','tuesday_start','tuesday_end',
+               'wednesday_start','wednesday_end','thursday_start','thursday_end',
+               'friday_start','friday_end','saturday_start','saturday_end',
+               'sunday_start','sunday_end','timezone','created_at','updated_at']
   },
   holidays: {
     pk: 'holiday_id',
     required: ['holiday_id','country_code','holiday_date','holiday_name','is_recurring','created_at']
   },
   sla_data: {
-    pk: 'log_id',
-    required: ['log_id','reference_type','reference_id','event_type','recorded_at','duration_min','breached','department','staff_id','country_code','created_at']
+    pk: 'document_number',
+    required: ['document_number','source_type','affiliate','customer_name','oracle_approver',
+               'finance_variance_min','la_variance_min','created_at','approved_at','dispatched_at',
+               'ordered_item','upload_batch_id']
   },
   po_approvals: {
     pk: 'po_number',
-    required: ['po_number','customer_id','amount','currency_code','requested_at','approver_name','approved_at','duration_hours','status','country_code','created_at']
+    required: ['po_number','description','nature','affiliate','created_by',
+               'original_creation_date','submission_date','submission_variance_min',
+               'first_approver','first_approval_date','first_variance_min',
+               'second_approver','second_approval_date','second_variance_min',
+               'third_approver','third_approval_date','third_variance_min',
+               'fourth_approver','fourth_approval_date','fourth_variance_min',
+               'fifth_approver','fifth_approval_date','fifth_variance_min',
+               'sixth_approver','sixth_approval_date','sixth_variance_min',
+               'seventh_approver','seventh_approval_date','seventh_variance_min',
+               'authorization_status','upload_batch_id']
   },
   approval_workflows: {
     pk: 'workflow_id',
@@ -361,20 +376,8 @@ var EXPECTED_SCHEMA = {
 // ============================================================================
 
 var KNOWN_DUPLICATIONS = [
-  {
-    table: 'customers',
-    frontend_uses: 'oracle_customer_code',
-    backend_writes: 'oracle_customer_id',
-    seen_in: ['Staffdashboard.html:4826','DatabaseSetup.gs SCHEMAS.Customers'],
-    recommendation: 'Keep ONE column. Suggest: rename oracle_customer_id to oracle_customer_code (front-end name), then update DatabaseSetup.gs SCHEMAS + Orderservice.gs writers.'
-  },
-  {
-    table: 'tickets',
-    frontend_uses: 'sla_resolve_deadline',
-    backend_writes: 'sla_resolve_by',
-    seen_in: ['Staffdashboard.html:5138','Ticketservice.gs:115,275'],
-    recommendation: 'Keep sla_resolve_by (matches sla_acknowledge_by / sla_response_by family). Update Staffdashboard.html line 5138 to read t.sla_resolve_by.'
-  }
+  // RESOLVED 2026-05-03: customers.oracle_customer_code is canonical (DB matches FE).
+  // RESOLVED 2026-05-03: tickets.sla_resolve_by is canonical; HTML edited.
 ];
 
 // ============================================================================
@@ -407,7 +410,7 @@ var FRONTEND_QUERIES = {
     'SELECT ticket_id,ticket_number,subject,description,customer_id,channel,category,priority,status,assigned_to,sla_resolve_by,sla_resolve_breached,created_at,resolved_at FROM tickets ORDER BY created_at DESC LIMIT 200',
   // This is what the front-end ACTUALLY tries (note the mismatched column):
   'tickets_page.list_AS_FRONTEND_USES':
-    'SELECT ticket_id,ticket_number,sla_resolve_deadline,sla_resolve_breached FROM tickets LIMIT 1',
+    'SELECT ticket_id,ticket_number,sla_resolve_by,sla_resolve_breached FROM tickets LIMIT 1',
   'tickets_page.comments_for_one':
     'SELECT comment_id,ticket_id,author_type,author_id,author_name,content,is_internal,channel,created_at FROM ticket_comments LIMIT 1',
 
@@ -435,11 +438,11 @@ var FRONTEND_QUERIES = {
   'sla.staff_list':
     "SELECT user_id,first_name,last_name,role FROM users WHERE status = 'ACTIVE' ORDER BY first_name",
   'sla.po_approvals':
-    'SELECT po_number,approver_name,duration_hours,country_code,created_at FROM po_approvals ORDER BY created_at DESC LIMIT 1',
+    'SELECT po_number,first_approver,submission_variance_min,affiliate FROM po_approvals LIMIT 1',
   'sla.business_hours':
-    'SELECT country_code,day_of_week,start_time,end_time,is_business_day FROM business_hours LIMIT 1',
+    'SELECT country_code,monday_start,monday_end,timezone FROM business_hours LIMIT 1',
   'sla.sla_data':
-    'SELECT log_id,reference_type,reference_id,event_type,recorded_at,duration_min,breached,department FROM sla_data LIMIT 1',
+    'SELECT document_number,affiliate,oracle_approver,finance_variance_min,la_variance_min,created_at FROM sla_data LIMIT 1',
 
   // Settings - backup is in Script Properties, but config is the table:
   'settings.config_backup_keys':
@@ -451,7 +454,7 @@ var FRONTEND_QUERIES = {
   'auth.session_lookup_shape':
     'SELECT session_id,user_id,user_type,role,token_hash,is_active,expires_at FROM sessions LIMIT 1',
   'auth.signup_requests':
-    "SELECT request_id,company_name,email,kyc_status,status FROM signup_requests WHERE status = 'PENDING_APPROVAL' LIMIT 5"
+    "SELECT request_id,company_name,email,kyc_status,status FROM signup_requests WHERE status = 'PENDING' LIMIT 5"
 };
 
 // ============================================================================
