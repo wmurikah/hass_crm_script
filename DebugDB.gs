@@ -375,10 +375,7 @@ var EXPECTED_SCHEMA = {
 // service-layer writes a different one. Pick ONE canonical name and migrate.
 // ============================================================================
 
-var KNOWN_DUPLICATIONS = [
-  // RESOLVED 2026-05-03: customers.oracle_customer_code is canonical (DB matches FE).
-  // RESOLVED 2026-05-03: tickets.sla_resolve_by is canonical; HTML edited.
-];
+var KNOWN_DUPLICATIONS = [];
 
 // ============================================================================
 // FRONTEND QUERIES
