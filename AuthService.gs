@@ -325,10 +325,75 @@ function requestPasswordReset(params) {
   });
 
   try {
+    var firstName = '';
+    if (sr.found)        firstName = String((sr.user && sr.user.first_name) || '').trim();
+    else if (cr && cr.found) firstName = String((cr.contact && cr.contact.first_name) || '').trim();
+    var greeting = firstName ? ('Hi ' + firstName + ',') : 'Hello,';
+    var brandNavy = '#1A237E';
+    var supportPhone = 'Hass Petroleum Customer Experience: +254 709 906 000';
+    var supportEmail = 'support@hasspetroleum.com';
+
+    var html =
+      '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#1e293b;">' +
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;padding:24px 0;">' +
+          '<tr><td align="center">' +
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px;max-width:560px;background:#ffffff;border-radius:10px;border:1px solid #e2e8f0;">' +
+              '<tr><td style="background:' + brandNavy + ';padding:18px 24px;border-radius:10px 10px 0 0;color:#ffffff;font-size:14px;font-weight:600;letter-spacing:0.5px;">' +
+                'Hass Petroleum Customer Experience' +
+              '</td></tr>' +
+              '<tr><td style="padding:28px 28px 8px 28px;font-size:18px;font-weight:600;color:#0f172a;">' +
+                'Your password reset code' +
+              '</td></tr>' +
+              '<tr><td style="padding:0 28px 16px 28px;font-size:14px;line-height:1.6;color:#334155;">' +
+                greeting + '<br><br>' +
+                'Use the code below to reset your Hass Petroleum portal password. ' +
+                'It is good for the next 15 minutes.' +
+              '</td></tr>' +
+              '<tr><td style="padding:0 28px 16px 28px;">' +
+                '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
+                  '<tr><td style="padding:18px 20px;text-align:center;">' +
+                    '<div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Reset code</div>' +
+                    '<div style="font-family:Consolas,Menlo,monospace;font-size:26px;font-weight:700;letter-spacing:6px;color:' + brandNavy + ';">' + otp + '</div>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td></tr>' +
+              '<tr><td style="padding:0 28px 20px 28px;font-size:13px;line-height:1.6;color:#475569;">' +
+                'If you did not ask for a reset, you can safely ignore this email and your password will stay the same. ' +
+                'If you would like us to look into it, just reply or call us on +254 709 906 000.' +
+              '</td></tr>' +
+              '<tr><td style="padding:18px 28px 22px 28px;border-top:1px solid #e2e8f0;font-size:13px;color:#475569;">' +
+                'Warm regards,<br>' +
+                '<strong style="color:#0f172a;">Hass Petroleum Customer Experience Team</strong>' +
+              '</td></tr>' +
+              '<tr><td style="padding:14px 28px 22px 28px;border-top:1px solid #e2e8f0;background:#f8fafc;border-radius:0 0 10px 10px;font-size:11px;color:#64748b;line-height:1.6;">' +
+                'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya<br>' +
+                supportPhone + ' &nbsp;|&nbsp; ' + supportEmail + '<br><br>' +
+                'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.' +
+              '</td></tr>' +
+            '</table>' +
+          '</td></tr>' +
+        '</table>' +
+      '</body></html>';
+
+    var text =
+      greeting + '\n\n' +
+      'Use the code below to reset your Hass Petroleum portal password. It is good for the next 15 minutes.\n\n' +
+      'Reset code: ' + otp + '\n\n' +
+      'If you did not ask for a reset, you can safely ignore this email and your password will stay the same. ' +
+      'If you would like us to look into it, just reply or call us on +254 709 906 000.\n\n' +
+      'Warm regards,\n' +
+      'Hass Petroleum Customer Experience Team\n\n' +
+      '---\n' +
+      'Hass Petroleum Group, Hass Plaza, Mombasa Road, Nairobi, Kenya\n' +
+      supportPhone + ' | ' + supportEmail + '\n' +
+      'This message was sent on behalf of the Hass Petroleum Customer Experience team. We are here to help, just reply.\n';
+
     MailApp.sendEmail({
-      to:      email,
-      subject: 'Hass Portal - Password reset code',
-      body:    'Your reset code is: ' + otp + '\n\nExpires in 15 minutes.\n\nHass Petroleum Group',
+      to:       email,
+      name:     'Hass Petroleum Customer Experience',
+      subject:  'Your Hass Petroleum portal password reset code',
+      body:     text,
+      htmlBody: html,
     });
   } catch(e) {
     return { success: false, error: 'Could not send reset email. Contact support.' };
