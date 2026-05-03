@@ -166,7 +166,7 @@ function getCustomerPriceList(customerId) {
     var customer = getById('Customers', customerId);
     var countryCode = customer ? (customer.country_code || 'KE') : 'KE';
     // Find active price list for customer country
-    var priceLists = getSheetData('PriceLists') || [];
+    var priceLists = getSheetData('PriceList') || [];
     var now = new Date();
     var activePL = priceLists.find(function(pl){
       return String(pl.country_code||'').toUpperCase() === countryCode.toUpperCase() &&
