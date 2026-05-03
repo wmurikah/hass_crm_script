@@ -170,12 +170,15 @@ var EXPECTED_SCHEMA = {
   },
   order_status_history: {
     pk: 'history_id',
-    required: ['history_id','order_id','from_status','to_status','changed_by_type','changed_by_id','reason','created_at'],
-    indexes: ['ix_osh_order (order_id)']
+    required: ['history_id','order_id','from_status','to_status','changed_by_type','changed_by_id',
+               'changed_by_name','notes','gps_lat','gps_lng','created_at']
   },
   recurring_schedule: {
     pk: 'schedule_id',
-    required: ['schedule_id','customer_id','frequency','start_date','end_date','next_run_at','is_active','created_at','updated_at']
+    required: ['schedule_id','customer_id','name','delivery_location_id','frequency',
+               'frequency_interval','day_of_week','day_of_month','preferred_time_from','preferred_time_to',
+               'start_date','end_date','next_order_date','is_active','auto_submit',
+               'special_instructions','created_by','created_at','updated_at']
   },
   recurring_schedule_lines: {
     pk: 'line_id',
@@ -183,12 +186,18 @@ var EXPECTED_SCHEMA = {
   },
   delivery_locations: {
     pk: 'location_id',
-    required: ['location_id','customer_id','location_name','address','city','county','country_code','latitude','longitude','contact_name','contact_phone','is_default','is_active','created_at','updated_at'],
+    required: ['location_id','customer_id','location_name','address_line1','address_line2',
+               'city','region','country_code','postal_code','latitude','longitude',
+               'delivery_instructions','contact_name','contact_phone','access_hours',
+               'requires_appointment','tank_capacity','is_default','is_verified',
+               'verified_by','verified_at','status','created_at','updated_at'],
     indexes: ['ix_locations_customer (customer_id)']
   },
   price_list: {
     pk: 'price_id',
-    required: ['price_id','price_list_name','customer_id','segment_id','country_code','currency_code','effective_from','effective_to','is_active','created_at']
+    required: ['price_id','price_list_name','country_code','currency_code','segment_id',
+               'customer_id','is_default','effective_from','effective_to','status',
+               'approved_by','approved_at','notes','created_by','created_at','updated_at']
   },
   price_list_items: {
     pk: 'item_id',
@@ -196,11 +205,15 @@ var EXPECTED_SCHEMA = {
   },
   products: {
     pk: 'product_id',
-    required: ['product_id','sku','product_name','category','unit_of_measure','description','is_active','created_at','updated_at']
+    required: ['product_id','code','sku','product_name','description','category','subcategory',
+               'unit_of_measure','min_order_quantity','max_order_quantity','requires_special_handling',
+               'handling_instructions','image_url','is_active','created_at','updated_at']
   },
   depots: {
     pk: 'depot_id',
-    required: ['depot_id','depot_name','country_code','address','city','latitude','longitude','is_active','created_at']
+    required: ['depot_id','code','depot_name','country_code','city','address',
+               'latitude','longitude','depot_type','capacity','products_available',
+               'operating_hours','contact_phone','contact_email','is_active','created_at','updated_at']
   },
   vehicles: {
     pk: 'vehicle_id',
@@ -216,7 +229,9 @@ var EXPECTED_SCHEMA = {
   },
   payment_uploads: {
     pk: 'upload_id',
-    required: ['upload_id','customer_id','invoice_id','amount','currency_code','payment_method','reference_number','file_path','uploaded_by','status','created_at']
+    required: ['upload_id','customer_id','order_id','invoice_id','uploaded_by','file_id','file_name',
+               'amount','currency_code','reference_number','upload_date','reviewed_by','status',
+               'review_notes','payment_method','file_path','created_at']
   },
 
   // ----- TICKETS -----------------------------------------------------------
@@ -263,7 +278,11 @@ var EXPECTED_SCHEMA = {
   // ----- SLA ---------------------------------------------------------------
   sla_config: {
     pk: 'sla_id',
-    required: ['sla_id','name','priority','channel','category','country_code','acknowledge_minutes','response_minutes','resolve_minutes','is_active','created_at','updated_at']
+    required: ['sla_id','name','country_code','segment_id','priority','category',
+               'acknowledge_minutes','response_minutes','resolve_minutes',
+               'escalation_1_minutes','escalation_2_minutes','escalation_3_minutes',
+               'business_hours_only','is_active','effective_from','effective_to',
+               'created_by','created_at','updated_at','process_type','channel']
   },
   business_hours: {
     pk: 'hours_id',
@@ -275,7 +294,7 @@ var EXPECTED_SCHEMA = {
   },
   holidays: {
     pk: 'holiday_id',
-    required: ['holiday_id','country_code','holiday_date','holiday_name','is_recurring','created_at']
+    required: ['holiday_id','country_code','holiday_name','holiday_date','is_recurring','created_at']
   },
   sla_data: {
     pk: 'document_number',
@@ -304,7 +323,11 @@ var EXPECTED_SCHEMA = {
   // ----- DOCUMENTS ---------------------------------------------------------
   documents: {
     pk: 'document_id',
-    required: ['document_id','customer_id','document_type','document_name','file_name','file_path','file_id','file_size','mime_type','issue_date','expiry_date','issuing_authority','document_number','status','verification_notes','verified_by','verified_at','uploaded_by_id','created_at','updated_at'],
+    required: ['document_id','customer_id','document_type','document_name','file_id','file_path',
+               'file_size','mime_type','document_number','issue_date','expiry_date','issuing_authority',
+               'is_mandatory','status','verified_by','verified_at','rejection_reason',
+               'reminder_sent_at','uploaded_by_type','uploaded_by_id','version','previous_version_id',
+               'file_name','verification_notes','created_at','updated_at'],
     indexes: ['ix_documents_customer (customer_id)','ix_documents_type (document_type)']
   },
 
@@ -319,12 +342,17 @@ var EXPECTED_SCHEMA = {
   // ----- NOTIFICATIONS -----------------------------------------------------
   notifications: {
     pk: 'notification_id',
-    required: ['notification_id','user_id','user_type','type','title','message','reference_type','reference_id','is_read','created_at'],
-    indexes: ['ix_notifications_user (user_id, is_read)']
+    required: ['notification_id','recipient_type','recipient_id','notification_type',
+               'reference_type','reference_id','title','message','priority',
+               'email_sent','sms_sent','is_read','in_app_read_at','action_url','expires_at','created_at'],
+    indexes: ['ix_notifications_user (user_id, is_read)'],
+    notes: 'recipient_id/recipient_type/notification_type are canonical (cover users + contacts)'
   },
   notification_preferences: {
     pk: 'preference_id',
-    required: ['preference_id','recipient_type','recipient_id','channel','event_type','enabled','created_at']
+    required: ['preference_id','recipient_type','recipient_id','notification_type',
+               'channel_email','channel_sms','channel_whatsapp','channel_push','channel_in_app',
+               'is_enabled','created_at','updated_at']
   },
   notification_templates: {
     pk: 'template_id',
@@ -334,11 +362,14 @@ var EXPECTED_SCHEMA = {
   // ----- KNOWLEDGE ---------------------------------------------------------
   knowledge_categories: {
     pk: 'category_id',
-    required: ['category_id','category_name','description','parent_category_id','sort_order','is_active','created_at']
+    required: ['category_id','category_name','slug','description','parent_category_id','icon',
+               'sort_order','is_public','is_active','created_at','updated_at']
   },
   knowledge_articles: {
     pk: 'article_id',
-    required: ['article_id','category_id','title','slug','content','tags','views','is_published','created_by','created_at','updated_at']
+    required: ['article_id','category_id','title','slug','summary','content','language','tags',
+               'is_public','is_featured','status','views','helpful_yes','helpful_no',
+               'created_by','published_at','created_at','updated_at']
   },
 
   // ----- LOGS / QUEUES -----------------------------------------------------
@@ -354,14 +385,16 @@ var EXPECTED_SCHEMA = {
   },
   job_queue: {
     pk: 'job_id',
-    required: ['job_id','type','payload','status','attempts','next_run_at','created_at','completed_at','error'],
+    required: ['job_id','type','payload','priority','status','attempts','max_attempts',
+               'error','next_run_at','started_at','completed_at','created_at'],
     indexes: ['ix_jobq_status (status, next_run_at)']
   },
 
   // ----- CHURN / RETENTION (referenced via TABLE_MAP) ----------------------
   churn_risk_factors: {
     pk: 'factor_id',
-    required: ['factor_id','customer_id','factor_type','score','recorded_at','notes','created_at']
+    required: ['factor_id','customer_id','factor_type','factor_weight','current_value',
+               'previous_value','threshold','notes','recorded_at','score','created_at']
   },
   retention_activities: {
     pk: 'activity_id',
@@ -427,7 +460,7 @@ var FRONTEND_QUERIES = {
   'portal.documents_for_customer':
     "SELECT document_id,document_type,document_name,expiry_date,status,file_path FROM documents WHERE customer_id = '__none__' LIMIT 5",
   'portal.delivery_locations':
-    "SELECT location_id,location_name,address,city,country_code,is_default FROM delivery_locations WHERE customer_id = '__none__'",
+    "SELECT location_id,location_name,address_line1,city,country_code,is_default FROM delivery_locations WHERE customer_id = '__none__'",
   'portal.contacts_for_customer':
     "SELECT contact_id,first_name,last_name,email,phone,job_title,contact_type,is_portal_user FROM contacts WHERE customer_id = '__none__'",
 
