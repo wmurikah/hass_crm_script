@@ -603,22 +603,48 @@ function approveOrder(orderId, context) {
   if (!order) {
     return { success: false, error: 'Order not found' };
   }
-  
+
   if (!['SUBMITTED', 'PENDING_APPROVAL'].includes(order.status)) {
     return { success: false, error: 'Order cannot be approved in current status' };
   }
-  
-  // Check approver has permission
-  const user = getById('Users', context.actorId);
-  if (!user || !user.can_approve_orders) {
-    return { success: false, error: 'You do not have permission to approve orders' };
+
+  const actorId = context && context.actorId;
+
+  // Segregation of duties: an order's creator cannot approve their own order.
+  try {
+    if (typeof requireDifferentActor === 'function') {
+      requireDifferentActor(order.created_by_id, actorId, 'approve own order');
+    } else if (order.created_by_id && actorId && String(order.created_by_id) === String(actorId)) {
+      return { success: false, error: 'Cannot approve own order. Order must be approved by a different user.', code: 'SOD_VIOLATION' };
+    }
+  } catch (e) {
+    return { success: false, error: e.message, code: e.code || 'SOD_VIOLATION' };
   }
-  
-  // Check approval limit
-  if (user.approval_limit && order.total_amount > user.approval_limit) {
+
+  // Amount-tiered approval permission (low / mid / high).
+  try {
+    if (typeof requireOrderApprovalPermission === 'function') {
+      requireOrderApprovalPermission(actorId, order.total_amount, order.currency_code || 'KES');
+    }
+  } catch (e) {
+    return { success: false, error: e.message, code: e.code || 'PERMISSION_DENIED', required_permission: e.required_permission || null };
+  }
+
+  // Country scope: country-bound approvers can only approve orders in their country.
+  try {
+    if (typeof requireScope === 'function') {
+      requireScope(actorId, order.country_code || '', null);
+    }
+  } catch (e) {
+    return { success: false, error: e.message, code: e.code || 'SCOPE_DENIED' };
+  }
+
+  // Legacy per-user approval limit fallback (kept for backwards compatibility).
+  const user = getById('Users', actorId);
+  if (user && user.approval_limit && order.total_amount > user.approval_limit) {
     return { success: false, error: `Order exceeds your approval limit of ${user.approval_limit}` };
   }
-  
+
   // Update credit used
   const customer = getById('Customers', order.customer_id);
   if (customer && order.payment_status !== 'PREPAID') {
@@ -627,7 +653,7 @@ function approveOrder(orderId, context) {
     });
     clearSheetCache('Customers');
   }
-  
+
   return updateOrderStatus(orderId, 'APPROVED', context);
 }
 
