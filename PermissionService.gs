@@ -27,87 +27,198 @@
 // PERMISSION CATALOG  (default seed - editable by Super Admin via UI)
 // ============================================================================
 
+// Canonical 37-permission catalog from gap-analysis v0.2 §2.
+// Legacy UI-derived permission codes (users.view, customers.view, ...)
+// are retained at the bottom as DEPRECATED for backwards compatibility
+// with existing service guards and the older admin UI; they will be
+// removed once all call sites move to the canonical entity.action codes.
 var DEFAULT_PERMISSIONS_ = [
-  // Users & Roles
-  { code: 'users.view',          label: 'View users',                category: 'Users & Roles' },
-  { code: 'users.create',        label: 'Create users',              category: 'Users & Roles' },
-  { code: 'users.edit',          label: 'Edit user details',         category: 'Users & Roles' },
-  { code: 'users.delete',        label: 'Deactivate / delete users', category: 'Users & Roles' },
-  { code: 'users.reset_password',label: 'Reset user passwords',      category: 'Users & Roles' },
-  { code: 'roles.view',          label: 'View roles & permissions',  category: 'Users & Roles' },
-  { code: 'roles.assign',        label: 'Assign roles to users',     category: 'Users & Roles' },
-  { code: 'roles.manage',        label: 'Create / edit roles',       category: 'Users & Roles' },
-  { code: 'permissions.manage',  label: 'Toggle permissions on roles', category: 'Users & Roles' },
-  // Customers
-  { code: 'customers.view',      label: 'View customers',            category: 'Customers' },
-  { code: 'customers.create',    label: 'Create customers',          category: 'Customers' },
-  { code: 'customers.edit',      label: 'Edit customers',            category: 'Customers' },
-  { code: 'customers.delete',    label: 'Delete customers',          category: 'Customers' },
-  { code: 'customers.statements',label: 'Run customer statements',   category: 'Customers' },
-  // Orders
-  { code: 'orders.view',         label: 'View orders',               category: 'Orders' },
-  { code: 'orders.create',       label: 'Create orders',             category: 'Orders' },
-  { code: 'orders.edit',         label: 'Edit orders',               category: 'Orders' },
-  { code: 'orders.approve',      label: 'Approve orders',            category: 'Orders' },
-  { code: 'orders.cancel',       label: 'Cancel orders',             category: 'Orders' },
-  // Tickets
-  { code: 'tickets.view',        label: 'View tickets',              category: 'Tickets' },
-  { code: 'tickets.create',      label: 'Create tickets',            category: 'Tickets' },
-  { code: 'tickets.edit',        label: 'Edit tickets',              category: 'Tickets' },
-  { code: 'tickets.assign',      label: 'Assign tickets',            category: 'Tickets' },
-  { code: 'tickets.resolve',     label: 'Resolve / close tickets',   category: 'Tickets' },
-  // Uploads
-  { code: 'uploads.la',          label: 'Upload LA (Loading Authority) data', category: 'Data Uploads' },
-  { code: 'uploads.po',          label: 'Upload PO (Purchase Order) data',    category: 'Data Uploads' },
-  // Integrations
-  { code: 'integrations.view',     label: 'View integration config',  category: 'Integrations' },
-  { code: 'integrations.configure',label: 'Configure integrations',   category: 'Integrations' },
-  { code: 'integrations.run_sync', label: 'Trigger Oracle sync jobs', category: 'Integrations' },
-  // Reports & Analytics
-  { code: 'reports.view',        label: 'View reports',              category: 'Reports' },
-  { code: 'reports.export',      label: 'Export reports',            category: 'Reports' },
-  // Settings
-  { code: 'settings.view',       label: 'View settings',             category: 'Settings' },
-  { code: 'settings.edit',       label: 'Edit settings',             category: 'Settings' },
-  { code: 'backups.run',         label: 'Run backups',               category: 'Settings' },
-  // Customer portal (for CUSTOMER role members)
-  { code: 'portal.view_invoices',  label: 'View own invoices',       category: 'Customer Portal' },
-  { code: 'portal.run_statement',  label: 'Run own account statement', category: 'Customer Portal' },
-  { code: 'portal.place_orders',   label: 'Place new orders',        category: 'Customer Portal' },
+  // ----- Customer (§2.1) ------------------------------------------------
+  { code: 'customer.view',         label: 'View customers',                  category: 'Customer' },
+  { code: 'customer.create',       label: 'Create customers',                category: 'Customer' },
+  { code: 'customer.update',       label: 'Update customers',                category: 'Customer' },
+  { code: 'customer.delete',       label: 'Delete customers',                category: 'Customer' },
+  { code: 'customer.approve_kyc',  label: 'Approve KYC',                     category: 'Customer' },
+  { code: 'customer.set_credit',   label: 'Set customer credit limit',       category: 'Customer', sod: 'setter_ne_requester' },
+
+  // ----- Order (§2.2) ---------------------------------------------------
+  { code: 'order.view',            label: 'View orders',                     category: 'Order' },
+  { code: 'order.create',          label: 'Create orders',                   category: 'Order' },
+  { code: 'order.approve_low',     label: 'Approve orders <= 100k KES',      category: 'Order', sod: 'creator_ne_approver' },
+  { code: 'order.approve_mid',     label: 'Approve orders <= 1M KES',        category: 'Order', sod: 'creator_ne_approver' },
+  { code: 'order.approve_high',    label: 'Approve orders > 1M KES',         category: 'Order', sod: 'creator_ne_approver' },
+  { code: 'order.cancel',          label: 'Cancel orders',                   category: 'Order' },
+  { code: 'order.dispatch',        label: 'Dispatch orders',                 category: 'Order' },
+  { code: 'order.confirm_delivery',label: 'Confirm delivery',                category: 'Order' },
+
+  // ----- Ticket (§2.3) --------------------------------------------------
+  { code: 'ticket.view',           label: 'View tickets',                    category: 'Ticket' },
+  { code: 'ticket.create',         label: 'Create tickets',                  category: 'Ticket' },
+  { code: 'ticket.assign',         label: 'Assign tickets',                  category: 'Ticket' },
+  { code: 'ticket.escalate',       label: 'Escalate tickets',                category: 'Ticket' },
+  { code: 'ticket.close',          label: 'Close tickets',                   category: 'Ticket' },
+  { code: 'ticket.reopen',         label: 'Reopen tickets',                  category: 'Ticket' },
+
+  // ----- Finance and billing (§2.4) -------------------------------------
+  { code: 'invoice.view',          label: 'View invoices',                   category: 'Finance' },
+  { code: 'invoice.generate',      label: 'Generate invoices',               category: 'Finance' },
+  { code: 'invoice.cancel',        label: 'Cancel invoices',                 category: 'Finance' },
+  { code: 'payment.review',        label: 'Review payments',                 category: 'Finance' },
+  { code: 'payment.approve',       label: 'Approve payments',                category: 'Finance' },
+  { code: 'payment.refund',        label: 'Refund payments',                 category: 'Finance', sod: 'refunder_ne_receiver' },
+  { code: 'statement.export',      label: 'Export account statements',       category: 'Finance' },
+
+  // ----- System and configuration (§2.5) --------------------------------
+  { code: 'config.view',           label: 'View configuration',              category: 'System' },
+  { code: 'config.update',         label: 'Update configuration',            category: 'System' },
+  { code: 'user.create',           label: 'Create users',                    category: 'System' },
+  { code: 'user.update',           label: 'Update users',                    category: 'System' },
+  { code: 'user.delete',           label: 'Delete users',                    category: 'System' },
+  { code: 'user.reset_password',   label: 'Reset user passwords',            category: 'System' },
+  { code: 'role.assign',           label: 'Assign roles to users',           category: 'System' },
+  { code: 'audit_log.view',        label: 'View audit log',                  category: 'System' },
+  { code: 'report.run',            label: 'Run reports',                     category: 'System' },
+
+  // ----- DEPRECATED legacy codes (retained for backwards compatibility) -
+  // Existing services (e.g. PermissionService.handlePermissionRequest,
+  // staff dashboard) still call requirePermission(..., 'roles.manage') etc.
+  // Until those call sites move to the canonical codes above, keep these
+  // seeded so existing role grants continue to resolve.
+  { code: 'roles.view',            label: '[deprecated] View roles & permissions', category: '_deprecated' },
+  { code: 'roles.assign',          label: '[deprecated] Assign roles to users',    category: '_deprecated' },
+  { code: 'roles.manage',          label: '[deprecated] Create / edit roles',      category: '_deprecated' },
+  { code: 'permissions.manage',    label: '[deprecated] Toggle permissions',       category: '_deprecated' },
+  { code: 'users.view',            label: '[deprecated] View users',               category: '_deprecated' },
+  { code: 'users.create',          label: '[deprecated] Create users',             category: '_deprecated' },
+  { code: 'users.edit',            label: '[deprecated] Edit users',               category: '_deprecated' },
+  { code: 'users.delete',          label: '[deprecated] Delete users',             category: '_deprecated' },
+  { code: 'users.reset_password',  label: '[deprecated] Reset passwords',          category: '_deprecated' },
 ];
 
+// v3 default role grants — derived directly from gap-analysis v0.2 §2.
+// SUPER_ADMIN holds the wildcard '*' so new permissions are auto-granted.
+// All other roles enumerate the specific permission codes they should hold.
 var DEFAULT_ROLES_ = [
-  { code: 'SUPER_ADMIN',     name: 'Super Admin',     description: 'Full access (wildcard).', is_system: 1,
+  // ----- System ---------------------------------------------------------
+  { code: 'SUPER_ADMIN', name: 'Super Administrator', is_system: 1,
+    description: 'System-level access reserved for designated technical and governance leads.',
     perms: ['*'] },
-  { code: 'ADMIN',           name: 'Administrator',   description: 'Administrative access except destructive root ops.', is_system: 1,
-    perms: ['users.view','users.create','users.edit','users.reset_password','roles.view','roles.assign',
-            'customers.view','customers.create','customers.edit','customers.statements',
-            'orders.view','orders.create','orders.edit','orders.approve',
-            'tickets.view','tickets.create','tickets.edit','tickets.assign','tickets.resolve',
-            'uploads.la','uploads.po',
-            'integrations.view','integrations.configure','integrations.run_sync',
-            'reports.view','reports.export','settings.view','settings.edit','backups.run'] },
-  { code: 'CS_MANAGER',      name: 'CS Manager',      description: 'Customer service manager.', is_system: 0,
-    perms: ['users.view','customers.view','customers.edit','orders.view','orders.edit','orders.approve',
-            'tickets.view','tickets.create','tickets.edit','tickets.assign','tickets.resolve','reports.view'] },
-  { code: 'CS_AGENT',        name: 'CS Agent',        description: 'Customer service agent.', is_system: 0,
-    perms: ['customers.view','orders.view','orders.create','tickets.view','tickets.create','tickets.edit','tickets.resolve'] },
-  { code: 'BD_MANAGER',      name: 'BD Manager',      description: 'Business development manager.', is_system: 0,
-    perms: ['customers.view','customers.create','customers.edit','orders.view','reports.view','reports.export'] },
-  { code: 'BD_REP',          name: 'BD Representative', description: 'BD field rep.', is_system: 0,
-    perms: ['customers.view','customers.create','orders.view','orders.create'] },
-  { code: 'FINANCE_OFFICER', name: 'Finance Officer', description: 'Finance & invoicing.', is_system: 0,
-    perms: ['customers.view','customers.statements','orders.view','orders.approve','reports.view','reports.export','uploads.la'] },
-  { code: 'COUNTRY_MANAGER', name: 'Country Manager', description: 'Country-level oversight.', is_system: 0,
-    perms: ['users.view','customers.view','orders.view','orders.approve','tickets.view','reports.view','reports.export'] },
-  { code: 'REGIONAL_MANAGER',name: 'Regional Manager', description: 'Regional oversight.', is_system: 0,
-    perms: ['users.view','customers.view','orders.view','tickets.view','reports.view','reports.export'] },
-  { code: 'GROUP_HEAD',      name: 'Group Head',      description: 'Group-level executive.', is_system: 0,
-    perms: ['users.view','customers.view','orders.view','tickets.view','reports.view','reports.export','integrations.view'] },
-  { code: 'VIEWER',          name: 'Viewer',          description: 'Read-only.', is_system: 0,
-    perms: ['users.view','customers.view','orders.view','tickets.view','reports.view'] },
-  { code: 'CUSTOMER',        name: 'Customer',        description: 'External customer portal user.', is_system: 1,
-    perms: ['portal.view_invoices','portal.run_statement','portal.place_orders'] },
+
+  // ----- C-Suite (GLOBAL, system-reserved) ------------------------------
+  { code: 'CEO', name: 'Chief Executive Officer', is_system: 1,
+    description: 'Group Chief Executive. Final approver for highest-tier orders.',
+    perms: ['customer.view',
+            'order.view','order.approve_high',
+            'invoice.view','statement.export',
+            'config.view','report.run'] },
+
+  { code: 'CFO', name: 'Chief Financial Officer', is_system: 1,
+    description: 'Group CFO. Approves refunds, credit limits, finance exceptions.',
+    perms: ['customer.view','customer.set_credit',
+            'order.view','order.approve_low','order.approve_mid','order.approve_high',
+            'invoice.view','invoice.cancel','payment.approve','payment.refund','statement.export',
+            'config.view','report.run'] },
+
+  { code: 'RMD', name: 'Regional Managing Director', is_system: 1,
+    description: 'C-Suite executive overseeing regional operations.',
+    perms: ['customer.view','customer.create','customer.update','customer.approve_kyc',
+            'order.view','order.approve_mid',
+            'invoice.view','statement.export',
+            'report.run'] },
+
+  // ----- Group functional ----------------------------------------------
+  { code: 'CREDIT_MANAGER', name: 'Credit Manager', is_system: 0,
+    description: 'Manages credit policy, customer credit limits, and credit risk across all countries.',
+    perms: ['customer.view','customer.set_credit',
+            'invoice.view','statement.export',
+            'report.run'] },
+
+  { code: 'INTERNAL_AUDITOR', name: 'Internal Auditor', is_system: 1,
+    description: 'Read-only access across all entities for internal and external audit.',
+    perms: ['customer.view',
+            'order.view',
+            'ticket.view',
+            'invoice.view','statement.export',
+            'config.view','audit_log.view','report.run'] },
+
+  { code: 'SHARED_SERVICES_MANAGER', name: 'Shared Services Manager', is_system: 0,
+    description: 'Cross-country shared services — HR, admin, group support.',
+    perms: ['customer.view',
+            'order.view',
+            'invoice.view','statement.export',
+            'report.run'] },
+
+  { code: 'SUPPLY_OPS_MANAGER', name: 'Supply and Operations Manager', is_system: 0,
+    description: 'Group-wide head of supply chain and operations.',
+    perms: ['customer.view',
+            'order.view','order.dispatch','order.confirm_delivery',
+            'report.run'] },
+
+  // ----- Country functional --------------------------------------------
+  { code: 'COUNTRY_MANAGER', name: 'Country Manager', is_system: 0,
+    description: 'Country General Manager. Approves operations within country scope.',
+    perms: ['customer.view','customer.create','customer.update','customer.approve_kyc',
+            'order.view','order.approve_low','order.approve_mid','order.cancel',
+            'ticket.view','ticket.create','ticket.assign','ticket.escalate','ticket.close','ticket.reopen',
+            'invoice.view','statement.export',
+            'report.run'] },
+
+  { code: 'REGIONAL_MANAGER', name: 'Regional Manager', is_system: 0,
+    description: 'Regional operations oversight within country.',
+    perms: ['customer.view','customer.create','customer.update','customer.approve_kyc',
+            'order.view','order.create','order.approve_low','order.cancel','order.dispatch','order.confirm_delivery',
+            'ticket.view','ticket.create','ticket.assign','ticket.escalate','ticket.close','ticket.reopen',
+            'report.run'] },
+
+  { code: 'CS_MANAGER', name: 'CS and BD Manager', is_system: 0,
+    description: 'Highest functional authority within country. Heads CS and BD teams.',
+    perms: ['customer.view','customer.create','customer.update','customer.approve_kyc',
+            'order.view','order.create','order.approve_low','order.approve_mid','order.cancel','order.confirm_delivery',
+            'ticket.view','ticket.create','ticket.assign','ticket.escalate','ticket.close','ticket.reopen',
+            'invoice.view','statement.export',
+            'report.run'] },
+
+  { code: 'CS_AGENT', name: 'CS Agent', is_system: 0,
+    description: 'Frontline customer service agent.',
+    perms: ['customer.view','customer.create','customer.update',
+            'order.view','order.create','order.confirm_delivery',
+            'ticket.view','ticket.create','ticket.escalate','ticket.close',
+            'invoice.view',
+            'report.run'] },
+
+  { code: 'BD_REP', name: 'BD Representative', is_system: 0,
+    description: 'Business development field staff.',
+    perms: ['customer.view','customer.create',
+            'order.view','order.create',
+            'ticket.view','ticket.create',
+            'report.run'] },
+
+  { code: 'FINANCE_MANAGER', name: 'Finance Manager', is_system: 0,
+    description: 'Country-level finance head. Approves payments, refunds within country.',
+    perms: ['customer.view',
+            'order.view','order.approve_low','order.approve_mid',
+            'invoice.view','invoice.generate','invoice.cancel',
+            'payment.review','payment.approve','payment.refund','statement.export',
+            'report.run'] },
+
+  { code: 'FINANCE_OFFICER', name: 'Finance Officer', is_system: 0,
+    description: 'Country-level finance operator. Invoice and payment processing.',
+    perms: ['customer.view',
+            'order.view','order.approve_low',
+            'invoice.view','invoice.generate',
+            'payment.review','statement.export',
+            'report.run'] },
+
+  { code: 'VIEWER', name: 'Viewer', is_system: 0,
+    description: 'Generic country-scoped read-only viewer.',
+    perms: ['customer.view',
+            'order.view',
+            'invoice.view','statement.export'] },
+
+  // ----- Customer portal role (non-staff; retained for backwards compat)
+  { code: 'CUSTOMER', name: 'Customer', is_system: 1,
+    description: 'External customer portal user.',
+    perms: [] },
 ];
 
 // ============================================================================
@@ -604,32 +715,62 @@ function handlePermissionRequest(params) {
 // CANONICAL STAFF ROLES (per gap analysis §2.1)
 // ============================================================================
 
+// v3 canonical staff roles (16). Sourced from
+//   docs/roles-permissions-gap-analysis.md v0.2 §1.1.
+//
+// target_min / target_max are best-current-estimate headcount targets used
+// by staffHeadcountReconciliation(). Override as HR baseline matures.
 var CANONICAL_STAFF_ROLES_ = [
-  { code: 'SUPER_ADMIN',  name: 'Super Administrator',     scope: 'GLOBAL',       is_system: 1, target_min: 2,  target_max: 2,
-    description: 'Group IT lead and designated CTO delegate. Full system access. Country scope: All.' },
-  { code: 'ADMIN',        name: 'Administrator',           scope: 'COUNTRY',      is_system: 1, target_min: 4,  target_max: 6,
-    description: 'Country IT and system administrators. Country-bound.' },
-  { code: 'CEO',          name: 'Chief Executive',         scope: 'GLOBAL',       is_system: 1, target_min: 1,  target_max: 1,
-    description: 'Group Chief Executive. Read-write across all countries. Final approver for high-value orders.' },
-  { code: 'CFO',          name: 'Chief Financial Officer', scope: 'GLOBAL',       is_system: 1, target_min: 1,  target_max: 1,
-    description: 'Group Chief Financial Officer. Finance approvals, refunds, credit limits.' },
-  { code: 'COUNTRY_HEAD', name: 'Country General Manager', scope: 'COUNTRY',      is_system: 0, target_min: 4,  target_max: 4,
-    description: 'Country General Manager. Country-bound. Approves operations within country scope.' },
-  { code: 'MANAGER',      name: 'Department Manager',      scope: 'COUNTRY',      is_system: 0, target_min: 8,  target_max: 12,
-    description: 'Department Manager. Country-bound. Approves orders and team operations.' },
-  { code: 'SUPERVISOR',   name: 'Team Supervisor',         scope: 'COUNTRY_TEAM', is_system: 0, target_min: 12, target_max: 18,
-    description: 'Team Supervisor. Country + team-bound. Manages team queue, escalations, and SLA.' },
-  { code: 'AGENT',        name: 'Customer Service Agent',  scope: 'COUNTRY_TEAM', is_system: 0, target_min: 20, target_max: 40,
-    description: 'Customer Service Agent. Country + team-bound. Frontline ticket and order handling.' },
-  { code: 'FINANCE',      name: 'Finance Officer',         scope: 'COUNTRY',      is_system: 0, target_min: 10, target_max: 15,
-    description: 'Finance Officer. Country-bound. Invoice, payment, and reconciliation operations.' },
-  { code: 'KYC_OFFICER',  name: 'KYC Compliance Officer',  scope: 'COUNTRY',      is_system: 0, target_min: 4,  target_max: 6,
-    description: 'KYC Compliance Officer. Country-bound. Customer onboarding and document verification.' },
-  { code: 'OPS',          name: 'Operations Officer',      scope: 'COUNTRY',      is_system: 0, target_min: 15, target_max: 25,
-    description: 'Operations Officer. Country-bound. Dispatch, depot, and fleet operations.' },
-  { code: 'AUDIT_VIEWER', name: 'Audit Read-Only',         scope: 'GLOBAL',       is_system: 1, target_min: 2,  target_max: 4,
-    description: 'Audit Read-Only. All countries. Read-only access for internal and external auditors.' },
+  // ---- System ---------------------------------------------------------
+  { code: 'SUPER_ADMIN',             name: 'Super Administrator',           scope: 'GLOBAL',  is_system: 1, target_min: 2,  target_max: 2,
+    description: 'System-level access for designated technical and governance leads. Full read/write across all modules and countries.' },
+
+  // ---- C-Suite (GLOBAL, system-reserved) ------------------------------
+  { code: 'CEO',                     name: 'Chief Executive Officer',       scope: 'GLOBAL',  is_system: 1, target_min: 1,  target_max: 1,
+    description: 'Group Chief Executive. Final approver for highest-tier orders.' },
+  { code: 'CFO',                     name: 'Chief Financial Officer',       scope: 'GLOBAL',  is_system: 1, target_min: 1,  target_max: 1,
+    description: 'Group Chief Financial Officer. Approves refunds, credit limits, finance exceptions.' },
+  { code: 'RMD',                     name: 'Regional Managing Director',    scope: 'GLOBAL',  is_system: 1, target_min: 1,  target_max: 2,
+    description: 'C-Suite executive overseeing regional operations.' },
+
+  // ---- Group functional ----------------------------------------------
+  { code: 'CREDIT_MANAGER',          name: 'Credit Manager',                scope: 'GLOBAL',  is_system: 0, target_min: 1,  target_max: 2,
+    description: 'Manages credit policy, customer credit limits, and credit risk across all countries.' },
+  { code: 'INTERNAL_AUDITOR',        name: 'Internal Auditor',              scope: 'GLOBAL',  is_system: 1, target_min: 2,  target_max: 4,
+    description: 'Read-only access across all entities for internal and external audit work.' },
+  { code: 'SHARED_SERVICES_MANAGER', name: 'Shared Services Manager',       scope: 'GLOBAL',  is_system: 0, target_min: 1,  target_max: 2,
+    description: 'Cross-country shared services functions including HR, admin, and group support.' },
+  { code: 'SUPPLY_OPS_MANAGER',      name: 'Supply and Operations Manager', scope: 'GLOBAL',  is_system: 0, target_min: 1,  target_max: 2,
+    description: 'Group-wide head of supply chain and operations.' },
+
+  // ---- Country functional --------------------------------------------
+  { code: 'COUNTRY_MANAGER',         name: 'Country Manager',               scope: 'COUNTRY', is_system: 0, target_min: 4,  target_max: 4,
+    description: 'Country General Manager. Approves operations within country scope.' },
+  { code: 'REGIONAL_MANAGER',        name: 'Regional Manager',              scope: 'COUNTRY', is_system: 0, target_min: 4,  target_max: 8,
+    description: 'Regional operations oversight within country (sub-country regional structure).' },
+  { code: 'CS_MANAGER',              name: 'CS and BD Manager',             scope: 'COUNTRY', is_system: 0, target_min: 4,  target_max: 8,
+    description: 'Highest functional authority within country. Heads CS and BD teams. Approves orders within country tier.' },
+  { code: 'CS_AGENT',                name: 'CS Agent',                      scope: 'COUNTRY', is_system: 0, target_min: 20, target_max: 40,
+    description: 'Frontline customer service agent. Tickets, order handling, customer communications.' },
+  { code: 'BD_REP',                  name: 'BD Representative',             scope: 'COUNTRY', is_system: 0, target_min: 8,  target_max: 16,
+    description: 'Business development field staff. Customer relationship development within country.' },
+  { code: 'FINANCE_MANAGER',         name: 'Finance Manager',               scope: 'COUNTRY', is_system: 0, target_min: 4,  target_max: 4,
+    description: 'Country-level finance head. Approves payments, refunds, invoice exceptions within country scope.' },
+  { code: 'FINANCE_OFFICER',         name: 'Finance Officer',               scope: 'COUNTRY', is_system: 0, target_min: 8,  target_max: 12,
+    description: 'Country-level finance operator. Invoice generation, payment processing, reconciliation.' },
+  { code: 'VIEWER',                  name: 'Viewer',                        scope: 'COUNTRY', is_system: 0, target_min: 0,  target_max: 20,
+    description: 'Generic country-scoped read-only viewer.' },
 ];
+
+// Deprecated v0.1 role codes - kept here so the headcount report can flag
+// any users still attached to them after the v3 migration.
+var DEPRECATED_STAFF_ROLES_ = [
+  'ADMIN','COUNTRY_HEAD','MANAGER','SUPERVISOR','AGENT',
+  'KYC_OFFICER','OPS','AUDIT_VIEWER','FINANCE',
+];
+
+// Roles that may only be granted by a SUPER_ADMIN (gap-analysis §2.6).
+var SUPER_ADMIN_ONLY_GRANTS_ = ['SUPER_ADMIN','CEO','CFO','RMD','INTERNAL_AUDITOR'];
 
 function _canonicalStaffCodes_() {
   return CANONICAL_STAFF_ROLES_.map(function(r) { return r.code; });
@@ -1010,10 +1151,11 @@ function listUsersForRoleAdmin(filters) {
 
 /**
  * Replaces a user's role assignments with `roleCodes`.
- * Enforces:
- *   - SUPER_ADMIN can only be granted by another SUPER_ADMIN
- *   - System roles require a `reason`
+ * Enforces (gap-analysis v0.2 §2.6):
+ *   - SUPER_ADMIN, CEO, CFO, RMD, INTERNAL_AUDITOR may only be granted by SUPER_ADMIN
+ *   - is_system=1 role grants/revokes require a `reason`
  *   - Cannot remove the last SUPER_ADMIN in the system
+ *   - Cannot remove the last CS_MANAGER in the target user's country
  */
 function setUserRoles(targetUserId, roleCodes, reason, actorId) {
   if (!targetUserId) return { success: false, error: 'userId required' };
@@ -1031,9 +1173,16 @@ function setUserRoles(targetUserId, roleCodes, reason, actorId) {
     var toAdd    = requested.filter(function(c) { return targetRolesNow.indexOf(c) === -1; });
     var toRemove = targetRolesNow.filter(function(c) { return requested.indexOf(c) === -1; });
 
-    // Constraint: only SUPER_ADMIN can grant SUPER_ADMIN.
-    if (toAdd.indexOf('SUPER_ADMIN') !== -1 && !actorIsSuper) {
-      return { success: false, error: 'Only a Super Administrator can grant the SUPER_ADMIN role.' };
+    // Constraint: SUPER_ADMIN, CEO, CFO, RMD and INTERNAL_AUDITOR may only
+    // be granted by a SUPER_ADMIN (gap-analysis v0.2 §2.6).
+    var superOnly = toAdd.filter(function(c) {
+      return SUPER_ADMIN_ONLY_GRANTS_.indexOf(c) !== -1;
+    });
+    if (superOnly.length && !actorIsSuper) {
+      return {
+        success: false,
+        error: 'Only a Super Administrator can grant: ' + superOnly.join(', ') + '.'
+      };
     }
 
     // Constraint: cannot remove the last SUPER_ADMIN.
@@ -1041,6 +1190,28 @@ function setUserRoles(targetUserId, roleCodes, reason, actorId) {
       var totalSupers = tursoSelect('SELECT COUNT(*) AS n FROM user_roles WHERE role_code = ?', ['SUPER_ADMIN']);
       if ((parseInt(totalSupers[0].n) || 0) <= 1) {
         return { success: false, error: 'There must be at least one Super Administrator. Grant SUPER_ADMIN to another user before removing this one.' };
+      }
+    }
+
+    // Constraint: cannot remove the last CS_MANAGER in the target user's country.
+    // CS_MANAGER is the apex functional authority within country - operations
+    // require at least one per country (gap-analysis v0.2 §2.6, G-021).
+    if (toRemove.indexOf('CS_MANAGER') !== -1) {
+      var target = findRow('Users', 'user_id', targetUserId) || {};
+      var country = target.country_code || '';
+      if (country) {
+        var countryCsm = tursoSelect(
+          'SELECT COUNT(DISTINCT ur.user_id) AS n ' +
+          'FROM user_roles ur JOIN users u ON u.user_id = ur.user_id ' +
+          'WHERE ur.role_code = ? AND u.country_code = ?',
+          ['CS_MANAGER', country]
+        );
+        if ((parseInt(countryCsm[0].n) || 0) <= 1) {
+          return {
+            success: false,
+            error: 'There must be at least one CS_MANAGER in country ' + country + '. Grant CS_MANAGER to another user in that country before removing this one.'
+          };
+        }
       }
     }
 
