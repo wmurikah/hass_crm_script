@@ -22,10 +22,36 @@ function doGet(e) {
   // If the URL forces a specific page, honour it as long as it matches the
   // session's userType. Otherwise route by userType.
   if (page === 'staff'  && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
+  if (page === 'roles'  && session.userType === 'STAFF')    return serveStaffRoleManagement(session, token);
   if (page === 'portal' && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
   if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   return serveLoginPage('Unknown account type.');
+}
+
+function serveStaffRoleManagement(session, token) {
+  if (!userHasPermission(session.userId, 'roles.assign')) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:48px;text-align:center;max-width:640px;margin:auto">' +
+      '<h2 style="color:#1A237E">Permission denied</h2>' +
+      '<p>You don\'t have permission to manage user roles. Contact your administrator if you need access.</p>' +
+      '</div>'
+    ).setTitle('Role Management - Permission denied');
+  }
+  var tmpl = HtmlService.createTemplateFromFile('Staff_RoleManagement');
+  var scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.SESSION = JSON.stringify({
+    userId:    session.userId,
+    userType:  'STAFF',
+    role:      session.role,
+    token:     token,
+    scriptUrl: scriptUrl
+  });
+  tmpl.scriptUrl = scriptUrl;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - User Role Management')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 // ---------------------------------------------------------------------------

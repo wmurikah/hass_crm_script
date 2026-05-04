@@ -2,10 +2,40 @@ function handleDashboardRequest(params) {
   try {
     switch(params.action) {
       case 'getDashboardSummary': return getDashboardSummary(params.affiliate);
+      case 'staffHeadcountWidget': return getStaffHeadcountWidget(params._session);
       default: return { success: false, error: 'Unknown dashboard action' };
     }
   } catch(e) {
     Logger.log('handleDashboardRequest: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Headcount traffic-light widget for the staff dashboard.
+ * Visible only to SUPER_ADMIN, CEO, CFO. Returns one entry per canonical role
+ * with a status (OK / UNDER / OVER / CRITICAL) for traffic-light rendering.
+ */
+function getStaffHeadcountWidget(session) {
+  if (!session || !session.userId) return { success: false, error: 'No session' };
+  var allowed = ['SUPER_ADMIN', 'CEO', 'CFO'];
+  try {
+    var roles = (typeof tursoSelect === 'function')
+      ? tursoSelect('SELECT role_code FROM user_roles WHERE user_id = ?', [session.userId]).map(function(r) { return r.role_code; })
+      : [];
+    if (!roles.some(function(r) { return allowed.indexOf(r) !== -1; })) {
+      return { success: false, error: 'Permission denied', code: 'PERMISSION_DENIED' };
+    }
+    var report = staffHeadcountReconciliation();
+    if (!report || !report.success) return report || { success: false, error: 'No data' };
+    return {
+      success: true,
+      cells: report.targetVsActual.map(function(r) {
+        return { role_code: r.role_code, role_name: r.role_name, actual: r.actual, target_min: r.target_min, target_max: r.target_max, status: r.status };
+      }),
+      summary: report.summary,
+    };
+  } catch(e) {
     return { success: false, error: e.message };
   }
 }
