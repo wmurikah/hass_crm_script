@@ -136,50 +136,80 @@
 <script>
   var SESSION = <?!= SESSION ?>;
 
-  // Canonical roles - matches PermissionService.gs CANONICAL_STAFF_ROLES_
+  // v3 canonical staff roles (16) - matches PermissionService.gs CANONICAL_STAFF_ROLES_.
+  // Source: docs/roles-permissions-gap-analysis.md v0.2 §1.1.
   var CANONICAL_ROLES = [
-    { code:'SUPER_ADMIN',  name:'Super Administrator',     scope:'GLOBAL',       is_system:true  },
-    { code:'ADMIN',        name:'Administrator',           scope:'COUNTRY',      is_system:true  },
-    { code:'CEO',          name:'Chief Executive',         scope:'GLOBAL',       is_system:true  },
-    { code:'CFO',          name:'Chief Financial Officer', scope:'GLOBAL',       is_system:true  },
-    { code:'COUNTRY_HEAD', name:'Country General Manager', scope:'COUNTRY',      is_system:false },
-    { code:'MANAGER',      name:'Department Manager',      scope:'COUNTRY',      is_system:false },
-    { code:'SUPERVISOR',   name:'Team Supervisor',         scope:'COUNTRY_TEAM', is_system:false },
-    { code:'AGENT',        name:'Customer Service Agent',  scope:'COUNTRY_TEAM', is_system:false },
-    { code:'FINANCE',      name:'Finance Officer',         scope:'COUNTRY',      is_system:false },
-    { code:'KYC_OFFICER',  name:'KYC Compliance Officer',  scope:'COUNTRY',      is_system:false },
-    { code:'OPS',          name:'Operations Officer',      scope:'COUNTRY',      is_system:false },
-    { code:'AUDIT_VIEWER', name:'Audit Read-Only',         scope:'GLOBAL',       is_system:true  },
+    // System
+    { code:'SUPER_ADMIN',             name:'Super Administrator',           scope:'GLOBAL',  is_system:true  },
+    // C-Suite
+    { code:'CEO',                     name:'Chief Executive Officer',       scope:'GLOBAL',  is_system:true  },
+    { code:'CFO',                     name:'Chief Financial Officer',       scope:'GLOBAL',  is_system:true  },
+    { code:'RMD',                     name:'Regional Managing Director',    scope:'GLOBAL',  is_system:true  },
+    // Group functional
+    { code:'CREDIT_MANAGER',          name:'Credit Manager',                scope:'GLOBAL',  is_system:false },
+    { code:'INTERNAL_AUDITOR',        name:'Internal Auditor',              scope:'GLOBAL',  is_system:true  },
+    { code:'SHARED_SERVICES_MANAGER', name:'Shared Services Manager',       scope:'GLOBAL',  is_system:false },
+    { code:'SUPPLY_OPS_MANAGER',      name:'Supply and Operations Manager', scope:'GLOBAL',  is_system:false },
+    // Country functional
+    { code:'COUNTRY_MANAGER',         name:'Country Manager',               scope:'COUNTRY', is_system:false },
+    { code:'REGIONAL_MANAGER',        name:'Regional Manager',              scope:'COUNTRY', is_system:false },
+    { code:'CS_MANAGER',              name:'CS and BD Manager',             scope:'COUNTRY', is_system:false },
+    { code:'CS_AGENT',                name:'CS Agent',                      scope:'COUNTRY', is_system:false },
+    { code:'BD_REP',                  name:'BD Representative',             scope:'COUNTRY', is_system:false },
+    { code:'FINANCE_MANAGER',         name:'Finance Manager',               scope:'COUNTRY', is_system:false },
+    { code:'FINANCE_OFFICER',         name:'Finance Officer',               scope:'COUNTRY', is_system:false },
+    { code:'VIEWER',                  name:'Viewer',                        scope:'COUNTRY', is_system:false },
   ];
 
-  // Subset of permission matrix from gap analysis §3 (truncated; can be expanded).
+  // v3 permission matrix - mirrors gap-analysis v0.2 §2.
+  // 'Y' = granted, undefined = not granted. SUPER_ADMIN holds wildcard '*'
+  // server-side, so it is implicitly granted everything regardless of cell.
   var PERMISSION_MATRIX = [
-    { perm:'customer.view',          grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', FINANCE:'Y', KYC_OFFICER:'Y', OPS:'Y', AUDIT_VIEWER:'Y' } },
-    { perm:'customer.create',        grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', KYC_OFFICER:'Y' } },
-    { perm:'customer.update',        grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', KYC_OFFICER:'Y' } },
+    // ----- Customer (§2.1) ---------------------------------------------
+    { perm:'customer.view',          grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', RMD:'Y', CREDIT_MANAGER:'Y', INTERNAL_AUDITOR:'Y', SHARED_SERVICES_MANAGER:'Y', SUPPLY_OPS_MANAGER:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y', VIEWER:'Y' } },
+    { perm:'customer.create',        grants:{ SUPER_ADMIN:'Y', RMD:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y' } },
+    { perm:'customer.update',        grants:{ SUPER_ADMIN:'Y', RMD:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y' } },
     { perm:'customer.delete',        grants:{ SUPER_ADMIN:'Y' } },
-    { perm:'customer.approve_kyc',   grants:{ SUPER_ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', KYC_OFFICER:'Y' } },
-    { perm:'customer.set_credit',    grants:{ SUPER_ADMIN:'Y', CFO:'Y', COUNTRY_HEAD:'Y', FINANCE:'Y' } },
-    { perm:'order.view',             grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', FINANCE:'Y', OPS:'Y', AUDIT_VIEWER:'Y' } },
-    { perm:'order.create',           grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
-    { perm:'order.approve_low',      grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
-    { perm:'order.approve_mid',      grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', FINANCE:'Y' } },
-    { perm:'order.approve_high',     grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y' } },
-    { perm:'order.cancel',           grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y' } },
-    { perm:'order.dispatch',         grants:{ SUPER_ADMIN:'Y', SUPERVISOR:'Y', OPS:'Y' } },
-    { perm:'order.confirm_delivery', grants:{ SUPER_ADMIN:'Y', SUPERVISOR:'Y', OPS:'Y' } },
-    { perm:'ticket.view',            grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', KYC_OFFICER:'Y', AUDIT_VIEWER:'Y' } },
-    { perm:'ticket.assign',          grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y' } },
-    { perm:'ticket.escalate',        grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
-    { perm:'ticket.close',           grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
-    { perm:'invoice.view',           grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE:'Y', MANAGER:'Y', AGENT:'Y', AUDIT_VIEWER:'Y' } },
-    { perm:'invoice.generate',       grants:{ SUPER_ADMIN:'Y', FINANCE:'Y' } },
-    { perm:'payment.refund',         grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE:'Y' } },
-    { perm:'role.assign',            grants:{ SUPER_ADMIN:'Y' } },
-    { perm:'audit_log.view',         grants:{ SUPER_ADMIN:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'customer.approve_kyc',   grants:{ SUPER_ADMIN:'Y', RMD:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y' } },
+    { perm:'customer.set_credit',    grants:{ SUPER_ADMIN:'Y', CFO:'Y', CREDIT_MANAGER:'Y' } },
+
+    // ----- Order (§2.2) ------------------------------------------------
+    { perm:'order.view',             grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', RMD:'Y', SUPPLY_OPS_MANAGER:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y', INTERNAL_AUDITOR:'Y' } },
+    { perm:'order.create',           grants:{ SUPER_ADMIN:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y' } },
+    { perm:'order.approve_low',      grants:{ SUPER_ADMIN:'Y', CFO:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y' } },
+    { perm:'order.approve_mid',      grants:{ SUPER_ADMIN:'Y', CFO:'Y', RMD:'Y', COUNTRY_MANAGER:'Y', CS_MANAGER:'Y', FINANCE_MANAGER:'Y' } },
+    { perm:'order.approve_high',     grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y' } },
+    { perm:'order.cancel',           grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y' } },
+    { perm:'order.dispatch',         grants:{ SUPER_ADMIN:'Y', SUPPLY_OPS_MANAGER:'Y', REGIONAL_MANAGER:'Y' } },
+    { perm:'order.confirm_delivery', grants:{ SUPER_ADMIN:'Y', SUPPLY_OPS_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y' } },
+
+    // ----- Ticket (§2.3) -----------------------------------------------
+    { perm:'ticket.view',            grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y', INTERNAL_AUDITOR:'Y' } },
+    { perm:'ticket.create',          grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y', BD_REP:'Y' } },
+    { perm:'ticket.assign',          grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y' } },
+    { perm:'ticket.escalate',        grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y' } },
+    { perm:'ticket.close',           grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y', CS_AGENT:'Y' } },
+    { perm:'ticket.reopen',          grants:{ SUPER_ADMIN:'Y', COUNTRY_MANAGER:'Y', REGIONAL_MANAGER:'Y', CS_MANAGER:'Y' } },
+
+    // ----- Finance (§2.4) ----------------------------------------------
+    { perm:'invoice.view',           grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_MANAGER:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y', INTERNAL_AUDITOR:'Y' } },
+    { perm:'invoice.generate',       grants:{ SUPER_ADMIN:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y' } },
+    { perm:'invoice.cancel',         grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE_MANAGER:'Y' } },
+    { perm:'payment.review',         grants:{ SUPER_ADMIN:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y' } },
+    { perm:'payment.approve',        grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE_MANAGER:'Y' } },
+    { perm:'payment.refund',         grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE_MANAGER:'Y' } },
+    { perm:'statement.export',       grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_MANAGER:'Y', FINANCE_MANAGER:'Y', FINANCE_OFFICER:'Y', INTERNAL_AUDITOR:'Y' } },
+
+    // ----- System (§2.5) -----------------------------------------------
+    { perm:'config.view',            grants:{ SUPER_ADMIN:'Y', CFO:'Y', INTERNAL_AUDITOR:'Y' } },
     { perm:'config.update',          grants:{ SUPER_ADMIN:'Y' } },
-    { perm:'user.create',            grants:{ SUPER_ADMIN:'Y', ADMIN:'Y' } },
+    { perm:'user.create',            grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'user.update',            grants:{ SUPER_ADMIN:'Y' } },
     { perm:'user.delete',            grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'user.reset_password',    grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'role.assign',            grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'audit_log.view',         grants:{ SUPER_ADMIN:'Y', INTERNAL_AUDITOR:'Y' } },
+    { perm:'report.run',             grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', INTERNAL_AUDITOR:'Y' } },
   ];
 
   var state = { users: [], editingUser: null };
@@ -369,7 +399,7 @@
     }).join('');
     c.innerHTML = '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>' +
       '<p style="font-size:12px; color:var(--hass-muted); margin-top:12px;">' +
-      'Source: docs/roles-permissions-gap-analysis.md §3. Read-only summary - manage assignments via Tab 1.</p>';
+      'Source: docs/roles-permissions-gap-analysis.md v0.2 &sect;2. Read-only summary - manage assignments via Tab 1.</p>';
   }
 
   // Patch back link with token
