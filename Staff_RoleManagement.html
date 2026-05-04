@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Hass Petroleum - User Role Management</title>
+<style>
+  :root { --hass-blue:#1A237E; --hass-blue-2:#283593; --hass-bg:#F5F6FA; --hass-line:#E5E7EB; --hass-text:#1F2937; --hass-muted:#6B7280; --hass-green:#16A34A; --hass-amber:#D97706; --hass-red:#DC2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background:var(--hass-bg); color:var(--hass-text); }
+  header { background:var(--hass-blue); color:white; padding:18px 28px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:20px; font-weight:600; }
+  header a { color:#C5CAE9; text-decoration:none; font-size:13px; }
+  main { padding:24px 28px; max-width:1280px; margin:0 auto; }
+  .toolbar { display:flex; gap:12px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+  .toolbar input, .toolbar select { padding:8px 10px; border:1px solid var(--hass-line); border-radius:6px; font-size:14px; min-width:180px; }
+  .tabs { display:flex; gap:4px; border-bottom:1px solid var(--hass-line); margin-bottom:16px; }
+  .tab { padding:10px 16px; cursor:pointer; border:none; background:transparent; font-size:14px; color:var(--hass-muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--hass-blue); border-bottom-color:var(--hass-blue); font-weight:600; }
+  table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  thead th { text-align:left; padding:10px 12px; font-size:12px; font-weight:600; color:var(--hass-muted); text-transform:uppercase; letter-spacing:.04em; background:#FAFBFC; border-bottom:1px solid var(--hass-line); }
+  tbody td { padding:12px; border-bottom:1px solid var(--hass-line); font-size:14px; vertical-align:top; }
+  tbody tr:last-child td { border-bottom:none; }
+  .chip { display:inline-block; padding:2px 8px; background:#E8EAF6; color:var(--hass-blue); font-size:11px; border-radius:10px; margin:2px 4px 2px 0; font-weight:500; }
+  .chip.system { background:#FFF3E0; color:var(--hass-amber); }
+  .btn { background:var(--hass-blue); color:white; border:none; padding:8px 14px; border-radius:6px; font-size:13px; cursor:pointer; font-weight:500; }
+  .btn:hover:not(:disabled) { background:var(--hass-blue-2); }
+  .btn:disabled { opacity:.6; cursor:wait; }
+  .btn.secondary { background:white; color:var(--hass-text); border:1px solid var(--hass-line); }
+  .btn.danger { background:var(--hass-red); }
+  .skeleton-row td { padding:14px 12px; }
+  .skeleton-row .bar { height:12px; background:linear-gradient(90deg,#EEE 0%,#F8F8F8 50%,#EEE 100%); border-radius:4px; animation: shimmer 1.4s infinite; }
+  @keyframes shimmer { 0%{background-position:-200px 0;} 100%{background-position:200px 0;} }
+  /* Modal */
+  .modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,0.5); display:none; align-items:center; justify-content:center; z-index:50; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:white; border-radius:10px; width:560px; max-width:92vw; max-height:88vh; overflow:auto; padding:24px; box-shadow:0 24px 64px rgba(0,0,0,0.25); }
+  .modal h2 { margin:0 0 12px; font-size:18px; }
+  .modal p { color:var(--hass-muted); font-size:13px; margin:0 0 16px; }
+  .role-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin-bottom:16px; }
+  .role-grid label { font-size:13px; display:flex; align-items:flex-start; gap:8px; padding:6px; border-radius:4px; cursor:pointer; }
+  .role-grid label:hover { background:#F5F5F5; }
+  .role-grid input { margin-top:3px; }
+  .role-grid .role-meta { color:var(--hass-muted); font-size:11px; }
+  textarea { width:100%; padding:8px; border:1px solid var(--hass-line); border-radius:6px; font-family:inherit; font-size:13px; min-height:60px; resize:vertical; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
+  .toast { position:fixed; right:24px; bottom:24px; padding:12px 18px; border-radius:6px; color:white; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,0.18); z-index:60; display:none; }
+  .toast.success { background:var(--hass-green); }
+  .toast.error { background:var(--hass-red); }
+  .toast.show { display:block; }
+  .matrix { overflow-x:auto; }
+  .matrix table { min-width: 1100px; }
+  .matrix th, .matrix td { font-size:12px; padding:6px 8px; text-align:center; }
+  .matrix th:first-child, .matrix td:first-child { text-align:left; min-width:220px; }
+  .matrix .y { color:var(--hass-green); font-weight:700; }
+  .matrix .n { color:var(--hass-red); }
+  .matrix .na { color:var(--hass-muted); }
+  .empty { padding:32px; text-align:center; color:var(--hass-muted); font-size:14px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .badge.ACTIVE { background:#DCFCE7; color:#166534; }
+  .badge.INACTIVE { background:#FEE2E2; color:#991B1B; }
+</style>
+</head>
+<body>
+<header>
+  <h1>User Role Management</h1>
+  <a href="?page=staff&token=__TOKEN__" id="backLink">&larr; Back to dashboard</a>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" data-tab="users">Users &rarr; Roles</button>
+    <button class="tab" data-tab="roles">Roles &rarr; Users</button>
+    <button class="tab" data-tab="matrix">Permission matrix</button>
+  </div>
+
+  <!-- Tab 1: Users -> Roles -->
+  <section id="tab-users">
+    <div class="toolbar">
+      <select id="filterCountry">
+        <option value="">All countries</option>
+        <option value="KE">Kenya</option>
+        <option value="UG">Uganda</option>
+        <option value="TZ">Tanzania</option>
+        <option value="RW">Rwanda</option>
+      </select>
+      <input id="filterSearch" type="text" placeholder="Search by name or email" />
+      <button class="btn secondary" id="reloadUsers">Reload</button>
+    </div>
+    <table id="usersTable">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Country</th><th>Roles</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="usersBody">
+        <tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:60%"></div></td></tr>
+        <tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:80%"></div></td></tr>
+        <tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:50%"></div></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Tab 2: Roles -> Users -->
+  <section id="tab-roles" style="display:none;">
+    <div id="rolesByRoleBody">
+      <div class="empty">Loading...</div>
+    </div>
+  </section>
+
+  <!-- Tab 3: Permission matrix -->
+  <section id="tab-matrix" style="display:none;">
+    <div class="matrix" id="matrixContainer">
+      <div class="empty">Loading...</div>
+    </div>
+  </section>
+</main>
+
+<!-- Manage roles modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modalTitle">Manage roles</h2>
+    <p id="modalSubtitle"></p>
+    <div class="role-grid" id="roleCheckboxes"></div>
+    <p style="font-size:12px; margin-bottom:6px;"><strong>Reason</strong> (required when granting/revoking system-reserved roles)</p>
+    <textarea id="modalReason" placeholder="Why is this change being made?"></textarea>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modalCancel">Cancel</button>
+      <button class="btn" id="modalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  var SESSION = <?!= SESSION ?>;
+
+  // Canonical roles - matches PermissionService.gs CANONICAL_STAFF_ROLES_
+  var CANONICAL_ROLES = [
+    { code:'SUPER_ADMIN',  name:'Super Administrator',     scope:'GLOBAL',       is_system:true  },
+    { code:'ADMIN',        name:'Administrator',           scope:'COUNTRY',      is_system:true  },
+    { code:'CEO',          name:'Chief Executive',         scope:'GLOBAL',       is_system:true  },
+    { code:'CFO',          name:'Chief Financial Officer', scope:'GLOBAL',       is_system:true  },
+    { code:'COUNTRY_HEAD', name:'Country General Manager', scope:'COUNTRY',      is_system:false },
+    { code:'MANAGER',      name:'Department Manager',      scope:'COUNTRY',      is_system:false },
+    { code:'SUPERVISOR',   name:'Team Supervisor',         scope:'COUNTRY_TEAM', is_system:false },
+    { code:'AGENT',        name:'Customer Service Agent',  scope:'COUNTRY_TEAM', is_system:false },
+    { code:'FINANCE',      name:'Finance Officer',         scope:'COUNTRY',      is_system:false },
+    { code:'KYC_OFFICER',  name:'KYC Compliance Officer',  scope:'COUNTRY',      is_system:false },
+    { code:'OPS',          name:'Operations Officer',      scope:'COUNTRY',      is_system:false },
+    { code:'AUDIT_VIEWER', name:'Audit Read-Only',         scope:'GLOBAL',       is_system:true  },
+  ];
+
+  // Subset of permission matrix from gap analysis §3 (truncated; can be expanded).
+  var PERMISSION_MATRIX = [
+    { perm:'customer.view',          grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', FINANCE:'Y', KYC_OFFICER:'Y', OPS:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'customer.create',        grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', KYC_OFFICER:'Y' } },
+    { perm:'customer.update',        grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', KYC_OFFICER:'Y' } },
+    { perm:'customer.delete',        grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'customer.approve_kyc',   grants:{ SUPER_ADMIN:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', KYC_OFFICER:'Y' } },
+    { perm:'customer.set_credit',    grants:{ SUPER_ADMIN:'Y', CFO:'Y', COUNTRY_HEAD:'Y', FINANCE:'Y' } },
+    { perm:'order.view',             grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', FINANCE:'Y', OPS:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'order.create',           grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
+    { perm:'order.approve_low',      grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
+    { perm:'order.approve_mid',      grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', FINANCE:'Y' } },
+    { perm:'order.approve_high',     grants:{ SUPER_ADMIN:'Y', CEO:'Y', CFO:'Y', COUNTRY_HEAD:'Y' } },
+    { perm:'order.cancel',           grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y' } },
+    { perm:'order.dispatch',         grants:{ SUPER_ADMIN:'Y', SUPERVISOR:'Y', OPS:'Y' } },
+    { perm:'order.confirm_delivery', grants:{ SUPER_ADMIN:'Y', SUPERVISOR:'Y', OPS:'Y' } },
+    { perm:'ticket.view',            grants:{ SUPER_ADMIN:'Y', ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y', KYC_OFFICER:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'ticket.assign',          grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y' } },
+    { perm:'ticket.escalate',        grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
+    { perm:'ticket.close',           grants:{ SUPER_ADMIN:'Y', MANAGER:'Y', SUPERVISOR:'Y', AGENT:'Y' } },
+    { perm:'invoice.view',           grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE:'Y', MANAGER:'Y', AGENT:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'invoice.generate',       grants:{ SUPER_ADMIN:'Y', FINANCE:'Y' } },
+    { perm:'payment.refund',         grants:{ SUPER_ADMIN:'Y', CFO:'Y', FINANCE:'Y' } },
+    { perm:'role.assign',            grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'audit_log.view',         grants:{ SUPER_ADMIN:'Y', AUDIT_VIEWER:'Y' } },
+    { perm:'config.update',          grants:{ SUPER_ADMIN:'Y' } },
+    { perm:'user.create',            grants:{ SUPER_ADMIN:'Y', ADMIN:'Y' } },
+    { perm:'user.delete',            grants:{ SUPER_ADMIN:'Y' } },
+  ];
+
+  var state = { users: [], editingUser: null };
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+  function showToast(msg, kind) {
+    var t = $('#toast');
+    t.className = 'toast ' + (kind || 'success') + ' show';
+    t.textContent = msg;
+    setTimeout(function() { t.className = 'toast'; }, 3500);
+  }
+
+  function call(action, payload) {
+    return new Promise(function(resolve) {
+      var req = Object.assign({ service:'permissions', action:action, token:SESSION.token }, payload || {});
+      google.script.run
+        .withSuccessHandler(function(r) { resolve(r || { success:false, error:'Empty response' }); })
+        .withFailureHandler(function(e) { resolve({ success:false, error:e && e.message || 'Server error' }); })
+        .processRequest(req);
+    });
+  }
+
+  // --- Tab switching ---
+  $$('.tab').forEach(function(b) {
+    b.addEventListener('click', function() {
+      $$('.tab').forEach(function(x) { x.classList.remove('active'); });
+      b.classList.add('active');
+      var tab = b.getAttribute('data-tab');
+      $('#tab-users').style.display   = (tab === 'users') ? '' : 'none';
+      $('#tab-roles').style.display   = (tab === 'roles') ? '' : 'none';
+      $('#tab-matrix').style.display  = (tab === 'matrix') ? '' : 'none';
+      if (tab === 'roles')  renderRolesByRole();
+      if (tab === 'matrix') renderMatrix();
+    });
+  });
+
+  // --- Tab 1: users -> roles ---
+  function loadUsers() {
+    var tbody = $('#usersBody');
+    tbody.innerHTML =
+      '<tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:60%"></div></td></tr>' +
+      '<tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:80%"></div></td></tr>' +
+      '<tr class="skeleton-row"><td colspan="6"><div class="bar" style="width:50%"></div></td></tr>';
+    var filters = {
+      country_code: $('#filterCountry').value || '',
+      search:       $('#filterSearch').value || '',
+    };
+    call('listUsersForRoleAdmin', { filters: filters }).then(function(r) {
+      if (!r.success) { tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed: ' + (r.error || 'unknown') + '</td></tr>'; return; }
+      state.users = r.users || [];
+      if (!state.users.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No users match the filter.</td></tr>'; return; }
+      tbody.innerHTML = state.users.map(function(u) {
+        return '<tr>' +
+          '<td>' + escape(u.name || '(no name)') + '</td>' +
+          '<td>' + escape(u.email || '') + '</td>' +
+          '<td>' + escape(u.country_code || '-') + '</td>' +
+          '<td>' + (u.roles || []).map(function(c) {
+              var canon = CANONICAL_ROLES.filter(function(x) { return x.code === c; })[0];
+              var cls = (canon && canon.is_system) ? 'chip system' : 'chip';
+              return '<span class="' + cls + '">' + escape(c) + '</span>';
+            }).join('') + '</td>' +
+          '<td><span class="badge ' + escape(u.status || '') + '">' + escape(u.status || '') + '</span></td>' +
+          '<td><button class="btn secondary" data-uid="' + escape(u.user_id) + '">Manage</button></td>' +
+        '</tr>';
+      }).join('');
+      $$('#usersBody button[data-uid]').forEach(function(btn) {
+        btn.addEventListener('click', function() { openManageModal(btn.getAttribute('data-uid')); });
+      });
+    });
+  }
+
+  function escape(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  $('#reloadUsers').addEventListener('click', loadUsers);
+  $('#filterCountry').addEventListener('change', loadUsers);
+  $('#filterSearch').addEventListener('input', debounce(loadUsers, 300));
+
+  function debounce(fn, ms) {
+    var t; return function() {
+      var args = arguments, ctx = this;
+      clearTimeout(t); t = setTimeout(function() { fn.apply(ctx, args); }, ms);
+    };
+  }
+
+  // --- Manage roles modal ---
+  function openManageModal(userId) {
+    var u = state.users.filter(function(x) { return x.user_id === userId; })[0];
+    if (!u) return;
+    state.editingUser = u;
+    $('#modalTitle').textContent = 'Manage roles - ' + (u.name || u.email);
+    $('#modalSubtitle').textContent = 'Country: ' + (u.country_code || '-') + ' | Email: ' + (u.email || '');
+    $('#modalReason').value = '';
+    var grid = $('#roleCheckboxes'); grid.innerHTML = '';
+    CANONICAL_ROLES.forEach(function(r) {
+      var checked = (u.roles || []).indexOf(r.code) !== -1;
+      var lbl = document.createElement('label');
+      lbl.innerHTML =
+        '<input type="checkbox" value="' + r.code + '"' + (checked ? ' checked' : '') + '>' +
+        '<span><strong>' + r.code + '</strong>' + (r.is_system ? ' <span class="chip system" style="margin:0 0 0 4px;">system</span>' : '') +
+        '<br><span class="role-meta">' + r.name + ' &middot; ' + r.scope + '</span></span>';
+      grid.appendChild(lbl);
+    });
+    $('#modal').classList.add('open');
+  }
+
+  $('#modalCancel').addEventListener('click', function() {
+    $('#modal').classList.remove('open');
+    state.editingUser = null;
+  });
+
+  $('#modalSave').addEventListener('click', function() {
+    if (!state.editingUser) return;
+    var btn = $('#modalSave');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    var roleCodes = $$('#roleCheckboxes input:checked').map(function(i) { return i.value; });
+    var reason = $('#modalReason').value || '';
+    var changingSystem = roleCodes.some(function(c) {
+      var r = CANONICAL_ROLES.filter(function(x) { return x.code === c; })[0];
+      return r && r.is_system;
+    }) || (state.editingUser.roles || []).some(function(c) {
+      var r = CANONICAL_ROLES.filter(function(x) { return x.code === c; })[0];
+      return r && r.is_system;
+    });
+    if (changingSystem && !reason.trim()) {
+      btn.disabled = false; btn.textContent = 'Save';
+      showToast('A reason is required for system-reserved role changes.', 'error');
+      return;
+    }
+    if (changingSystem && !confirm('This change involves a system-reserved role. Continue?')) {
+      btn.disabled = false; btn.textContent = 'Save';
+      return;
+    }
+    call('setUserRoles', { userId: state.editingUser.user_id, roleCodes: roleCodes, reason: reason }).then(function(r) {
+      btn.disabled = false; btn.textContent = 'Save';
+      if (!r.success) { showToast('Failed: ' + (r.error || 'unknown'), 'error'); return; }
+      showToast('Roles updated.', 'success');
+      $('#modal').classList.remove('open');
+      state.editingUser = null;
+      loadUsers();
+    });
+  });
+
+  // --- Tab 2: roles -> users ---
+  function renderRolesByRole() {
+    var c = $('#rolesByRoleBody');
+    c.innerHTML = '<div class="empty">Loading...</div>';
+    call('listUsersForRoleAdmin', { filters: {} }).then(function(r) {
+      if (!r.success) { c.innerHTML = '<div class="empty">Failed: ' + (r.error || '') + '</div>'; return; }
+      var byRole = {};
+      CANONICAL_ROLES.forEach(function(role) { byRole[role.code] = []; });
+      (r.users || []).forEach(function(u) {
+        (u.roles || []).forEach(function(rc) {
+          if (!byRole[rc]) byRole[rc] = [];
+          byRole[rc].push(u);
+        });
+      });
+      c.innerHTML = CANONICAL_ROLES.map(function(role) {
+        var users = byRole[role.code] || [];
+        return '<details style="background:white; border-radius:8px; margin-bottom:8px; padding:10px 14px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">' +
+          '<summary style="cursor:pointer; font-weight:600;">' + escape(role.code) +
+          ' <span style="color:var(--hass-muted); font-weight:400;">- ' + escape(role.name) + '</span>' +
+          ' <span class="chip" style="margin-left:6px;">' + users.length + ' user' + (users.length===1?'':'s') + '</span></summary>' +
+          (users.length ?
+            '<ul style="margin:10px 0 0; padding-left:18px;">' +
+            users.map(function(u) { return '<li>' + escape(u.name || u.email) + ' <span style="color:var(--hass-muted); font-size:12px;">(' + escape(u.email || '') + ', ' + escape(u.country_code || '-') + ')</span></li>'; }).join('') +
+            '</ul>'
+            : '<p style="margin:8px 0 0; color:var(--hass-muted);">No users currently hold this role.</p>') +
+          '</details>';
+      }).join('');
+    });
+  }
+
+  // --- Tab 3: permission matrix ---
+  function renderMatrix() {
+    var c = $('#matrixContainer');
+    var head = '<tr><th>Permission</th>' + CANONICAL_ROLES.map(function(r) { return '<th>' + escape(r.code) + '</th>'; }).join('') + '</tr>';
+    var body = PERMISSION_MATRIX.map(function(row) {
+      return '<tr><td><code>' + escape(row.perm) + '</code></td>' +
+        CANONICAL_ROLES.map(function(r) {
+          var v = row.grants[r.code];
+          if (v === 'Y') return '<td class="y">&#10003;</td>';
+          if (v === '-') return '<td class="na">-</td>';
+          return '<td class="n">&times;</td>';
+        }).join('') + '</tr>';
+    }).join('');
+    c.innerHTML = '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>' +
+      '<p style="font-size:12px; color:var(--hass-muted); margin-top:12px;">' +
+      'Source: docs/roles-permissions-gap-analysis.md §3. Read-only summary - manage assignments via Tab 1.</p>';
+  }
+
+  // Patch back link with token
+  $('#backLink').setAttribute('href', '?page=staff&token=' + encodeURIComponent(SESSION.token));
+
+  loadUsers();
+</script>
+</body>
+</html>
