@@ -666,6 +666,10 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <i data-feather="shield" style="width:16px;height:16px;"></i>
         Users &amp; Roles
       </div>
+      <div class="nav-item" id="nav-role-assignment" style="display:none" onclick="gotoRoleAssignment()">
+        <i data-feather="user-check" style="width:16px;height:16px;"></i>
+        Role Assignment
+      </div>
       <div class="nav-item" id="nav-reports" data-page="reports" onclick="showPage('reports')">
         <i data-feather="file-text" style="width:16px;height:16px;"></i>
         Reports
@@ -2608,6 +2612,19 @@ if (!SESSION || !SESSION.token) {
   _gotoLogin();
 }
 
+/* Navigate the top frame to ?page=role-assignment with the live token. */
+function gotoRoleAssignment() {
+  var url = (SESSION && SESSION.scriptUrl) || '';
+  var target = url + (url.indexOf('?') === -1 ? '?' : '&') +
+    'page=role-assignment&token=' + encodeURIComponent(SESSION.token || '');
+  try {
+    if (window.top && window.top.location) { window.top.location.href = target; return; }
+    window.location.href = target;
+  } catch (e) {
+    window.location.href = target;
+  }
+}
+
 /* ── State ── */
 var currentPage = 'dashboard';
 var currentAffiliate = 'ALL';
@@ -2699,6 +2716,28 @@ function applyRoleVisibility() {
   if (usersNav)    usersNav.style.display    = adminRoles.includes(role)  ? 'flex' : 'none';
   if (reportsNav)  reportsNav.style.display  = reportRoles.includes(role) ? 'flex' : 'none';
   if (settingsNav) settingsNav.style.display = role === 'SUPER_ADMIN'     ? 'flex' : 'none';
+
+  // Role Assignment nav: shown when the user holds the `role.assign`
+  // permission. SUPER_ADMIN holds the wildcard so it always sees the link;
+  // for other roles we ask the server. The page itself enforces permission
+  // server-side, so this is purely UX.
+  var roleAssignNav = document.getElementById('nav-role-assignment');
+  if (roleAssignNav) {
+    if (role === 'SUPER_ADMIN') {
+      roleAssignNav.style.display = 'flex';
+    } else {
+      try {
+        google.script.run
+          .withSuccessHandler(function(r) {
+            var perms = (r && r.permissions) || [];
+            var ok = perms.indexOf('*') !== -1 || perms.indexOf('role.assign') !== -1;
+            roleAssignNav.style.display = ok ? 'flex' : 'none';
+          })
+          .withFailureHandler(function() { roleAssignNav.style.display = 'none'; })
+          .processRequest({ service:'permissions', action:'getMyPermissions', token: SESSION.token });
+      } catch(e) { roleAssignNav.style.display = 'none'; }
+    }
+  }
 
   // Backup tab + Data Upload tab: visible to SUPER_ADMIN and GROUP_HEAD only
   var canPriv = ['SUPER_ADMIN','GROUP_HEAD'].includes(role);
