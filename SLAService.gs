@@ -64,6 +64,14 @@ function handleSLARequest(params) {
       case 'getSLAAnalytics': return getSLAAnalytics(params.filters || params.period, params.affiliate);
       case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters || params.period, params.affiliate);
       case 'getStaffList': return getStaffList();
+      case 'getActiveBreaches':
+        return (typeof getSLABreachWidget === 'function')
+          ? getSLABreachWidget(params._session, params.filter || {})
+          : { success: false, error: 'SLABreachDetector not loaded' };
+      case 'detectTicketBreaches':
+        return (typeof detectTicketBreaches === 'function')
+          ? detectTicketBreaches()
+          : { success: false, error: 'SLABreachDetector not loaded' };
       case 'getFinanceApproverDetail':
         return getFinanceApproverDetail(params.approverName, params.filters, params.affiliate);
       case 'getPOApproverDetail':
