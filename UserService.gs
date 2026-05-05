@@ -105,7 +105,7 @@ function addStaffUser(data) {
   var userId = 'USR' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 8).toUpperCase();
   var now    = new Date().toISOString();
 
-  appendRow('Users', {
+  var newUser = {
     user_id:          userId,
     email:            data.email.trim(),
     first_name:       data.first_name.trim(),
@@ -119,7 +119,12 @@ function addStaffUser(data) {
     password_hash:    hashedPassword,
     created_at:       now,
     updated_at:       now,
-  });
+  };
+  appendRow('Users', newUser);
+  try {
+    var safeUser = Object.assign({}, newUser); delete safeUser.password_hash;
+    auditLogCreate('User', userId, '', safeUser, data.country_code || '');
+  } catch(auditErr) {}
 
   try {
     MailApp.sendEmail({
@@ -183,9 +188,14 @@ function updateStaffUser(userId, data) {
     var dup = findRow('Users', 'email', updates.email);
     if (dup && dup.user_id !== userId) return { success: false, error: 'Email already in use by another user' };
   }
+  var before = findRow('Users', 'user_id', userId) || {};
   var ok = updateRow('Users', 'user_id', userId, updates);
   if (!ok) return { success: false, error: 'User not found' };
   try { _invalidatePermissionCache(userId); } catch(e) {}
+  try {
+    var beforeSubset = {}; Object.keys(updates).forEach(function(k) { beforeSubset[k] = before[k]; });
+    auditLogUpdate('User', userId, '', beforeSubset, updates, before.country_code || '');
+  } catch(e) {}
   return { success: true, message: 'User updated' };
 }
 
@@ -199,6 +209,7 @@ function updateStaffRole(userId, newRole) {
     return { success: false, error: 'Could not validate role: ' + e.message };
   }
 
+  var before = findRow('Users', 'user_id', userId) || {};
   var success = updateRow('Users', 'user_id', userId, { role: newRole });
   if (!success) return { success: false, error: 'User not found' };
 
@@ -211,6 +222,10 @@ function updateStaffRole(userId, newRole) {
   } catch(e) {
     Logger.log('[UserService] user_roles sync failed: ' + e.message);
   }
+  try {
+    auditLogCustom('User', userId, '', 'ROLE_CHANGED',
+      { from_role: before.role || '', to_role: newRole }, before.country_code || '');
+  } catch(e) {}
   return { success: true, message: 'Role updated to ' + newRole };
 }
 
@@ -218,10 +233,14 @@ function setUserStatus(userId, status) {
   if (!userId || !status) return { success: false, error: 'userId and status required' };
   if (['ACTIVE', 'INACTIVE'].indexOf(status) === -1) return { success: false, error: 'Invalid status' };
 
+  var before = findRow('Users', 'user_id', userId) || {};
   var success = updateRow('Users', 'user_id', userId, { status: status });
-  return success
-    ? { success: true,  message: 'Status updated to ' + status }
-    : { success: false, error:   'User not found' };
+  if (!success) return { success: false, error: 'User not found' };
+  try {
+    auditLogCustom('User', userId, '', status === 'ACTIVE' ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
+      { from_status: before.status || '', to_status: status }, before.country_code || '');
+  } catch(e) {}
+  return { success: true,  message: 'Status updated to ' + status };
 }
 
 function resetUserPassword(userId, userType) {
@@ -237,6 +256,10 @@ function resetUserPassword(userId, userType) {
   var hashedPassword = hashPassword(tempPassword);
 
   updateRow(sheetName, idField, userId, { password_hash: hashedPassword });
+  try {
+    auditLogCustom(userType === 'CUSTOMER' ? 'Contact' : 'User', userId, '',
+      'PASSWORD_RESET_BY_ADMIN', { admin_initiated: true }, row.country_code || '');
+  } catch(e) {}
 
   var email = String(row.email || '').trim();
   var name  = String(row.first_name || '').trim() || 'there';
@@ -460,9 +483,12 @@ function setContactPortalAccess(contactId, hasAccess) {
   var success = updateRow('Contacts', 'contact_id', contactId, {
     is_portal_user: hasAccess ? true : false,
   });
-  return success
-    ? { success: true,  message: 'Portal access ' + (hasAccess ? 'enabled' : 'disabled') }
-    : { success: false, error:   'Contact not found' };
+  if (!success) return { success: false, error: 'Contact not found' };
+  try {
+    auditLogCustom('Contact', contactId, '',
+      hasAccess ? 'PORTAL_ACCESS_GRANTED' : 'PORTAL_ACCESS_REVOKED', {}, '');
+  } catch(e) {}
+  return { success: true,  message: 'Portal access ' + (hasAccess ? 'enabled' : 'disabled') };
 }
 
 /**
@@ -488,7 +514,7 @@ function addCustomerContact(customerId, data, actorId) {
   var now = new Date().toISOString();
   var grantPortal = !!data.is_portal_user;
 
-  appendRow('Contacts', {
+  var newContact = {
     contact_id:     contactId,
     customer_id:    customerId,
     first_name:     String(data.first_name).trim(),
@@ -502,7 +528,9 @@ function addCustomerContact(customerId, data, actorId) {
     created_by:     actorId || 'STAFF',
     created_at:     now,
     updated_at:     now,
-  });
+  };
+  appendRow('Contacts', newContact);
+  try { auditLogCreate('Contact', contactId, actorId || '', newContact, ''); } catch(e) {}
 
   var tempPassword = '';
   if (grantPortal) {
@@ -552,9 +580,14 @@ function updateCustomerContact(contactId, data) {
       return { success: false, error: 'Email already in use by another contact' };
     }
   }
+  var before = findRow('Contacts', 'contact_id', contactId) || {};
   var ok = updateRow('Contacts', 'contact_id', contactId, updates);
   if (!ok) return { success: false, error: 'Contact not found' };
   try { clearSheetCache('Contacts'); } catch(e) {}
+  try {
+    var beforeSubset = {}; Object.keys(updates).forEach(function(k) { beforeSubset[k] = before[k]; });
+    auditLogUpdate('Contact', contactId, '', beforeSubset, updates, '');
+  } catch(e) {}
   return { success: true, message: 'Contact updated' };
 }
 
@@ -581,7 +614,7 @@ function createCustomerAccount(data, actorId) {
   var country      = String(data.country_code || 'KE').toUpperCase();
   var accountNum   = String(data.account_number || ('HASS-' + country + '-' + customerId.substring(4, 10))).toUpperCase();
 
-  appendRow('Customers', {
+  var newCustomer = {
     customer_id:      customerId,
     company_name:     company,
     trading_name:     String(data.trading_name || company).trim(),
@@ -597,14 +630,16 @@ function createCustomerAccount(data, actorId) {
     created_by:       actorId || 'SUPER_ADMIN',
     created_at:       now,
     updated_at:       now,
-  });
+  };
+  appendRow('Customers', newCustomer);
+  try { auditLogCreate('Customer', customerId, actorId || '', newCustomer, country); } catch(e) {}
 
   // Provision primary contact + portal user with a temp password.
   var contactId   = 'CON' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 6).toUpperCase();
   var tempPassword = generateTempPassword();
   var hashed = hashPassword(tempPassword);
 
-  appendRow('Contacts', {
+  var primaryContact = {
     contact_id:     contactId,
     customer_id:    customerId,
     first_name:     String(data.first_name || '').trim(),
@@ -619,7 +654,12 @@ function createCustomerAccount(data, actorId) {
     created_by:     actorId || 'SUPER_ADMIN',
     created_at:     now,
     updated_at:     now,
-  });
+  };
+  appendRow('Contacts', primaryContact);
+  try {
+    var safe = Object.assign({}, primaryContact); delete safe.password_hash;
+    auditLogCreate('Contact', contactId, actorId || '', safe, country);
+  } catch(e) {}
 
   try {
     var welcome = renderWelcomeEmail(data.first_name || company, company, accountNum, email, tempPassword);
@@ -697,6 +737,10 @@ function approveSignup(requestId, approvedBy) {
       approved_by: approvedBy,
       approved_at: new Date().toISOString(),
     });
+    try {
+      auditLogCustom('SignupRequest', requestId, approvedBy || '', 'APPROVE',
+        { email: req.email, contact_id: contactId }, '');
+    } catch(e) {}
 
     try {
       MailApp.sendEmail(req.email, 'Your Hass Petroleum Portal Access',
@@ -731,6 +775,10 @@ function rejectSignup(requestId, reason) {
       rejection_reason: reason || '',
       rejected_at:      new Date().toISOString(),
     });
+    try {
+      auditLogCustom('SignupRequest', requestId, '', 'REJECT',
+        { email: req.email, reason: reason || '' }, '');
+    } catch(e) {}
 
     try {
       MailApp.sendEmail(req.email, 'Hass Petroleum Portal - Application Update',

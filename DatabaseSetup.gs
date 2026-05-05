@@ -346,8 +346,32 @@ function getCurrentDate()      { return new Date(); }
 // AUDIT & CONFIG
 // ============================================================================
 
+/**
+ * Legacy positional audit writer kept for backwards compatibility with
+ * existing call sites. New code should call audit_log() / auditLogCreate /
+ * auditLogUpdate / auditLogDelete / auditLogCustom from AuditService.gs.
+ *
+ * This shim normalises every legacy call through the centralised
+ * audit_log() pipeline so IP / user-agent / actor resolution stay
+ * consistent (G-005).
+ */
 function logAudit(entityType, entityId, action, actorType, actorId, actorEmail, changes, metadata) {
   try {
+    if (typeof audit_log === 'function') {
+      audit_log({
+        entity_type:   entityType,
+        entity_id:     entityId,
+        action:        action,
+        actor_user_id: actorId,
+        actor_type:    actorType,
+        actor_email:   actorEmail,
+        changes:       changes  || {},
+        metadata:      metadata || {},
+        country_code:  (metadata && metadata.countryCode) || '',
+      });
+      return;
+    }
+    // Fallback if AuditService hasn't loaded yet during early bootstrap.
     appendRow('AuditLog', {
       log_id:           generateUUID(),
       entity_type:      entityType,

@@ -63,10 +63,17 @@ function loginUser(params) {
   var hashed = hashPassword(password);
 
   var sr = findStaffByEmail(email, hashed);
-  if (sr.error) return { success: false, error: sr.error };
+  if (sr.error) {
+    _auditLoginFailed_(email, sr.error, sr.user && sr.user.user_id, 'STAFF');
+    return { success: false, error: sr.error };
+  }
   if (sr.found) {
     var token = createSession(sr.user.user_id, 'STAFF', sr.user.role, 8);
     updateLastLogin('Users', 'user_id', sr.user.user_id);
+    try {
+      auditLogCustom('User', sr.user.user_id, sr.user.user_id, 'LOGIN',
+        { email: email, role: sr.user.role, userType: 'STAFF' }, sr.user.country_code || '');
+    } catch(e) {}
     return { success: true, token: token, role: sr.user.role, userId: sr.user.user_id,
       name: trim2(sr.user.first_name) + ' ' + trim2(sr.user.last_name),
       email: email, userType: 'STAFF',
@@ -74,10 +81,17 @@ function loginUser(params) {
   }
 
   var cr = findCustomerByEmail(email, hashed);
-  if (cr.error) return { success: false, error: cr.error };
+  if (cr.error) {
+    _auditLoginFailed_(email, cr.error, cr.contact && cr.contact.contact_id, 'CUSTOMER');
+    return { success: false, error: cr.error };
+  }
   if (cr.found) {
     var ctoken = createSession(cr.contact.contact_id, 'CUSTOMER', 'CUSTOMER', 24);
     updateLastLogin('Contacts', 'contact_id', cr.contact.contact_id);
+    try {
+      auditLogCustom('Contact', cr.contact.contact_id, cr.contact.contact_id, 'LOGIN',
+        { email: email, userType: 'CUSTOMER', customer_id: cr.contact.customer_id || '' }, '');
+    } catch(e) {}
     return { success: true, token: ctoken, role: 'CUSTOMER', userId: cr.contact.contact_id,
       customerId: String(cr.contact.customer_id || ''),
       name: trim2(cr.contact.first_name) + ' ' + trim2(cr.contact.last_name),
@@ -85,7 +99,16 @@ function loginUser(params) {
       redirectUrl: getScriptUrl() + '?page=portal&token=' + ctoken };
   }
 
+  _auditLoginFailed_(email, 'No account found for this email address.', '', '');
   return { success: false, error: 'No account found for this email address.' };
+}
+
+function _auditLoginFailed_(email, reason, userId, userType) {
+  try {
+    auditLogCustom(userType === 'STAFF' ? 'User' : (userType === 'CUSTOMER' ? 'Contact' : 'Auth'),
+      userId || email, userId || '', 'LOGIN_FAILED',
+      { email: email, reason: reason, userType: userType || 'UNKNOWN' }, '');
+  } catch(e) {}
 }
 
 function findStaffByEmail(email, hashed) {
@@ -158,7 +181,16 @@ function logoutUser(params) {
   var token = String(params.token || '').trim();
   if (!token) return { success: true };
   var tokenHash = hashPassword(token);
+  var sess = findRow('Sessions', 'token_hash', tokenHash);
   updateRow('Sessions', 'token_hash', tokenHash, { is_active: 0 });
+  if (sess) {
+    try {
+      var entityType = sess.user_type === 'STAFF' ? 'User'
+                     : sess.user_type === 'CUSTOMER' ? 'Contact' : 'Session';
+      auditLogCustom(entityType, sess.user_id, sess.user_id, 'LOGOUT',
+        { session_id: sess.session_id, userType: sess.user_type }, '');
+    } catch(e) {}
+  }
   return { success: true };
 }
 
@@ -323,6 +355,10 @@ function requestPasswordReset(params) {
     used:       false,
     created_at: new Date().toISOString(),
   });
+  try {
+    auditLogCustom(userType === 'STAFF' ? 'User' : 'Contact', userId, userId,
+      'PASSWORD_RESET_INITIATED', { email: email, userType: userType }, '');
+  } catch(e) {}
 
   try {
     var firstName = '';
@@ -437,10 +473,18 @@ function setNewPassword(params) {
 
   if (staffRow) {
     updateRow('Users', 'user_id', staffRow.user_id, { password_hash: hashed });
+    try {
+      auditLogCustom('User', staffRow.user_id, staffRow.user_id, 'PASSWORD_RESET_COMPLETED',
+        { email: email, userType: 'STAFF' }, staffRow.country_code || '');
+    } catch(e) {}
     return { success: true };
   }
   if (contactRow) {
     updateRow('Contacts', 'contact_id', contactRow.contact_id, { password_hash: hashed });
+    try {
+      auditLogCustom('Contact', contactRow.contact_id, contactRow.contact_id, 'PASSWORD_RESET_COMPLETED',
+        { email: email, userType: 'CUSTOMER' }, '');
+    } catch(e) {}
     return { success: true };
   }
   return { success: false, error: 'Account not found.' };

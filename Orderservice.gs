@@ -307,14 +307,20 @@ function addOrderLines(orderId, lines, context) {
     
     // Recalculate order totals
     recalculateOrderTotals(orderId);
-    
+
     clearSheetCache('OrderLines');
-    
+
+    try {
+      auditLogCustom('Order', orderId, (context && context.actorId) || '', 'LINES_ADDED',
+        { count: createdLines.length, line_ids: createdLines.map(function(l){ return l.line_id; }) },
+        order.country_code || '');
+    } catch(e) {}
+
     return {
       success: true,
       linesAdded: createdLines.length,
     };
-    
+
   } catch (e) {
     Logger.log('addOrderLines error: ' + e.message);
     return { success: false, error: 'Failed to add order lines' };
@@ -353,14 +359,19 @@ function updateOrderLine(lineId, updates, context) {
     }
     
     updateRow('OrderLines', 'line_id', lineId, updates);
-    
+
     // Recalculate order totals
     recalculateOrderTotals(line.order_id);
-    
+
     clearSheetCache('OrderLines');
-    
+
+    try {
+      auditLogUpdate('OrderLine', lineId, (context && context.actorId) || '', line, updates,
+        order.country_code || '');
+    } catch(e) {}
+
     return { success: true };
-    
+
   } catch (e) {
     Logger.log('updateOrderLine error: ' + e.message);
     return { success: false, error: 'Failed to update order line' };
@@ -386,14 +397,19 @@ function removeOrderLine(lineId, context) {
     }
     
     deleteRow('OrderLines', 'line_id', lineId, true);
-    
+
     // Recalculate order totals
     recalculateOrderTotals(line.order_id);
-    
+
     clearSheetCache('OrderLines');
-    
+
+    try {
+      auditLogDelete('OrderLine', lineId, (context && context.actorId) || '', line,
+        order.country_code || '');
+    } catch(e) {}
+
     return { success: true };
-    
+
   } catch (e) {
     Logger.log('removeOrderLine error: ' + e.message);
     return { success: false, error: 'Failed to remove order line' };
@@ -648,11 +664,24 @@ function approveOrder(orderId, context) {
   // Update credit used
   const customer = getById('Customers', order.customer_id);
   if (customer && order.payment_status !== 'PREPAID') {
+    var newCreditUsed = (customer.credit_used || 0) + order.total_amount;
     updateRow('Customers', 'customer_id', order.customer_id, {
-      credit_used: (customer.credit_used || 0) + order.total_amount,
+      credit_used: newCreditUsed,
     });
     clearSheetCache('Customers');
+    try {
+      auditLogUpdate('Customer', order.customer_id, actorId || '',
+        { credit_used: customer.credit_used || 0 },
+        { credit_used: newCreditUsed },
+        customer.country_code || '');
+    } catch(e) {}
   }
+
+  try {
+    auditLogCustom('Order', orderId, actorId || '', 'APPROVE',
+      { amount: order.total_amount, currency: order.currency_code || 'KES' },
+      order.country_code || '');
+  } catch(e) {}
 
   return updateOrderStatus(orderId, 'APPROVED', context);
 }
@@ -673,7 +702,12 @@ function rejectOrder(orderId, reason, context) {
   if (!['SUBMITTED', 'PENDING_APPROVAL'].includes(order.status)) {
     return { success: false, error: 'Order cannot be rejected in current status' };
   }
-  
+
+  try {
+    auditLogCustom('Order', orderId, (context && context.actorId) || '', 'REJECT',
+      { reason: reason || '' }, order.country_code || '');
+  } catch(e) {}
+
   return updateOrderStatus(orderId, 'REJECTED', context, {
     rejection_reason: reason,
   });
@@ -706,9 +740,20 @@ function cancelOrder(orderId, reason, context) {
         credit_used: newCreditUsed,
       });
       clearSheetCache('Customers');
+      try {
+        auditLogUpdate('Customer', order.customer_id, (context && context.actorId) || '',
+          { credit_used: customer.credit_used || 0 },
+          { credit_used: newCreditUsed },
+          customer.country_code || '');
+      } catch(e) {}
     }
   }
-  
+
+  try {
+    auditLogCustom('Order', orderId, (context && context.actorId) || '', 'CANCEL',
+      { reason: reason || '', previous_status: order.status }, order.country_code || '');
+  } catch(e) {}
+
   return updateOrderStatus(orderId, 'CANCELLED', context, {
     reason: reason,
   });
@@ -821,6 +866,13 @@ function completeLoading(orderId, loadData, context) {
  * @returns {Object} Result
  */
 function dispatchOrder(orderId, dispatchData, context) {
+  try {
+    var order = getById('Orders', orderId);
+    auditLogCustom('Order', orderId, (context && context.actorId) || '', 'DISPATCH',
+      { gps_lat: dispatchData.gps_lat || '', gps_lng: dispatchData.gps_lng || '',
+        vehicle_id: order ? order.vehicle_id : '', driver_id: order ? order.driver_id : '' },
+      order ? (order.country_code || '') : '');
+  } catch(e) {}
   return updateOrderStatus(orderId, 'IN_TRANSIT', context, {
     gps_lat: dispatchData.gps_lat || '',
     gps_lng: dispatchData.gps_lng || '',
@@ -905,6 +957,15 @@ function confirmDelivery(orderId, deliveryData, context) {
     clearSheetCache('Vehicles');
     clearSheetCache('Drivers');
     
+    try {
+      auditLogCustom('Order', orderId, (context && context.actorId) || '',
+        isPartial ? 'PARTIAL_DELIVERY' : 'DELIVERY_CONFIRMED',
+        { confirmed_by: deliveryData.confirmedBy || '',
+          gps_lat: deliveryData.gps_lat || '', gps_lng: deliveryData.gps_lng || '',
+          delivered_lines: Object.keys(lineUpdatesMap).length },
+        order.country_code || '');
+    } catch(e) {}
+
     return updateOrderStatus(orderId, newStatus, context, {
       delivery_confirmed_by: deliveryData.confirmedBy || '',
       gps_lat: deliveryData.gps_lat || '',
