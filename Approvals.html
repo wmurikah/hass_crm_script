@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Approvals - Hass Petroleum</title>
+<style>
+  :root { --navy:#1A237E; --orange:#FF6F00; --slate:#475569; --line:#e2e8f0; --bg:#f1f5f9; --green:#16a34a; --red:#dc2626; --amber:#d97706; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Segoe UI',Roboto,Arial,sans-serif; background:var(--bg); color:#0f172a; }
+  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; align-items:center; gap:16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; letter-spacing:0.4px; }
+  header .sub { font-size:12px; opacity:0.85; }
+  main { padding:18px 24px; max-width:1100px; margin:0 auto; }
+  .summary { display:flex; align-items:center; justify-content:space-between; margin:8px 4px 12px; font-size:13px; color:var(--slate); }
+  button { background:var(--navy); color:#fff; border:none; padding:8px 14px; font-size:13px; font-weight:600; border-radius:6px; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  button.danger { background:var(--red); }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:14px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+  .card-title { font-size:15px; font-weight:600; color:#0f172a; }
+  .card-meta { font-size:12px; color:var(--slate); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; background:#e0e7ff; color:var(--navy); }
+  .pill.high { background:#fee2e2; color:#991b1b; }
+  .pill.role { background:#fef3c7; color:#92400e; }
+  .pill.expired { background:#fde68a; color:#92400e; }
+  .row { display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:8px; font-size:13px; margin-bottom:10px; }
+  .row label { color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:2px; }
+  textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:13px; min-height:60px; }
+  .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+  .empty { text-align:center; padding:48px; color:var(--slate); background:#fff; border-radius:10px; border:1px dashed var(--line); }
+  .err { background:#fee2e2; color:#991b1b; padding:10px 14px; border-radius:6px; margin:10px 0; }
+  .ok  { background:#dcfce7; color:#166534; padding:10px 14px; border-radius:6px; margin:10px 0; }
+  details summary { cursor:pointer; color:var(--navy); font-size:12px; }
+  details pre { background:#f8fafc; padding:10px; border-radius:6px; font-size:11px; overflow:auto; }
+  .toolbar { display:flex; gap:8px; align-items:center; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Approvals</h1>
+  <span class="sub">Pending approvals routed to you by the workflow engine</span>
+</header>
+<main>
+  <div class="toolbar">
+    <button id="btn_refresh">Refresh</button>
+    <span id="summary" class="summary"></span>
+  </div>
+
+  <div id="msgBox"></div>
+  <div id="list"></div>
+</main>
+
+<script>
+  var SESSION = <?!= SESSION ?>;
+
+  function $(id) { return document.getElementById(id); }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function showMsg(html, kind) {
+    $('msgBox').innerHTML = html ? '<div class="' + (kind || 'ok') + '">' + html + '</div>' : '';
+    if (html) setTimeout(function() { $('msgBox').innerHTML = ''; }, 5000);
+  }
+
+  function fmtAmount(ctx) {
+    if (!ctx) return '';
+    if (ctx.amount != null) {
+      var n = Number(ctx.amount);
+      if (!isNaN(n)) return (ctx.currency || 'KES') + ' ' + n.toLocaleString();
+    }
+    if (ctx.new_limit != null) {
+      var n2 = Number(ctx.new_limit);
+      if (!isNaN(n2)) return 'New limit: ' + (ctx.currency || 'KES') + ' ' + n2.toLocaleString();
+    }
+    return '';
+  }
+
+  function entitySummary(r) {
+    var ctx = r.context_parsed || {};
+    if (ctx.summary) return escapeHtml(ctx.summary);
+    return escapeHtml((r.entity_type || '').toUpperCase() + ' ' + (r.entity_id || ''));
+  }
+
+  function isExpired(r) {
+    if (!r.expires_at) return false;
+    return new Date(r.expires_at) < new Date();
+  }
+
+  function renderRow(r) {
+    var ctx = r.context_parsed || {};
+    return '' +
+      '<div class="card" data-id="' + escapeHtml(r.request_id) + '">' +
+        '<div class="card-head">' +
+          '<div>' +
+            '<div class="card-title">' + entitySummary(r) + '</div>' +
+            '<div class="card-meta">' + escapeHtml(r.entity_type) + ' &middot; ' + escapeHtml(r.entity_id) + '</div>' +
+          '</div>' +
+          '<div>' +
+            (isExpired(r) ? '<span class="pill expired">SLA OVERDUE</span> ' : '') +
+            '<span class="pill role">' + escapeHtml(r.required_approver_role || 'USER') + '</span> ' +
+            (r.escalation_level && parseInt(r.escalation_level) > 0
+              ? '<span class="pill high">ESC L' + escapeHtml(r.escalation_level) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="row">' +
+          '<div><label>Amount</label>' + (fmtAmount(ctx) || '&mdash;') + '</div>' +
+          '<div><label>Country</label>' + escapeHtml(r.country_code || ctx.country_code || '&mdash;') + '</div>' +
+          '<div><label>Submitted</label>' + escapeHtml(r.created_at) + '</div>' +
+          '<div><label>Expires</label>' + escapeHtml(r.expires_at || '&mdash;') + '</div>' +
+        '</div>' +
+
+        '<details><summary>Context</summary><pre>' + escapeHtml(JSON.stringify(ctx, null, 2)) + '</pre></details>' +
+
+        '<textarea placeholder="Optional comment / required reason on rejection" id="cm_' + escapeHtml(r.request_id) + '"></textarea>' +
+        '<div class="actions">' +
+          '<button class="secondary" data-act="reject" data-id="' + escapeHtml(r.request_id) + '">Reject</button>' +
+          '<button data-act="approve" data-id="' + escapeHtml(r.request_id) + '">Approve</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function render(requests) {
+    if (!requests || !requests.length) {
+      $('list').innerHTML = '<div class="empty">No pending approvals.</div>';
+      $('summary').textContent = '0 pending';
+      return;
+    }
+    $('summary').textContent = requests.length + ' pending';
+    $('list').innerHTML = requests.map(renderRow).join('');
+    [].forEach.call(document.querySelectorAll('button[data-act]'), function(btn) {
+      btn.onclick = function() {
+        var id  = btn.getAttribute('data-id');
+        var act = btn.getAttribute('data-act');
+        var ta  = document.getElementById('cm_' + id);
+        var txt = ta ? ta.value.trim() : '';
+        if (act === 'reject' && !txt) {
+          showMsg('Rejection requires a reason.', 'err');
+          if (ta) ta.focus();
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = act === 'approve' ? 'Approving...' : 'Rejecting...';
+        var payload = {
+          service:   'approvals',
+          action:    act === 'approve' ? 'approve' : 'reject',
+          token:     SESSION.token,
+          requestId: id,
+        };
+        if (act === 'approve') payload.comment = txt;
+        else payload.reason = txt;
+        google.script.run
+          .withSuccessHandler(function(resp) {
+            if (!resp || !resp.success) {
+              showMsg((resp && resp.error) || 'Request failed', 'err');
+              btn.disabled = false;
+              btn.textContent = act === 'approve' ? 'Approve' : 'Reject';
+              return;
+            }
+            showMsg(act === 'approve'
+              ? 'Approved. ' + (resp.entity_status === 'APPROVED' ? 'Entity is now APPROVED.' : 'Waiting for ' + resp.remaining_pending + ' more approver(s).')
+              : 'Rejected.', 'ok');
+            load();
+          })
+          .withFailureHandler(function(err) {
+            showMsg(err && err.message ? err.message : 'Request failed', 'err');
+            btn.disabled = false;
+            btn.textContent = act === 'approve' ? 'Approve' : 'Reject';
+          })
+          .processRequest(payload);
+      };
+    });
+  }
+
+  function load() {
+    $('summary').textContent = 'Loading...';
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.success) {
+          showMsg((resp && resp.error) || 'Unknown error', 'err');
+          render([]);
+          return;
+        }
+        render(resp.requests || []);
+      })
+      .withFailureHandler(function(err) {
+        showMsg(err && err.message ? err.message : 'Request failed', 'err');
+        render([]);
+      })
+      .processRequest({ service: 'approvals', action: 'pending', token: SESSION.token });
+  }
+
+  $('btn_refresh').onclick = load;
+  load();
+</script>
+</body>
+</html>

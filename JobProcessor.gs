@@ -13,6 +13,7 @@
  *  SESSION_CLEANUP      Hard-delete expired session rows
  *  AUDIT_CLEANUP        Hard-delete AuditLog rows older than 90 days
  *  ORACLE_SYNC          POST data to Oracle integration endpoint
+ *  APPROVAL_TIMEOUT_CHECK Re-run ApprovalEngine timeout/escalation sweep
  *
  * RETRY POLICY
  * ────────────
@@ -130,6 +131,7 @@ function _dispatch_(type, payload) {
     case 'SESSION_CLEANUP':    return _jobSessionClean_();
     case 'AUDIT_CLEANUP':      return _jobAuditClean_();
     case 'ORACLE_SYNC':        return _jobOracleSync_(payload);
+    case 'APPROVAL_TIMEOUT_CHECK': return _jobApprovalTimeoutCheck_(payload);
     default:
       throw new Error('Unknown job type: ' + type);
   }
@@ -222,6 +224,15 @@ function _jobAuditClean_() {
   cacheInvalidate('AuditLog');
   Logger.log('[JobProcessor] Audit cleanup: archived ' + result.updated);
   return { removed: result.updated };
+}
+
+function _jobApprovalTimeoutCheck_(p) {
+  if (typeof runApprovalTimeoutCheck !== 'function') {
+    throw new Error('ApprovalEngine.runApprovalTimeoutCheck not loaded');
+  }
+  var result = runApprovalTimeoutCheck();
+  Logger.log('[JobProcessor] APPROVAL_TIMEOUT_CHECK ' + JSON.stringify(result));
+  return result;
 }
 
 function _jobOracleSync_(p) {
@@ -351,6 +362,30 @@ function scheduleDailyMaintenance() {
   enqueueJob('SESSION_CLEANUP', {});
   enqueueJob('AUDIT_CLEANUP',   {});
   Logger.log('[JobProcessor] Daily maintenance jobs enqueued');
+}
+
+/**
+ * Enqueue an ApprovalEngine SLA-timeout sweep. Install as an hourly
+ * time-driven trigger (see installApprovalTimeoutTrigger).
+ */
+function scheduleApprovalTimeoutCheck() {
+  enqueueJob('APPROVAL_TIMEOUT_CHECK', {});
+  Logger.log('[JobProcessor] APPROVAL_TIMEOUT_CHECK enqueued');
+}
+
+function installApprovalTimeoutTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'scheduleApprovalTimeoutCheck') {
+      Logger.log('[JobProcessor] Approval timeout trigger already installed');
+      return;
+    }
+  }
+  ScriptApp.newTrigger('scheduleApprovalTimeoutCheck')
+    .timeBased()
+    .everyHours(1)
+    .create();
+  Logger.log('[JobProcessor] Hourly approval timeout trigger installed');
 }
 
 /**
