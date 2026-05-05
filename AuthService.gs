@@ -30,6 +30,10 @@ function handleAuthRequest(params) {
       case 'verifyOtp':            return verifyOtp(params);
       case 'setNewPassword':       return setNewPassword(params);
       case 'getStaffInfo':         return getStaffInfo(params.userId);
+      case 'mfaEnrollStart':       return mfaEnrollStart(params);
+      case 'mfaEnrollVerify':      return mfaEnrollVerify(params);
+      case 'mfaVerify':            return mfaVerify(params);
+      case 'mfaDisable':           return mfaDisableForUser(params);
       default:
         return { success: false, error: 'Unknown auth action: ' + params.action };
     }
@@ -68,16 +72,26 @@ function loginUser(params) {
     return { success: false, error: sr.error };
   }
   if (sr.found) {
-    var token = createSession(sr.user.user_id, 'STAFF', sr.user.role, 8);
-    updateLastLogin('Users', 'user_id', sr.user.user_id);
-    try {
-      auditLogCustom('User', sr.user.user_id, sr.user.user_id, 'LOGIN',
-        { email: email, role: sr.user.role, userType: 'STAFF' }, sr.user.country_code || '');
-    } catch(e) {}
-    return { success: true, token: token, role: sr.user.role, userId: sr.user.user_id,
-      name: trim2(sr.user.first_name) + ' ' + trim2(sr.user.last_name),
-      email: email, userType: 'STAFF',
-      redirectUrl: getScriptUrl() + '?page=staff&token=' + token };
+    // G-008: enforce MFA for privileged roles before issuing a session.
+    if (typeof userRequiresMfa === 'function' && userRequiresMfa(sr.user.user_id)) {
+      var enrolled = String(sr.user.mfa_enabled || '0') === '1';
+      var mode = enrolled ? 'verify' : 'enroll';
+      var challengeToken = createMfaChallenge(sr.user.user_id, 'STAFF', sr.user.role, mode);
+      try {
+        auditLogCustom('User', sr.user.user_id, sr.user.user_id, 'MFA_CHALLENGE_ISSUED',
+          { email: email, role: sr.user.role, mode: mode }, sr.user.country_code || '');
+      } catch(e) {}
+      var page = enrolled ? 'mfa-verify' : 'mfa-enroll';
+      return {
+        success: true,
+        mfaRequired: true,
+        mfaMode: mode,
+        challengeToken: challengeToken,
+        email: email,
+        redirectUrl: getScriptUrl() + '?page=' + page + '&challenge=' + encodeURIComponent(challengeToken),
+      };
+    }
+    return _completeStaffLogin_(sr.user, email);
   }
 
   var cr = findCustomerByEmail(email, hashed);
@@ -508,6 +522,214 @@ function getStaffInfo(userId) {
   } catch(e) {
     return { name: userId, role: 'CS_AGENT' };
   }
+}
+
+// ================================================================
+// MFA ENROLMENT / CHALLENGE / DISABLE  (G-008)
+// ================================================================
+
+function _completeStaffLogin_(user, email) {
+  var token = createSession(user.user_id, 'STAFF', user.role, 8);
+  try {
+    updateRow('Users', 'user_id', user.user_id, {
+      last_login_at:         new Date().toISOString(),
+      failed_login_attempts: 0,
+      locked_until:          '',
+    });
+  } catch(e) {
+    updateLastLogin('Users', 'user_id', user.user_id);
+  }
+  try {
+    auditLogCustom('User', user.user_id, user.user_id, 'LOGIN',
+      { email: email, role: user.role, userType: 'STAFF' }, user.country_code || '');
+  } catch(e) {}
+  return {
+    success:  true,
+    token:    token,
+    role:     user.role,
+    userId:   user.user_id,
+    name:     trim2(user.first_name) + ' ' + trim2(user.last_name),
+    email:    email,
+    userType: 'STAFF',
+    redirectUrl: getScriptUrl() + '?page=staff&token=' + token,
+  };
+}
+
+function _bumpStaffFailedAttempts_(userId) {
+  if (!userId) return;
+  try {
+    var u = findRow('Users', 'user_id', userId);
+    if (!u) return;
+    var fails = (parseInt(u.failed_login_attempts, 10) || 0) + 1;
+    var updates = { failed_login_attempts: fails };
+    if (fails >= 5) {
+      updates.locked_until = new Date(Date.now() + 15 * 60000).toISOString();
+    }
+    updateRow('Users', 'user_id', userId, updates);
+  } catch(e) {
+    Logger.log('[AuthService] _bumpStaffFailedAttempts_: ' + e.message);
+  }
+}
+
+/**
+ * Step 1 of enrolment: caller holds an enroll-mode challenge token.
+ * Returns a freshly-generated TOTP secret + provisioning URI + QR URL.
+ * Calling this resets any prior pending secret on the challenge.
+ */
+function mfaEnrollStart(params) {
+  var token = String(params.challengeToken || '').trim();
+  var entry = getMfaChallenge(token);
+  if (!entry) return { success: false, error: 'Your enrolment session has expired. Please sign in again.' };
+  if (entry.mode !== 'enroll') return { success: false, error: 'Invalid MFA mode for this challenge.' };
+
+  var user = findRow('Users', 'user_id', entry.user_id);
+  if (!user) return { success: false, error: 'Account not found.' };
+
+  var secret = generateSecret();
+  setMfaChallengePendingSecret(token, secret);
+  var uri = provisioningUri(user.email, secret, 'Hass Petroleum');
+  return {
+    success:  true,
+    secret:   secret,
+    uri:      uri,
+    qrUrl:    provisioningQrUrl(uri),
+    email:    user.email,
+    issuer:   'Hass Petroleum',
+  };
+}
+
+/**
+ * Step 2 of enrolment: verify the first TOTP code against the pending
+ * secret. On success, persist the secret, set mfa_enabled=1, audit, and
+ * issue a real session.
+ */
+function mfaEnrollVerify(params) {
+  var token = String(params.challengeToken || '').trim();
+  var code  = String(params.code           || '').trim();
+  var entry = getMfaChallenge(token);
+  if (!entry) return { success: false, error: 'Your enrolment session has expired. Please sign in again.' };
+  if (entry.mode !== 'enroll') return { success: false, error: 'Invalid MFA mode for this challenge.' };
+  if (!entry.pending_secret)   return { success: false, error: 'Start enrolment first.' };
+
+  if (!verifyCode(entry.pending_secret, code)) {
+    var bump = incrementChallengeFailure(token);
+    if (bump && bump.exhausted) {
+      try {
+        auditLogCustom('User', entry.user_id, entry.user_id, 'MFA_VERIFY_FAILED',
+          { stage: 'enroll', reason: 'too_many_attempts' }, '');
+      } catch(e) {}
+      return { success: false, error: 'Too many invalid attempts. Please sign in again.', restart: true };
+    }
+    try {
+      auditLogCustom('User', entry.user_id, entry.user_id, 'MFA_VERIFY_FAILED',
+        { stage: 'enroll' }, '');
+    } catch(e) {}
+    return { success: false, error: 'Invalid code. Try again.' };
+  }
+
+  var user = findRow('Users', 'user_id', entry.user_id);
+  if (!user) return { success: false, error: 'Account not found.' };
+
+  updateRow('Users', 'user_id', entry.user_id, {
+    mfa_enabled: 1,
+    mfa_secret:  entry.pending_secret,
+  });
+  try {
+    auditLogCustom('User', entry.user_id, entry.user_id, 'MFA_ENROLLED',
+      { email: user.email, role: user.role }, user.country_code || '');
+  } catch(e) {}
+
+  consumeMfaChallenge(token);
+  // Re-load so completed login sees mfa_enabled=1.
+  user = findRow('Users', 'user_id', entry.user_id) || user;
+  return _completeStaffLogin_(user, String(user.email || '').toLowerCase());
+}
+
+/**
+ * MFA challenge for already-enrolled users. Verifies the code against
+ * the stored secret. On success, completes the session.
+ */
+function mfaVerify(params) {
+  var token = String(params.challengeToken || '').trim();
+  var code  = String(params.code           || '').trim();
+  var entry = getMfaChallenge(token);
+  if (!entry) return { success: false, error: 'Your sign-in session has expired. Please try again.' };
+  if (entry.mode !== 'verify') return { success: false, error: 'Invalid MFA mode for this challenge.' };
+
+  var user = findRow('Users', 'user_id', entry.user_id);
+  if (!user) return { success: false, error: 'Account not found.' };
+
+  if (String(user.mfa_enabled || '0') !== '1' || !user.mfa_secret) {
+    consumeMfaChallenge(token);
+    return { success: false, error: 'MFA is not active on this account. Please sign in again.', restart: true };
+  }
+
+  if (!verifyCode(user.mfa_secret, code)) {
+    _bumpStaffFailedAttempts_(entry.user_id);
+    var bump = incrementChallengeFailure(token);
+    try {
+      auditLogCustom('User', entry.user_id, entry.user_id, 'MFA_VERIFY_FAILED',
+        { stage: 'verify' }, user.country_code || '');
+    } catch(e) {}
+    if (bump && bump.exhausted) {
+      return { success: false, error: 'Too many invalid attempts. Please sign in again.', restart: true };
+    }
+    return { success: false, error: 'Invalid code. Try again.' };
+  }
+
+  consumeMfaChallenge(token);
+  try {
+    auditLogCustom('User', entry.user_id, entry.user_id, 'MFA_VERIFIED',
+      { email: user.email, role: user.role }, user.country_code || '');
+  } catch(e) {}
+  return _completeStaffLogin_(user, String(user.email || '').toLowerCase());
+}
+
+/**
+ * SUPER_ADMIN-only: clear MFA on another user's account so the user can
+ * re-enrol on next login. Caller must (a) be authenticated, (b) hold
+ * SUPER_ADMIN, (c) have MFA enrolled themselves (no chicken-and-egg).
+ *
+ * Required params:
+ *   token       - caller's session token
+ *   targetUserId
+ *   reason      - free text, written to audit metadata
+ */
+function mfaDisableForUser(params) {
+  var sessionToken = String(params.token || '').trim();
+  var targetId     = String(params.targetUserId || '').trim();
+  var reason       = String(params.reason       || '').trim();
+  if (!sessionToken) return { success: false, error: 'Authentication required.' };
+  if (!targetId)     return { success: false, error: 'targetUserId is required.' };
+  if (!reason)       return { success: false, error: 'A reason is required for the audit log.' };
+
+  var session = checkSession({ token: sessionToken });
+  if (!session.valid || session.userType !== 'STAFF') {
+    return { success: false, error: 'Authentication required.' };
+  }
+
+  var caller = findRow('Users', 'user_id', session.userId);
+  if (!caller) return { success: false, error: 'Caller not found.' };
+  if (String(caller.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+    return { success: false, error: 'Only SUPER_ADMIN can disable MFA on another user.' };
+  }
+  if (String(caller.mfa_enabled || '0') !== '1') {
+    return { success: false, error: 'You must have MFA enrolled before you can disable it for other users.' };
+  }
+
+  var target = findRow('Users', 'user_id', targetId);
+  if (!target) return { success: false, error: 'Target user not found.' };
+
+  updateRow('Users', 'user_id', targetId, {
+    mfa_enabled: 0,
+    mfa_secret:  '',
+  });
+  try {
+    auditLogCustom('User', targetId, session.userId, 'MFA_DISABLED',
+      { reason: reason, target_email: target.email || '', target_role: target.role || '' },
+      target.country_code || '');
+  } catch(e) {}
+  return { success: true };
 }
 
 function getLogoUrl() {

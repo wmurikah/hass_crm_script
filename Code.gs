@@ -10,6 +10,12 @@ function doGet(e) {
   var token  = String(params.token || '').trim();
   Logger.log('[Code] doGet page=' + page + ' tokenLen=' + token.length);
 
+  // MFA pages are reached during login, before a session exists. They are
+  // gated by a short-lived challenge token (verified server-side on submit),
+  // not by a session.
+  if (page === 'mfa-enroll') return serveMfaEnrollPage(String(params.challenge || '').trim());
+  if (page === 'mfa-verify') return serveMfaVerifyPage(String(params.challenge || '').trim());
+
   // No token: always serve the login page (covers bare /exec, /exec?page=login,
   // and any unrecognised page). The previous behaviour rendered a blank
   // response when the redirect target dropped its query string mid-navigation.
@@ -129,6 +135,32 @@ function serveStaffRoleManagement(session, token) {
 // ---------------------------------------------------------------------------
 // Page Serving Helpers
 // ---------------------------------------------------------------------------
+
+function serveMfaEnrollPage(challengeToken) {
+  if (!challengeToken || !getMfaChallenge(challengeToken)) {
+    return serveLoginPage('Your sign-in session has expired. Please sign in again.');
+  }
+  var tmpl = HtmlService.createTemplateFromFile('MfaEnroll');
+  tmpl.scriptUrl      = ScriptApp.getService().getUrl();
+  tmpl.challengeToken = challengeToken;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - Set up MFA')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function serveMfaVerifyPage(challengeToken) {
+  if (!challengeToken || !getMfaChallenge(challengeToken)) {
+    return serveLoginPage('Your sign-in session has expired. Please sign in again.');
+  }
+  var tmpl = HtmlService.createTemplateFromFile('MfaVerify');
+  tmpl.scriptUrl      = ScriptApp.getService().getUrl();
+  tmpl.challengeToken = challengeToken;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - Verify MFA')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
 
 function serveLoginPage(errorMessage) {
   var tmpl = HtmlService.createTemplateFromFile('Login');

@@ -473,7 +473,7 @@ const SCHEMAS = {
     validations: { contact_type: ['PRIMARY', 'BILLING', 'OPERATIONS', 'TECHNICAL', 'SECONDARY'], status: ['ACTIVE', 'INACTIVE', 'DELETED'] },
   },
   Users: {
-    headers: ['user_id', 'email', 'first_name', 'last_name', 'phone', 'role', 'team_id', 'country_code', 'countries_access', 'reports_to', 'can_approve_orders', 'approval_limit', 'max_tickets', 'status', 'password_hash', 'created_at', 'updated_at'],
+    headers: ['user_id', 'email', 'first_name', 'last_name', 'phone', 'role', 'team_id', 'country_code', 'countries_access', 'reports_to', 'can_approve_orders', 'approval_limit', 'max_tickets', 'status', 'password_hash', 'mfa_enabled', 'mfa_secret', 'failed_login_attempts', 'locked_until', 'last_login_at', 'created_at', 'updated_at'],
     validations: { role: ['SUPER_ADMIN', 'ADMIN', 'CS_MANAGER', 'CS_AGENT', 'SALES_REP', 'COUNTRY_MANAGER', 'REGIONAL_MANAGER', 'GROUP_HEAD', 'VIEWER'], status: ['ACTIVE', 'INACTIVE', 'SUSPENDED'] },
   },
   Teams: {

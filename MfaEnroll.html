@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hass Petroleum - Set up MFA</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'DM Sans', sans-serif; background: #0D1442; min-height: 100vh; margin: 0; padding: 40px 16px; }
+  .card-mfa {
+    max-width: 520px; margin: 0 auto; background: #fff; border-radius: 16px;
+    padding: 32px 36px; box-shadow: 0 12px 48px rgba(13,20,66,0.18);
+  }
+  h1 { color: #1A237E; font-size: 22px; font-weight: 700; margin: 0 0 8px; }
+  .lead-text { color: #475569; font-size: 14px; margin-bottom: 20px; }
+  .step { font-size: 13px; font-weight: 600; color: #1A237E; margin: 18px 0 6px; }
+  .secret-box {
+    font-family: Consolas, Menlo, monospace; font-size: 14px; letter-spacing: 2px;
+    background: #f1f5f9; border: 1px solid #e2e8f0; padding: 10px 12px;
+    border-radius: 8px; color: #0f172a; word-break: break-all;
+  }
+  .qr-wrap { text-align: center; padding: 12px; background: #f8fafc; border-radius: 12px; }
+  .qr-wrap img { max-width: 200px; height: auto; }
+  .code-input {
+    width: 100%; font-size: 22px; letter-spacing: 8px; text-align: center;
+    padding: 12px; border-radius: 10px; border: 1.5px solid #cbd5e1;
+    font-family: Consolas, Menlo, monospace;
+  }
+  .code-input:focus { outline: none; border-color: #1A237E; box-shadow: 0 0 0 3px rgba(26,35,126,0.12); }
+  .btn-primary {
+    background: #1A237E; border: none; padding: 12px 20px; width: 100%;
+    border-radius: 10px; font-weight: 600; font-size: 15px;
+  }
+  .btn-primary:hover { background: #0D1442; }
+  .err { color: #dc2626; font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .ok { color: #16a34a; font-size: 13px; }
+  a.cancel { display: inline-block; margin-top: 14px; font-size: 13px; color: #64748b; text-decoration: none; }
+  a.cancel:hover { color: #1A237E; }
+</style>
+</head>
+<body>
+<div class="card-mfa">
+  <h1>Set up two-factor authentication</h1>
+  <p class="lead-text">Your role requires multi-factor authentication. Use Google Authenticator, Authy, or any TOTP app to scan the QR code below, then enter the 6-digit code to confirm.</p>
+
+  <div class="step">1. Scan with your authenticator app</div>
+  <div class="qr-wrap"><img id="qrImg" alt="MFA QR code" /></div>
+
+  <div class="step">2. Or enter this secret manually</div>
+  <div class="secret-box" id="secretBox">Loading...</div>
+
+  <div class="step">3. Enter the 6-digit code from your app</div>
+  <input id="codeInput" class="code-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" autofocus />
+
+  <div class="err" id="errBox"></div>
+
+  <button class="btn btn-primary mt-3" id="confirmBtn">Confirm and sign in</button>
+
+  <a href="<?= scriptUrl ?>" class="cancel">Cancel and return to sign-in</a>
+</div>
+
+<script>
+  var CHALLENGE = <?= JSON.stringify(challengeToken) ?>;
+  var SCRIPT_URL = <?= JSON.stringify(scriptUrl) ?>;
+
+  function setError(msg) {
+    document.getElementById('errBox').textContent = msg || '';
+  }
+
+  function setBusy(busy) {
+    var btn = document.getElementById('confirmBtn');
+    btn.disabled = !!busy;
+    btn.textContent = busy ? 'Verifying...' : 'Confirm and sign in';
+  }
+
+  function loadSecret() {
+    google.script.run
+      .withSuccessHandler(function(r) {
+        if (!r || !r.success) {
+          setError((r && r.error) || 'Could not start enrolment.');
+          return;
+        }
+        document.getElementById('secretBox').textContent = r.secret;
+        document.getElementById('qrImg').src = r.qrUrl;
+      })
+      .withFailureHandler(function() {
+        setError('Could not start enrolment. Please refresh.');
+      })
+      .processRequest({
+        service: 'auth',
+        action:  'mfaEnrollStart',
+        challengeToken: CHALLENGE
+      });
+  }
+
+  function submitCode() {
+    var code = (document.getElementById('codeInput').value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setError('Enter the 6-digit code from your app.'); return; }
+    setError('');
+    setBusy(true);
+    google.script.run
+      .withSuccessHandler(function(r) {
+        setBusy(false);
+        if (r && r.success && r.token && r.redirectUrl) {
+          try { sessionStorage.setItem('hass_token', r.token); } catch(e) {}
+          window.top.location.href = r.redirectUrl;
+          return;
+        }
+        if (r && r.restart) { window.location.href = SCRIPT_URL; return; }
+        setError((r && r.error) || 'Invalid code. Try again.');
+        document.getElementById('codeInput').select();
+      })
+      .withFailureHandler(function() {
+        setBusy(false);
+        setError('Connection error. Please try again.');
+      })
+      .processRequest({
+        service: 'auth',
+        action:  'mfaEnrollVerify',
+        challengeToken: CHALLENGE,
+        code: code
+      });
+  }
+
+  document.getElementById('confirmBtn').addEventListener('click', submitCode);
+  document.getElementById('codeInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); submitCode(); }
+  });
+
+  loadSecret();
+</script>
+</body>
+</html>
