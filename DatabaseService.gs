@@ -113,14 +113,18 @@ function createRecord(sheetName, data, context) {
     var result = appendRow(sheetName, data);
     clearSheetCache(sheetName);
 
-    if (context) {
-      logAudit(sheetName, data[idField], 'CREATE',
-        context.actorType || 'SYSTEM',
-        context.actorId || '',
-        context.actorEmail || '',
-        { record: sanitizeForAudit(data) },
-        { countryCode: data.country_code || '' });
-    }
+    try {
+      audit_log({
+        entity_type:   sheetName,
+        entity_id:     data[idField],
+        action:        'CREATE',
+        actor_user_id: (context && context.actorId) || '',
+        actor_type:    context && context.actorType,
+        actor_email:   context && context.actorEmail,
+        changes:       { after: sanitizeForAudit(data) },
+        country_code:  data.country_code || '',
+      });
+    } catch(auditErr) {}
 
     return { success: true, data: result, id: data[idField] };
   } catch (e) {
@@ -169,13 +173,19 @@ function updateRecord(sheetName, id, updates, context, expectedUpdatedAt) {
     }
     clearSheetCache(sheetName);
 
-    if (context && Object.keys(changes).length > 0) {
-      logAudit(sheetName, id, 'UPDATE',
-        context.actorType || 'SYSTEM',
-        context.actorId || '',
-        context.actorEmail || '',
-        changes,
-        { countryCode: current.country_code || '' });
+    if (Object.keys(changes).length > 0) {
+      try {
+        audit_log({
+          entity_type:   sheetName,
+          entity_id:     id,
+          action:        'UPDATE',
+          actor_user_id: (context && context.actorId) || '',
+          actor_type:    context && context.actorType,
+          actor_email:   context && context.actorEmail,
+          changes:       changes,
+          country_code:  current.country_code || '',
+        });
+      } catch(auditErr) {}
     }
     return { success: true, changes: changes };
   } catch (e) {
@@ -201,12 +211,18 @@ function hardDeleteRecord(sheetName, id, context) {
     if (!current) {
       return { success: false, error: 'Record not found' };
     }
-    if (context) {
-      logAudit(sheetName, id, 'HARD_DELETE',
-        context.actorType || 'SYSTEM', context.actorId || '', context.actorEmail || '',
-        { deleted_record: sanitizeForAudit(current) },
-        { countryCode: current.country_code || '' });
-    }
+    try {
+      audit_log({
+        entity_type:   sheetName,
+        entity_id:     id,
+        action:        'DELETE',
+        actor_user_id: (context && context.actorId) || '',
+        actor_type:    context && context.actorType,
+        actor_email:   context && context.actorEmail,
+        changes:       { before: sanitizeForAudit(current) },
+        country_code:  current.country_code || '',
+      });
+    } catch(auditErr) {}
     // Actually removes the row from the sheet (not a status flag update).
     var deleted = deleteRow(sheetName, idField, id, true);
     if (!deleted) {

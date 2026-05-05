@@ -82,6 +82,7 @@ function saveSettings(settings) {
   var now  = new Date().toISOString();
   var keys = Object.keys(settings);
 
+  var changedKeys = [];
   keys.forEach(function(key) {
     var value = settings[key];
     // Skip masked values (user didn't change the password)
@@ -105,9 +106,16 @@ function saveSettings(settings) {
         updated_at:   now,
       });
     }
+    // Audit each config key change. Mask encrypted values.
+    try {
+      var auditValue = isEncrypted ? '****' : value;
+      auditLogCustom('Config', key, '', existing ? 'CONFIG_UPDATE' : 'CONFIG_CREATE',
+        { key: key, new_value: auditValue, encrypted: isEncrypted }, '');
+    } catch(e) {}
+    changedKeys.push(key);
   });
 
-  return { success: true, message: 'Settings saved' };
+  return { success: true, message: 'Settings saved', changed: changedKeys.length };
 }
 
 /**

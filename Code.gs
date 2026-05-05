@@ -23,10 +23,37 @@ function doGet(e) {
   // session's userType. Otherwise route by userType.
   if (page === 'staff'  && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
   if (page === 'roles'  && session.userType === 'STAFF')    return serveStaffRoleManagement(session, token);
+  if (page === 'audit'  && session.userType === 'STAFF')    return serveAuditViewer(session, token);
   if (page === 'portal' && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
   if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   return serveLoginPage('Unknown account type.');
+}
+
+function serveAuditViewer(session, token) {
+  if (typeof userHasPermission !== 'function' ||
+      !userHasPermission(session.userId, 'audit_log.view')) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:48px;text-align:center;max-width:640px;margin:auto">' +
+      '<h2 style="color:#1A237E">Permission denied</h2>' +
+      '<p>You don\'t have permission to view the audit log. Contact your administrator if you need access.</p>' +
+      '</div>'
+    ).setTitle('Audit Log - Permission denied');
+  }
+  var tmpl = HtmlService.createTemplateFromFile('AuditViewer');
+  var scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.SESSION = JSON.stringify({
+    userId:    session.userId,
+    userType:  'STAFF',
+    role:      session.role,
+    token:     token,
+    scriptUrl: scriptUrl,
+  });
+  tmpl.scriptUrl = scriptUrl;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - Audit Log')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function serveStaffRoleManagement(session, token) {
@@ -163,6 +190,7 @@ var AUTHENTICATED_SERVICES_ = [
   'tickets', 'orders', 'customers', 'documents', 'knowledge',
   'notifications', 'integrations', 'sla', 'chat', 'settings',
   'upload', 'dashboard', 'users', 'permissions', 'statements',
+  'audit',
 ];
 
 function doPost(e) {
@@ -183,6 +211,18 @@ function doPost(e) {
       params._session = session;
     }
 
+    // Stash request context for AuditService so logs auto-fill ip/UA/actor.
+    try {
+      if (typeof setAuditRequestContext === 'function') {
+        var hdrs = (e && e.parameter && e.parameter._headers) || {};
+        setAuditRequestContext({
+          actorIp:        String(params.clientIp        || hdrs['x-forwarded-for'] || ''),
+          actorUserAgent: String(params.clientUserAgent || hdrs['user-agent']      || ''),
+          actorUserId:    (params._session && params._session.userId) || '',
+        });
+      }
+    } catch(ctxErr) { Logger.log('[Code] audit ctx error: ' + ctxErr.message); }
+
     var result;
     switch (service) {
       case 'auth':          result = handleAuthRequest(params);         break;
@@ -201,6 +241,7 @@ function doPost(e) {
       case 'users':         result = handleUserRequest(params);         break;
       case 'permissions':   result = handlePermissionRequest(params);   break;
       case 'statements':    result = handleStatementRequest(params);    break;
+      case 'audit':         result = handleAuditRequest(params);        break;
       default:
         result = { success: false, error: 'Unknown service: ' + service };
     }

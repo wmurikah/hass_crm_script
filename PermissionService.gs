@@ -1097,9 +1097,23 @@ function requireDifferentActor(creatorId, currentUserId, what) {
 
 function _logPermissionDenied(userId, action, country, team, requiredPerm) {
   try {
-    logAudit('Permission', userId || 'UNKNOWN', 'PERMISSION_DENIED', 'STAFF', userId || '', '',
-      { action: action, country_code: country || '', team_id: team || '', required_permission: requiredPerm || '' },
-      { countryCode: country || '' });
+    // Normalised through audit_log() so actor_email / IP / UA are auto-resolved
+    // and the row shape matches every other audit entry (G-005).
+    if (typeof audit_log === 'function') {
+      audit_log({
+        entity_type:   'Permission',
+        entity_id:     userId || 'UNKNOWN',
+        action:        'PERMISSION_DENIED',
+        actor_user_id: userId || '',
+        metadata:      { attempted_action: action || '', team_id: team || '',
+                         required_permission: requiredPerm || '' },
+        country_code:  country || '',
+      });
+    } else {
+      logAudit('Permission', userId || 'UNKNOWN', 'PERMISSION_DENIED', 'STAFF', userId || '', '',
+        { action: action, country_code: country || '', team_id: team || '', required_permission: requiredPerm || '' },
+        { countryCode: country || '' });
+    }
   } catch(e) { /* non-fatal */ }
 }
 

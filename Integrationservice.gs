@@ -844,9 +844,16 @@ function handleInvoiceWebhook(eventType, data) {
           invoice_date: data.invoice_date || order.invoice_date,
         });
         clearSheetCache('Orders');
+        try {
+          auditLogCustom('Invoice', data.invoice_number || order.order_id, 'SYSTEM',
+            eventType === 'invoice.paid' ? 'INVOICE_PAID' : 'INVOICE_CREATED',
+            { order_id: order.order_id, invoice_number: data.invoice_number || '',
+              amount: data.amount || 0, payment_status: paymentStatus },
+            order.country_code || '');
+        } catch(e) {}
       }
     }
-    
+
     // Update customer credit used
     if (eventType === 'invoice.paid' && data.amount) {
       const newCreditUsed = Math.max(0, (customer.credit_used || 0) - data.amount);
@@ -854,8 +861,14 @@ function handleInvoiceWebhook(eventType, data) {
         credit_used: newCreditUsed,
       });
       clearSheetCache('Customers');
+      try {
+        auditLogUpdate('Customer', customer.customer_id, 'SYSTEM',
+          { credit_used: customer.credit_used || 0 },
+          { credit_used: newCreditUsed },
+          customer.country_code || '');
+      } catch(e) {}
     }
-    
+
     return { success: true };
     
   } catch (e) {
@@ -885,8 +898,20 @@ function handlePaymentWebhook(data) {
         credit_used: newCreditUsed,
       });
       clearSheetCache('Customers');
+      try {
+        auditLogCustom('Payment', data.payment_id || data.reference || customer.customer_id, 'SYSTEM',
+          'PAYMENT_RECEIVED',
+          { customer_id: customer.customer_id, amount: data.amount,
+            currency: data.currency || customer.currency_code || 'KES',
+            reference: data.reference || '' },
+          customer.country_code || '');
+        auditLogUpdate('Customer', customer.customer_id, 'SYSTEM',
+          { credit_used: customer.credit_used || 0 },
+          { credit_used: newCreditUsed },
+          customer.country_code || '');
+      } catch(e) {}
     }
-    
+
     return { success: true, customerId: customer.customer_id };
     
   } catch (e) {
