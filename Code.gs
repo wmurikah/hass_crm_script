@@ -21,10 +21,11 @@ function doGet(e) {
 
   // If the URL forces a specific page, honour it as long as it matches the
   // session's userType. Otherwise route by userType.
-  if (page === 'staff'      && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
-  if (page === 'roles'      && session.userType === 'STAFF')    return serveStaffRoleManagement(session, token);
-  if (page === 'audit'      && session.userType === 'STAFF')    return serveAuditViewer(session, token);
-  if (page === 'approvals'  && session.userType === 'STAFF')    return serveApprovalsInbox(session, token);
+  if (page === 'staff'           && session.userType === 'STAFF') return serveStaffDashboard(session, token);
+  if (page === 'roles'           && session.userType === 'STAFF') return serveStaffRoleManagement(session, token);
+  if (page === 'role-assignment' && session.userType === 'STAFF') return serveStaffRoleAssignment(session, token);
+  if (page === 'audit'           && session.userType === 'STAFF') return serveAuditViewer(session, token);
+  if (page === 'approvals'       && session.userType === 'STAFF') return serveApprovalsInbox(session, token);
   if (page === 'portal'     && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
   if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
@@ -70,6 +71,32 @@ function serveAuditViewer(session, token) {
   tmpl.scriptUrl = scriptUrl;
   return tmpl.evaluate()
     .setTitle('Hass Petroleum - Audit Log')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function serveStaffRoleAssignment(session, token) {
+  if (typeof userHasPermission !== 'function' ||
+      !userHasPermission(session.userId, 'role.assign')) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:48px;text-align:center;max-width:640px;margin:auto">' +
+      '<h2 style="color:#1A237E">Permission denied</h2>' +
+      '<p>You don\'t have permission to assign roles. Contact your administrator if you need access.</p>' +
+      '</div>'
+    ).setTitle('Role Assignment - Permission denied');
+  }
+  var tmpl = HtmlService.createTemplateFromFile('Staff_RoleAssignment');
+  var scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.SESSION = JSON.stringify({
+    userId:    session.userId,
+    userType:  'STAFF',
+    role:      session.role,
+    token:     token,
+    scriptUrl: scriptUrl,
+  });
+  tmpl.scriptUrl = scriptUrl;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - Staff Role Assignment')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -208,7 +235,7 @@ var AUTHENTICATED_SERVICES_ = [
   'tickets', 'orders', 'customers', 'documents', 'knowledge',
   'notifications', 'integrations', 'sla', 'chat', 'settings',
   'upload', 'dashboard', 'users', 'permissions', 'statements',
-  'audit', 'approvals',
+  'audit', 'approvals', 'roles',
 ];
 
 function doPost(e) {
@@ -258,6 +285,7 @@ function doPost(e) {
       case 'dashboard':     result = handleDashboardRequest(params);    break;
       case 'users':         result = handleUserRequest(params);         break;
       case 'permissions':   result = handlePermissionRequest(params);   break;
+      case 'roles':         result = handleRoleRequest(params);         break;
       case 'statements':    result = handleStatementRequest(params);    break;
       case 'audit':         result = handleAuditRequest(params);        break;
       case 'approvals':     result = handleApprovalRequest(params);     break;
