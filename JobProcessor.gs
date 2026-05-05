@@ -10,6 +10,7 @@
  *  SEND_EMAIL           Send email via GmailApp
  *  SEND_NOTIFICATION    Write in-app notification row
  *  SLA_BREACH_CHECK     Re-evaluate SLA breach flags on an open ticket
+ *  SLA_BREACH_SWEEP     Portfolio sweep: tickets + orders + documents (G-003)
  *  SESSION_CLEANUP      Hard-delete expired session rows
  *  AUDIT_CLEANUP        Hard-delete AuditLog rows older than 90 days
  *  ORACLE_SYNC          POST data to Oracle integration endpoint
@@ -128,6 +129,7 @@ function _dispatch_(type, payload) {
     case 'SEND_EMAIL':         return _jobEmail_(payload);
     case 'SEND_NOTIFICATION':  return _jobNotification_(payload);
     case 'SLA_BREACH_CHECK':   return _jobSlaCheck_(payload);
+    case 'SLA_BREACH_SWEEP':   return _jobSlaBreachSweep_(payload);
     case 'SESSION_CLEANUP':    return _jobSessionClean_();
     case 'AUDIT_CLEANUP':      return _jobAuditClean_();
     case 'ORACLE_SYNC':        return _jobOracleSync_(payload);
