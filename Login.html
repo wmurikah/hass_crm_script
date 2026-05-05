@@ -1343,6 +1343,13 @@ body {
     try {
       google.script.run
         .withSuccessHandler(function(result) {
+          // G-008: privileged users get bounced through MFA before any
+          // session token is issued. Just follow the redirectUrl.
+          if (result && result.success && result.mfaRequired && result.redirectUrl) {
+            setLoginLoading(false);
+            try { window.top.location.href = result.redirectUrl; return; }
+            catch (e) { window.location.href = result.redirectUrl; return; }
+          }
           if (result && result.success) {
             sessionStorage.setItem('hass_token',    result.token);
             sessionStorage.setItem('hass_userId',   result.userId);
