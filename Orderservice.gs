@@ -25,7 +25,7 @@ var ORDER_CONFIG = {
 
 // Order status flow
 var ORDER_STATUS_FLOW = {
-  'DRAFT': ['SUBMITTED', 'CANCELLED'],
+  'DRAFT': ['SUBMITTED', 'PENDING_APPROVAL', 'CANCELLED'],
   'SUBMITTED': ['PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'CANCELLED'],
   'PENDING_APPROVAL': ['APPROVED', 'REJECTED', 'CANCELLED'],
   'APPROVED': ['SCHEDULED', 'CANCELLED'],
@@ -579,33 +579,43 @@ function submitOrder(orderId, context) {
   if (!order) {
     return { success: false, error: 'Order not found' };
   }
-  
+
   if (order.status !== 'DRAFT') {
     return { success: false, error: 'Order is not in draft status' };
   }
-  
+
   // Validate order has lines
   const lineCount = countWhere('OrderLines', { order_id: orderId });
   if (lineCount === 0) {
     return { success: false, error: 'Order must have at least one line item' };
   }
-  
+
   // Validate delivery location
   if (!order.delivery_location_id) {
     return { success: false, error: 'Delivery location is required' };
   }
-  
-  // Check credit
-  const creditCheck = checkCreditLimit(order.customer_id, order.total_amount);
-  if (!creditCheck.approved) {
-    // Requires approval
-    return updateOrderStatus(orderId, 'PENDING_APPROVAL', context, {
-      approval_reason: creditCheck.reason,
-    });
+
+  // Always route through the approval engine. The engine evaluates the
+  // workflow rule (amount-tiered) and creates approval_requests rows for
+  // every required approver. The order moves to PENDING_APPROVAL.
+  const actorId = (context && context.actorId) || order.created_by_id || '';
+  const submitResult = submitForApproval('order', orderId, {
+    amount:       parseFloat(order.total_amount) || 0,
+    currency:     order.currency_code || 'KES',
+    country_code: order.country_code  || '',
+    customer_id:  order.customer_id   || '',
+    created_by:   actorId,
+    summary:      'Order ' + (order.order_number || orderId) + ' for ' + (order.customer_id || ''),
+  });
+
+  if (!submitResult || !submitResult.success) {
+    return { success: false, error: (submitResult && submitResult.error) || 'Approval submission failed' };
   }
-  
-  // Auto-approve if within credit
-  return updateOrderStatus(orderId, 'APPROVED', context);
+
+  return updateOrderStatus(orderId, 'PENDING_APPROVAL', context, {
+    approval_request_ids: (submitResult.request_ids || []).join(','),
+    approval_workflow_id: submitResult.workflow_id || '',
+  });
 }
 
 /**

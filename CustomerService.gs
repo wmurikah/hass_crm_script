@@ -157,6 +157,126 @@ function getCustomerConsumption(customerId, period) {
   }
 }
 
+// ============================================================================
+// APPROVAL-GATED MUTATIONS  (G-002)
+// Each helper routes through ApprovalEngine.submitForApproval() and is
+// responsible for capturing enough context for the engine + inbox to
+// render a useful entity summary.
+// ============================================================================
+
+/**
+ * Requests a credit-limit change on a customer. Routes through the engine
+ * - the actual `customers.credit_limit` mutation happens only when every
+ * required approver has signed off (see _approvalAdvanceEntity_).
+ *
+ * @param {string} customerId
+ * @param {number} newLimit
+ * @param {Object} context  { actorId, currency? }
+ */
+function setCreditLimit(customerId, newLimit, context) {
+  try {
+    if (!customerId) return { success: false, error: 'customerId required' };
+    var amt = parseFloat(newLimit);
+    if (isNaN(amt) || amt < 0) return { success: false, error: 'Invalid credit limit' };
+    var customer = getById('Customers', customerId);
+    if (!customer) return { success: false, error: 'Customer not found' };
+
+    var actorId = (context && context.actorId) || '';
+    var current = parseFloat(customer.credit_limit || 0);
+    var delta   = Math.abs(amt - current);
+
+    var result = submitForApproval('customer_credit_limit', customerId, {
+      new_limit:    amt,
+      old_limit:    current,
+      delta:        delta,
+      currency:     (context && context.currency) || customer.currency_code || 'KES',
+      country_code: customer.country_code || '',
+      customer_id:  customerId,
+      requested_by: actorId,
+      created_by:   actorId,
+      summary:      'Credit limit change for ' + (customer.company_name || customerId) +
+                    ' from ' + current + ' to ' + amt,
+    });
+    return result;
+  } catch (e) {
+    Logger.log('setCreditLimit error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Requests a refund on a payment upload. Engine routes to FINANCE_MANAGER
+ * (small) → CFO (large). When approved, the engine flips the upload row
+ * status to REFUND_APPROVED; downstream payout is performed manually.
+ *
+ * @param {string} uploadId       PaymentUploads.upload_id
+ * @param {number} amount         refund amount
+ * @param {string} reason
+ * @param {Object} context        { actorId }
+ */
+function requestPaymentRefund(uploadId, amount, reason, context) {
+  try {
+    if (!uploadId) return { success: false, error: 'uploadId required' };
+    var amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) return { success: false, error: 'Invalid refund amount' };
+    var upload = getById('PaymentUploads', uploadId);
+    if (!upload) return { success: false, error: 'Payment upload not found' };
+
+    var actorId = (context && context.actorId) || '';
+    return submitForApproval('payment_refund', uploadId, {
+      amount:               amt,
+      currency:             upload.currency_code || 'KES',
+      country_code:         upload.country_code  || '',
+      customer_id:          upload.customer_id   || '',
+      payment_receiver_id:  upload.received_by   || upload.uploaded_by || '',
+      reason:               String(reason || ''),
+      created_by:           actorId,
+      requested_by:         actorId,
+      summary:              'Refund of ' + (upload.currency_code || 'KES') + ' ' + amt +
+                            ' on payment ' + uploadId,
+    });
+  } catch (e) {
+    Logger.log('requestPaymentRefund error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Final KYC sign-off. Called once all required KYC documents are approved
+ * for a customer. The engine routes to CS_MANAGER (approver), enforcing
+ * approver != document collector via the domain SoD rule.
+ *
+ * @param {string} customerId
+ * @param {Object} context  { actorId }
+ */
+function submitKycForApproval(customerId, context) {
+  try {
+    if (!customerId) return { success: false, error: 'customerId required' };
+    var customer = getById('Customers', customerId);
+    if (!customer) return { success: false, error: 'Customer not found' };
+
+    var actorId = (context && context.actorId) || '';
+    // Determine the document collector (any user who uploaded mandatory KYC docs).
+    var collectedBy = '';
+    try {
+      var docs = findRows('Documents', 'customer_id', customerId) || [];
+      var collector = docs.find(function(d) { return d.is_mandatory && d.uploaded_by_id; });
+      if (collector) collectedBy = String(collector.uploaded_by_id || '');
+    } catch (e) {}
+
+    return submitForApproval('customer_kyc', customerId, {
+      customer_id:  customerId,
+      country_code: customer.country_code || '',
+      collected_by: collectedBy,
+      created_by:   actorId,
+      summary:      'KYC final approval for ' + (customer.company_name || customerId),
+    });
+  } catch (e) {
+    Logger.log('submitKycForApproval error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
 /**
  * Returns the active price list applicable to the given customer.
  * Called by handleCustomerRequest action:'getPriceList'

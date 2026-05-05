@@ -319,6 +319,19 @@ var EXPECTED_SCHEMA = {
     pk: 'workflow_id',
     required: ['workflow_id','workflow_name','entity_type','rules','is_active','created_at']
   },
+  approval_requests: {
+    pk: 'request_id',
+    required: ['request_id','workflow_id','entity_type','entity_id','status',
+               'required_approver_role','required_approver_user_id',
+               'approver_user_id','approved_at','comment','reason',
+               'escalation_level','expires_at','context','country_code',
+               'created_by','created_at','updated_at'],
+    indexes: ['ix_approval_requests_entity (entity_type, entity_id)',
+              'ix_approval_requests_status_expires (status, expires_at)',
+              'ix_approval_requests_role (required_approver_role, status)',
+              'ix_approval_requests_user (required_approver_user_id, status)'],
+    notes: 'Runtime engine state for ApprovalEngine.gs (G-002).'
+  },
 
   // ----- DOCUMENTS ---------------------------------------------------------
   documents: {

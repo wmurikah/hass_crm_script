@@ -21,13 +21,31 @@ function doGet(e) {
 
   // If the URL forces a specific page, honour it as long as it matches the
   // session's userType. Otherwise route by userType.
-  if (page === 'staff'  && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
-  if (page === 'roles'  && session.userType === 'STAFF')    return serveStaffRoleManagement(session, token);
-  if (page === 'audit'  && session.userType === 'STAFF')    return serveAuditViewer(session, token);
-  if (page === 'portal' && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
+  if (page === 'staff'      && session.userType === 'STAFF')    return serveStaffDashboard(session, token);
+  if (page === 'roles'      && session.userType === 'STAFF')    return serveStaffRoleManagement(session, token);
+  if (page === 'audit'      && session.userType === 'STAFF')    return serveAuditViewer(session, token);
+  if (page === 'approvals'  && session.userType === 'STAFF')    return serveApprovalsInbox(session, token);
+  if (page === 'portal'     && session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   if (session.userType === 'STAFF')    return serveStaffDashboard(session, token);
   if (session.userType === 'CUSTOMER') return serveCustomerPortal(session, token);
   return serveLoginPage('Unknown account type.');
+}
+
+function serveApprovalsInbox(session, token) {
+  var tmpl = HtmlService.createTemplateFromFile('Approvals');
+  var scriptUrl = ScriptApp.getService().getUrl();
+  tmpl.SESSION = JSON.stringify({
+    userId:    session.userId,
+    userType:  'STAFF',
+    role:      session.role,
+    token:     token,
+    scriptUrl: scriptUrl,
+  });
+  tmpl.scriptUrl = scriptUrl;
+  return tmpl.evaluate()
+    .setTitle('Hass Petroleum - Approvals Inbox')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function serveAuditViewer(session, token) {
@@ -190,7 +208,7 @@ var AUTHENTICATED_SERVICES_ = [
   'tickets', 'orders', 'customers', 'documents', 'knowledge',
   'notifications', 'integrations', 'sla', 'chat', 'settings',
   'upload', 'dashboard', 'users', 'permissions', 'statements',
-  'audit',
+  'audit', 'approvals',
 ];
 
 function doPost(e) {
@@ -242,6 +260,7 @@ function doPost(e) {
       case 'permissions':   result = handlePermissionRequest(params);   break;
       case 'statements':    result = handleStatementRequest(params);    break;
       case 'audit':         result = handleAuditRequest(params);        break;
+      case 'approvals':     result = handleApprovalRequest(params);     break;
       default:
         result = { success: false, error: 'Unknown service: ' + service };
     }
@@ -287,6 +306,15 @@ function handleCustomerRequest(params) {
         return getCustomerConsumption(params.customerId, params.period);
       case 'getPriceList':
         return getCustomerPriceList(params.customerId);
+      case 'setCreditLimit':
+        return setCreditLimit(params.customerId, params.newLimit, Object.assign(
+          {}, params.context || {}, { actorId: (params._session && params._session.userId) || '' }));
+      case 'requestRefund':
+        return requestPaymentRefund(params.uploadId, params.amount, params.reason,
+          { actorId: (params._session && params._session.userId) || '' });
+      case 'submitKyc':
+        return submitKycForApproval(params.customerId,
+          { actorId: (params._session && params._session.userId) || '' });
       default:
         return { success: false, error: 'Unknown customer action: ' + action };
     }

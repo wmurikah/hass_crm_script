@@ -287,7 +287,7 @@ function generateIdForSheet(sheetName) {
     'KnowledgeCategories': 'KCAT', 'KnowledgeArticles': 'KART',
     'AuditLog': 'LOG', 'Sessions': 'SES', 'IntegrationLog': 'INT',
     'JobQueue': 'JOB',
-    'Invoices': 'INV', 'ApprovalWorkflows': 'WF', 'PaymentUploads': 'PUP',
+    'Invoices': 'INV', 'ApprovalWorkflows': 'WF', 'ApprovalRequests': 'AR', 'PaymentUploads': 'PUP',
     'SignupRequests': 'SRQ', 'StaffMessages': 'MSG',
   };
   var prefix = prefixes[sheetName] || 'REC';
