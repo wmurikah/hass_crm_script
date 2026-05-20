@@ -29,6 +29,13 @@ var MFA_REQUIRED_ROLES = [
   'FINANCE_MANAGER',
 ];
 
+// User IDs explicitly exempt from MFA (e.g. test/dummy accounts).
+// Add to Script Property MFA_EXEMPT_IDS as a comma-separated list,
+// or hard-code IDs here for permanent exemptions.
+var MFA_EXEMPT_USER_IDS = [
+  'a1b2c3d4-e5f6-7890-abcd-ef1234567890', // peryne.danois@dummy.com
+];
+
 var MFA_TOTP_STEP_SECONDS_     = 30;
 var MFA_TOTP_DIGITS_           = 6;
 var MFA_TOTP_WINDOW_           = 1;            // +/- 1 step tolerance
@@ -42,6 +49,17 @@ var MFA_CHALLENGE_PREFIX_      = 'MFA_CHL_';
 
 function userRequiresMfa(userId) {
   if (!userId) return false;
+
+  // Check hard-coded exempt list.
+  if (MFA_EXEMPT_USER_IDS.indexOf(userId) !== -1) return false;
+
+  // Check Script Property exempt list (comma-separated user IDs).
+  try {
+    var exemptProp = PropertiesService.getScriptProperties().getProperty('MFA_EXEMPT_IDS') || '';
+    var exemptIds  = exemptProp.split(',').map(function(s) { return s.trim(); });
+    if (exemptIds.indexOf(userId) !== -1) return false;
+  } catch(e) {}
+
   try {
     var rows = tursoSelect(
       'SELECT role_code FROM user_roles WHERE user_id = ?', [userId]
