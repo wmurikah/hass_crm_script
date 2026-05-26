@@ -54,6 +54,11 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
   display: flex;
   flex-direction: column;
   transition: transform 0.3s ease;
+  /* Fixed: stays visible on scroll */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 #topbar {
@@ -545,8 +550,34 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 @media(max-width:900px){.dash-stat-row{grid-template-columns:repeat(2,1fr);}}
 
 /* State-of-the-art KPI cards */
-.dash-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s; }
-.dash-kpi-card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(15,23,42,0.08); }
+.dash-kpi-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; display:flex; align-items:center; gap:14px; position:relative; overflow:hidden; transition:transform 0.15s, box-shadow 0.15s; cursor:pointer; text-decoration:none; color:inherit; }
+.dash-kpi-card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(15,23,42,0.1); border-color:rgba(26,35,126,0.2); }
+/* Profile menu */
+.profile-menu { position:relative; }
+.profile-dropdown { display:none; position:absolute; top:calc(100% + 8px); right:0; background:#fff; border:1px solid var(--slate-200); border-radius:12px; min-width:200px; box-shadow:0 8px 24px rgba(15,23,42,0.12); z-index:150; overflow:hidden; }
+.profile-dropdown.open { display:block; }
+.profile-dropdown-item { display:flex; align-items:center; gap:10px; padding:10px 14px; font-size:13px; font-weight:500; color:var(--slate-800); cursor:pointer; transition:background 0.12s; border:none; background:none; width:100%; text-align:left; font-family:inherit; }
+.profile-dropdown-item:hover { background:var(--slate-100); }
+.profile-dropdown-item.danger { color:#dc2626; }
+.profile-dropdown-item.danger:hover { background:#fee2e2; }
+.profile-dropdown-divider { height:1px; background:var(--slate-200); margin:4px 0; }
+/* Dashboard period selector */
+.dash-period-tabs { display:flex; background:#f1f5f9; border-radius:8px; padding:2px; gap:2px; }
+.dash-period-tab { background:none; border:none; padding:6px 12px; font-size:12px; font-weight:600; color:var(--slate-600); cursor:pointer; border-radius:6px; font-family:inherit; transition:all 0.12s; }
+.dash-period-tab.active { background:#fff; color:var(--navy-800); box-shadow:0 1px 4px rgba(15,23,42,0.08); }
+/* Affiliate donut hide when scoped */
+#dashAffiliateCard.hidden-by-scope { display:none !important; }
+/* Chart series palette - distinct from KPI accent colours */
+:root {
+  --chart-1: #2563eb;
+  --chart-2: #f59e0b;
+  --chart-3: #10b981;
+  --chart-4: #8b5cf6;
+  --chart-5: #f43f5e;
+  --chart-6: #06b6d4;
+  --chart-7: #84cc16;
+  --chart-8: #fb923c;
+}
 .dash-kpi-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent, #1A237E); border-radius:14px 0 0 14px; }
 .dash-kpi-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .dash-kpi-val { font-family:'Space Mono',monospace; font-size:24px; font-weight:700; color:#0D1442; line-height:1.1; }
@@ -713,26 +744,35 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <option value="HTW">HTW Terminal</option>
     </select>
 
-    <button class="topbar-icon-btn" onclick="toggleNotifications()" id="notifBtn">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-      <span class="topbar-badge" id="notifCount" style="display:none">0</span>
-    </button>
-
-    <button onclick="logoutUser()" class="topbar-icon-btn" title="Sign out" style="color:#64748b;">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-        <polyline points="16 17 21 12 16 7"/>
-        <line x1="21" y1="12" x2="9" y2="12"/>
-      </svg>
-    </button>
-
-    <div class="topbar-user" onclick="toggleUserMenu()">
-      <div class="topbar-avatar" id="topbarAvatar">JO</div>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:#1e293b;" id="topbarName">Loading</div>
-        <div style="font-size:11px;color:#64748b;" id="topbarRole"></div>
+    <div class="profile-menu" id="profileMenuWrap">
+      <div class="topbar-user" onclick="toggleUserMenu()" id="profileMenuTrigger">
+        <div class="topbar-avatar" id="topbarAvatar">JO</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#1e293b;" id="topbarName">Loading</div>
+          <div style="font-size:11px;color:#64748b;" id="topbarRole"></div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="profile-dropdown" id="profileDropdown">
+        <div style="padding:10px 14px 8px;border-bottom:1px solid var(--slate-200);">
+          <div style="font-size:12px;font-weight:700;color:var(--slate-800);" id="profileMenuName">Loading...</div>
+          <div style="font-size:11px;color:var(--slate-600);" id="profileMenuRole"></div>
+        </div>
+        <button class="profile-dropdown-item" onclick="openAccountSettings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Account Settings
+        </button>
+        <button class="profile-dropdown-item" onclick="toggleNotifications()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          Notifications
+          <span id="notifCount" style="display:none;margin-left:auto;background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;">0</span>
+        </button>
+        <div class="profile-dropdown-divider"></div>
+        <button class="profile-dropdown-item danger" onclick="logoutUser()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
+      </div>
     </div>
   </header>
 
@@ -745,9 +785,14 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           <h2 id="dashWelcomeHeading">Good morning</h2>
           <p style="color:#64748b;font-size:14px;margin-top:4px;" id="dashWelcomeSub">Here is what is happening across the Hass Petroleum Group today.</p>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <span id="dashHealthBadge" class="badge badge-secondary" style="font-size:11px;padding:6px 10px;border-radius:20px;">Loading...</span>
-          <button class="btn btn-outline btn-sm" onclick="loadDashboardHome()" title="Refresh">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <div class="dash-period-tabs" title="Select activity window">
+            <button class="dash-period-tab active" onclick="setDashPeriod(7, this)">7d</button>
+            <button class="dash-period-tab" onclick="setDashPeriod(14, this)">14d</button>
+            <button class="dash-period-tab" onclick="setDashPeriod(30, this)">30d</button>
+          </div>
+          <span id="dashHealthBadge" class="badge badge-secondary" style="font-size:11px;padding:6px 10px;border-radius:20px;display:none"></span>
+          <button class="btn-refresh" onclick="loadDashboardHome()" title="Refresh">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
             Refresh
           </button>
@@ -756,12 +801,30 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
 
       <!-- Hero KPI Strip - operational pulse, not SLA averages -->
       <div class="dash-kpi-strip" id="dashKpiStrip" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:18px;">
-        <div class="dash-kpi-card" style="--accent:#1A237E"><div class="dash-kpi-icon" style="background:rgba(26,35,126,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A237E" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div><div><div class="dash-kpi-val" id="dStatOpenTickets">--</div><div class="dash-kpi-label">Open Tickets</div><div class="dash-kpi-delta" id="dDeltaTickets">&nbsp;</div></div></div>
-        <div class="dash-kpi-card" style="--accent:#FF6F00"><div class="dash-kpi-icon" style="background:rgba(255,111,0,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div><div><div class="dash-kpi-val" id="dStatPendingOrders">--</div><div class="dash-kpi-label">Pending Orders</div><div class="dash-kpi-delta" id="dDeltaOrders">&nbsp;</div></div></div>
-        <div class="dash-kpi-card" style="--accent:#0d9488"><div class="dash-kpi-icon" style="background:rgba(13,148,136,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div><div><div class="dash-kpi-val" id="dStatInTransit">--</div><div class="dash-kpi-label">In Transit</div><div class="dash-kpi-delta" id="dDeltaTransit">&nbsp;</div></div></div>
-        <div class="dash-kpi-card" style="--accent:#7c3aed"><div class="dash-kpi-icon" style="background:rgba(124,58,237,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="dash-kpi-val" id="dStatPendingApproval">--</div><div class="dash-kpi-label">Awaiting Approval</div><div class="dash-kpi-delta" id="dDeltaApproval">&nbsp;</div></div></div>
-        <div class="dash-kpi-card" style="--accent:#16a34a"><div class="dash-kpi-icon" style="background:rgba(22,163,74,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div><div><div class="dash-kpi-val" id="dStatRevenueToday">--</div><div class="dash-kpi-label">Revenue Today</div><div class="dash-kpi-delta" id="dDeltaRevenue">&nbsp;</div></div></div>
-        <div class="dash-kpi-card" style="--accent:#dc2626"><div class="dash-kpi-icon" style="background:rgba(220,38,38,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div><div class="dash-kpi-val" id="dStatBreaches">--</div><div class="dash-kpi-label">SLA Breaches (24h)</div><div class="dash-kpi-delta" id="dDeltaBreach">&nbsp;</div></div></div>
+        <div class="dash-kpi-card" style="--accent:#1A237E" onclick="gotoFilteredTickets('open')" title="View all open tickets">
+          <div class="dash-kpi-icon" style="background:rgba(26,35,126,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A237E" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatOpenTickets">--</div><div class="dash-kpi-label">Open Tickets</div><div class="dash-kpi-delta" id="dDeltaTickets">&nbsp;</div></div>
+        </div>
+        <div class="dash-kpi-card" style="--accent:#FF6F00" onclick="gotoFilteredOrders('PENDING_APPROVAL')" title="View pending orders">
+          <div class="dash-kpi-icon" style="background:rgba(255,111,0,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6F00" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatPendingOrders">--</div><div class="dash-kpi-label">Pending Orders</div><div class="dash-kpi-delta" id="dDeltaOrders">&nbsp;</div></div>
+        </div>
+        <div class="dash-kpi-card" style="--accent:#0d9488" onclick="gotoFilteredOrders('IN_TRANSIT')" title="View orders in transit">
+          <div class="dash-kpi-icon" style="background:rgba(13,148,136,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatInTransit">--</div><div class="dash-kpi-label">In Transit</div><div class="dash-kpi-delta" id="dDeltaTransit">&nbsp;</div></div>
+        </div>
+        <div class="dash-kpi-card" style="--accent:#7c3aed" onclick="gotoFilteredOrders('PENDING_APPROVAL')" title="View orders awaiting approval">
+          <div class="dash-kpi-icon" style="background:rgba(124,58,237,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatPendingApproval">--</div><div class="dash-kpi-label">Awaiting Approval</div><div class="dash-kpi-delta" id="dDeltaApproval">&nbsp;</div></div>
+        </div>
+        <div class="dash-kpi-card" style="--accent:#16a34a" onclick="gotoFilteredOrders('DELIVERED')" title="View today&apos;s delivered orders">
+          <div class="dash-kpi-icon" style="background:rgba(22,163,74,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatRevenueToday">--</div><div class="dash-kpi-label">Revenue Today</div><div class="dash-kpi-delta" id="dDeltaRevenue">&nbsp;</div></div>
+        </div>
+        <div class="dash-kpi-card" style="--accent:#dc2626" onclick="showPage('sla')" title="View SLA analytics">
+          <div class="dash-kpi-icon" style="background:rgba(220,38,38,0.1);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div><div class="dash-kpi-val" id="dStatBreaches">--</div><div class="dash-kpi-label">SLA Breaches (24h)</div><div class="dash-kpi-delta" id="dDeltaBreach">&nbsp;</div></div>
+        </div>
       </div>
 
       <!-- Live activity grid -->
@@ -771,16 +834,16 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
             <div>
               <div class="dash-card-title">Operations Pulse</div>
-              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Tickets opened, orders placed and deliveries completed in the last 14 days.</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px;" id="dashPulseSubtitle">Tickets opened, orders placed and deliveries completed.</div>
             </div>
             <span style="font-size:10px;background:rgba(26,35,126,0.1);color:#1A237E;padding:3px 8px;border-radius:10px;font-weight:700;letter-spacing:0.4px;">LIVE</span>
           </div>
           <div style="height:240px;"><canvas id="dashPulseChart"></canvas></div>
         </div>
 
-        <div class="dash-card" style="padding:20px;">
+        <div class="dash-card" id="dashAffiliateCard" style="padding:20px;" title="Click a segment to filter by that affiliate">
           <div class="dash-card-title">Affiliate Activity</div>
-          <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">Active orders by affiliate, last 30 days.</div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;" id="dashAffiliateSubtitle">Active orders by affiliate.</div>
           <div style="height:240px;"><canvas id="dashAffiliateChart"></canvas></div>
         </div>
 
@@ -802,7 +865,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           <div id="dashOrderList" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
         </div>
 
-        <div class="dash-card" style="padding:20px;">
+        <div class="dash-card" id="dashChannelCard" style="padding:20px;display:none;">
           <div class="dash-card-title">System Channels</div>
           <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Health of integrations the portal depends on.</div>
           <div id="dashChannelHealth" style="display:flex;flex-direction:column;gap:8px;">Loading...</div>
@@ -1554,7 +1617,8 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
         <button class="users-tab active" id="tabStaff" onclick="switchUserTab('staff')">Staff Users</button>
         <button class="users-tab" id="tabCustomers" onclick="switchUserTab('customers')">Customer Accounts</button>
         <button class="users-tab" id="tabPendingSignups" onclick="switchUserTab('pending')">Pending Signups <span id="pendingSignupsBadge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;">0</span></button>
-        <button class="users-tab" id="tabRoles" onclick="switchUserTab('roles')">Roles &amp; Permissions</button>
+        <button class="users-tab" id="tabRoles" onclick="switchUserTab('roles')" title="View and edit what each role is permitted to do">Roles &amp; Permissions</button>
+        <button class="users-tab" id="tabRoleAssign" onclick="switchUserTab('roleassign')" style="display:none" title="Assign roles to individual staff members">Role Assignment</button>
         <div style="flex:1"></div>
         <input type="text" id="userSearch" class="users-search" placeholder="Search by name or email..." oninput="filterUserTable()">
         <button class="btn-add-staff" id="btnAddStaffTopbar" onclick="openAddStaffModal()">+ Add Staff</button>
@@ -1606,7 +1670,7 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
       <!-- Roles & Permissions Tab -->
       <div id="rolesPanel" class="user-panel" style="display:none">
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:#1e3a8a;line-height:1.5;">
-          <strong>How roles work.</strong> Each role is just a checklist of permissions. To make a thin role like <code>NE</code> more capable, find it in the matrix and tick the permissions you want it to have. To restrict a role, untick. Changes apply immediately and are cached for 60s. The Super Admin column is locked at <code>*</code> (all permissions). Use <strong>+ New Role</strong> to create a custom role, then assign permissions to it. Click <strong>Verify &amp; Migrate</strong> only if the schema or default seed needs to be (re)created.
+          <strong>Roles &amp; Permissions — what each role may do.</strong> Each role is a checklist of permissions. Tick to grant, untick to revoke. Changes apply immediately and are cached for 60 s. The Super Admin column is locked at <code>*</code> (all permissions). Use <strong>+ New Role</strong> to create a custom role, then assign permissions to it. To assign a role to a specific staff member, use the <strong>Role Assignment</strong> tab.
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <div style="font-size:13px;color:#64748b;">Tick / untick to grant / revoke. Roles can be delegated by Super Admin to anyone with the <code>roles.assign</code> permission.</div>
@@ -1623,6 +1687,24 @@ body { font-family: 'DM Sans', sans-serif; margin: 0; padding: 0; background: va
           </table>
         </div>
         <div id="rbacMigrateResult" style="display:none;margin-top:10px;padding:10px;border-radius:6px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:12px;font-family:monospace;white-space:pre-wrap;"></div>
+      </div>
+
+      <!-- Role Assignment Tab - bind users to roles -->
+      <div id="roleAssignPanel" class="user-panel" style="display:none">
+        <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.5;">
+          <strong>Role Assignment — who has which role.</strong> This panel binds individual staff members to roles. Granting a role here gives the staff member every permission that role carries (see Roles &amp; Permissions tab). You can assign or revoke multiple roles per person. A system role (SUPER_ADMIN, CEO, CFO&hellip;) requires a justification reason.
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="font-size:13px;color:#64748b;">Select a staff member to manage their role assignments.</div>
+          <button class="btn-secondary" onclick="openRoleAssignmentPage()" style="font-size:12px;padding:6px 12px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Full role-assignment page
+          </button>
+        </div>
+        <div id="roleAssignInlineContent">
+          <div class="users-loading" id="roleAssignLoading">Loading staff for role assignment...</div>
+          <div id="roleAssignBody" style="display:none"></div>
+        </div>
       </div>
     </div>
 
@@ -2713,9 +2795,9 @@ function applyRoleVisibility() {
   var reportsNav = document.getElementById('nav-reports');
   var settingsNav= document.getElementById('nav-settings');
 
-  if (usersNav)    usersNav.style.display    = adminRoles.includes(role)  ? 'flex' : 'none';
-  if (reportsNav)  reportsNav.style.display  = reportRoles.includes(role) ? 'flex' : 'none';
-  if (settingsNav) settingsNav.style.display = role === 'SUPER_ADMIN'     ? 'flex' : 'none';
+  if (usersNav)    usersNav.style.display   = adminRoles.includes(role)  ? 'flex' : 'none';
+  if (reportsNav)  reportsNav.style.display = reportRoles.includes(role) ? 'flex' : 'none';
+  // settingsNav visibility set below after channel-roles check
 
   // Role Assignment nav: shown when the user holds the `role.assign`
   // permission. SUPER_ADMIN holds the wildcard so it always sees the link;
@@ -2746,21 +2828,113 @@ function applyRoleVisibility() {
   if (backupTabBtn) backupTabBtn.style.display = canPriv ? 'flex' : 'none';
   if (uploadTabBtn) uploadTabBtn.style.display = canPriv ? 'flex' : 'none';
   if (canPriv) {
-    // Make Backup the default active tab for privileged users
     if (backupTabBtn) {
       switchSettingsTab('tab-backup', backupTabBtn);
       loadBackupStatus();
     }
   } else {
-    // Fall back to Oracle EBS as default
     var erpBtn = document.querySelector('[data-tab="tab-erp"]');
     if (erpBtn) switchSettingsTab('tab-erp', erpBtn);
   }
+
+  // Role Assignment tab within Users page: show if user can assign roles
+  var roleAssignTabBtn = document.getElementById('tabRoleAssign');
+  if (roleAssignTabBtn) {
+    if (role === 'SUPER_ADMIN') {
+      roleAssignTabBtn.style.display = '';
+    } else {
+      try {
+        google.script.run
+          .withSuccessHandler(function(r) {
+            var perms = (r && r.permissions) || [];
+            var ok = perms.indexOf('*') !== -1 || perms.indexOf('role.assign') !== -1;
+            if (roleAssignTabBtn) roleAssignTabBtn.style.display = ok ? '' : 'none';
+          })
+          .withFailureHandler(function() { if (roleAssignTabBtn) roleAssignTabBtn.style.display = 'none'; })
+          .processRequest({ service:'permissions', action:'getMyPermissions', token: SESSION.token });
+      } catch(e) { roleAssignTabBtn.style.display = 'none'; }
+    }
+  }
+
+  // System Channels panel: shown only to admin roles (server also enforces this)
+  var channelRoles = ['SUPER_ADMIN','CEO','CFO','CTO','GROUP_HEAD'];
+  window._canSeeChannels = channelRoles.includes(role);
+  var channelCard = document.getElementById('dashChannelCard');
+  if (channelCard) channelCard.style.display = window._canSeeChannels ? '' : 'none';
+
+  // Settings nav item: only for admin roles (server enforces via permission checks on each tab)
+  if (settingsNav) settingsNav.style.display = adminRoles.includes(role) ? 'flex' : 'none';
 }
 
 /* ── Affiliate Filter ── */
 function onAffiliateChange(val) { currentAffiliate = val; refreshCurrentPage(); }
 function refreshCurrentPage() { showPage(currentPage); }
+
+/* ── KPI Deep-link Navigation ── */
+function gotoFilteredOrders(status) {
+  var sel = document.getElementById('ordStatusFilter');
+  if (sel) sel.value = status || 'ALL';
+  showPage('orders');
+}
+
+function gotoFilteredTickets(statusGroup) {
+  // statusGroup: 'open' means all open statuses; otherwise set to specific status
+  var sel = document.getElementById('tktStatusFilter');
+  if (sel) {
+    if (statusGroup === 'open') {
+      sel.value = 'ALL';
+    } else {
+      sel.value = statusGroup;
+    }
+  }
+  showPage('tickets');
+}
+
+/* ── Dashboard Period Selector ── */
+var currentDashPeriod = 14;
+
+function setDashPeriod(days, btn) {
+  currentDashPeriod = days;
+  document.querySelectorAll('.dash-period-tab').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  loadDashboardHome();
+}
+
+/* ── Role Assignment Tab in-page ── */
+function openRoleAssignmentPage() { gotoRoleAssignment(); }
+
+function loadRoleAssignInline() {
+  var body = document.getElementById('roleAssignBody');
+  var loading = document.getElementById('roleAssignLoading');
+  if (body) body.style.display = 'none';
+  if (loading) loading.style.display = 'block';
+
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (loading) loading.style.display = 'none';
+      if (!r || !r.success) {
+        if (body) { body.style.display = 'block'; body.innerHTML = '<div style="color:#dc2626;padding:12px;">Failed to load role assignment data.</div>'; }
+        return;
+      }
+      if (body) {
+        body.style.display = 'block';
+        var users = r.users || [];
+        if (!users.length) { body.innerHTML = '<div style="color:#64748b;padding:12px;">No staff users found.</div>'; return; }
+        body.innerHTML = '<table class="users-table"><thead><tr><th>Name</th><th>Email</th><th>Assigned Roles</th><th style="text-align:right">Action</th></tr></thead>'
+          + '<tbody>' + users.map(function(u) {
+            var roles = (u.roles || []).join(', ') || 'None';
+            return '<tr><td>' + escapeHtml(u.name || u.user_id) + '</td><td>' + escapeHtml(u.email||'') + '</td>'
+              + '<td><span style="font-size:12px;color:#1A237E;">' + escapeHtml(roles) + '</span></td>'
+              + '<td style="text-align:right"><button class="action-btn" onclick="gotoRoleAssignment()">Manage</button></td></tr>';
+          }).join('') + '</tbody></table>';
+      }
+    })
+    .withFailureHandler(function(e) {
+      if (loading) loading.style.display = 'none';
+      if (body) { body.style.display = 'block'; body.innerHTML = '<div style="color:#dc2626;padding:12px;">Error: ' + (e && e.message || 'unknown') + '</div>'; }
+    })
+    .processRequest({ service:'roles', action:'listAssignmentData', token: SESSION.token });
+}
 
 /* ── Mobile Sidebar ── */
 function toggleSidebar() {
@@ -2770,9 +2944,46 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
 }
 
-/* ── Notification / User Menu stubs ── */
-function toggleNotifications() {}
-function toggleUserMenu() {}
+/* ── Profile Menu ── */
+function toggleUserMenu() {
+  var dd = document.getElementById('profileDropdown');
+  if (!dd) return;
+  dd.classList.toggle('open');
+  if (dd.classList.contains('open')) {
+    // Sync names into dropdown header
+    var pName = document.getElementById('profileMenuName');
+    var pRole = document.getElementById('profileMenuRole');
+    var topName = document.getElementById('topbarName');
+    var topRole = document.getElementById('topbarRole');
+    if (pName && topName) pName.textContent = topName.textContent;
+    if (pRole && topRole) pRole.textContent = topRole.textContent;
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', closeProfileMenuOutside_, { once: true });
+    }, 0);
+  }
+}
+
+function closeProfileMenuOutside_(e) {
+  var wrap = document.getElementById('profileMenuWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var dd = document.getElementById('profileDropdown');
+    if (dd) dd.classList.remove('open');
+  }
+}
+
+function openAccountSettings() {
+  var dd = document.getElementById('profileDropdown');
+  if (dd) dd.classList.remove('open');
+  showPage('settings');
+}
+
+/* ── Notifications stub ── */
+function toggleNotifications() {
+  var dd = document.getElementById('profileDropdown');
+  if (dd) dd.classList.remove('open');
+  showToast('Notifications coming soon');
+}
 
 /* ── Role Formatter ── */
 function formatRole(role) {
@@ -2942,6 +3153,18 @@ function setSLADimension(dim) {
   if (intView) intView.style.display = isInternal  ? 'block' : 'none';
   if (extView) extView.style.display = !isInternal ? 'block' : 'none';
 
+  // External SLA: staff-member and internal-department filters are not applicable
+  // (external metrics relate to customers, not internal staff performance)
+  var staffGrp = document.getElementById('filterStaffGroup');
+  var deptGrp  = document.querySelector('#slaFilterBar .sla-filter-group:has(#filterDepartment)');
+  if (!deptGrp) {
+    // Fallback: find by sibling relationship
+    var deptSel = document.getElementById('filterDepartment');
+    if (deptSel) deptGrp = deptSel.closest('.sla-filter-group');
+  }
+  if (staffGrp) staffGrp.style.display = isInternal ? '' : 'none';
+  if (deptGrp)  deptGrp.style.display  = isInternal ? '' : 'none';
+
   if (isInternal) {
     loadSLAData();
   } else {
@@ -2969,7 +3192,8 @@ function loadSLAData(period) {
     .handleSLARequest({
       action:    'getSLAAnalytics',
       filters:   typeof slaFilters !== 'undefined' ? slaFilters : { year: '2025', period: 'all' },
-      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'
+      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL',
+      token:     SESSION.token
     });
 }
 
@@ -3226,7 +3450,7 @@ function openFinanceApproverDrill(approverName) {
     .withFailureHandler(function(e) {
       document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
     })
-    .handleSLARequest({ action:'getFinanceApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+    .handleSLARequest({ action:'getFinanceApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'), token: SESSION.token });
 }
 
 function renderFinanceApproverDrill(approverName, rows) {
@@ -3297,7 +3521,7 @@ function openPOApproverDrill(approverName) {
     .withFailureHandler(function(e) {
       document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
     })
-    .handleSLARequest({ action:'getPOApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+    .handleSLARequest({ action:'getPOApproverDetail', approverName: approverName, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'), token: SESSION.token });
 }
 
 function renderPOApproverDrill(approverName, pos) {
@@ -3378,7 +3602,7 @@ function openAffiliateDrill(affiliateLabel) {
     .withFailureHandler(function(e) {
       document.getElementById('drillBody').innerHTML = '<div style="color:#dc2626;padding:20px;">' + e.message + '</div>';
     })
-    .handleSLARequest({ action:'getAffiliateDetail', affiliateLabel: affiliateLabel, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: affiliateLabel });
+    .handleSLARequest({ action:'getAffiliateDetail', affiliateLabel: affiliateLabel, filters: (typeof slaFilters !== 'undefined' ? slaFilters : {}), affiliate: affiliateLabel, token: SESSION.token });
 }
 
 function closeDrillModal() {
@@ -3425,7 +3649,8 @@ function loadExternalSLAData() {
     .handleSLARequest({
       action:    'getExternalSLAAnalytics',
       filters:   filters,
-      affiliate: affiliate
+      affiliate: affiliate,
+      token:     SESSION.token
     });
 }
 
@@ -3723,12 +3948,17 @@ function switchUserTab(tab) {
   if (pendingTab) pendingTab.classList.toggle('active', tab === 'pending');
   var rolesTab = document.getElementById('tabRoles');
   if (rolesTab) rolesTab.classList.toggle('active', tab === 'roles');
+  var roleAssignTab = document.getElementById('tabRoleAssign');
+  if (roleAssignTab) roleAssignTab.classList.toggle('active', tab === 'roleassign');
+
   document.getElementById('staffPanel').style.display = tab === 'staff' ? 'block' : 'none';
   document.getElementById('customersPanel').style.display = tab === 'customers' ? 'block' : 'none';
   var pendingPanel = document.getElementById('pendingSignupsPanel');
   if (pendingPanel) pendingPanel.style.display = tab === 'pending' ? 'block' : 'none';
   var rolesPanel = document.getElementById('rolesPanel');
   if (rolesPanel) rolesPanel.style.display = tab === 'roles' ? 'block' : 'none';
+  var roleAssignPanel = document.getElementById('roleAssignPanel');
+  if (roleAssignPanel) roleAssignPanel.style.display = tab === 'roleassign' ? 'block' : 'none';
 
   // Toggle the topbar action button between "+ Add Staff" and "+ Create Customer"
   var addStaffBtn   = document.getElementById('btnAddStaffTopbar');
@@ -3740,6 +3970,7 @@ function switchUserTab(tab) {
   if (tab === 'customers' && usersCustomerData.length === 0) loadCustomersData();
   if (tab === 'pending') loadPendingSignups();
   if (tab === 'roles') loadRolesMatrix();
+  if (tab === 'roleassign' && !window._roleAssignLoaded) { window._roleAssignLoaded = true; loadRoleAssignInline(); }
 }
 
 /* ── Roles & Permissions UI ── */
@@ -5366,7 +5597,7 @@ function runReport(reportId) {
       .handleCustomerRequest({ action:'list', conditions:{}, options:{ limit:200 } });
   } else if (reportId === 'sla') {
     google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
-      .handleSLARequest({ action:'getSLAAnalytics', filters:{ year:'2026', period:'all' }, affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL') });
+      .handleSLARequest({ action:'getSLAAnalytics', filters:{ year:'2026', period:'all' }, affiliate: (typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL'), token: SESSION.token });
   } else if (reportId === 'consumption' || reportId === 'cost') {
     // Consumption / cost trend reports aggregate orders into months.
     google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail)
@@ -6564,6 +6795,8 @@ function loadDashboardHome() {
   var hEl = document.getElementById('dashWelcomeHeading');
   if (hEl) hEl.textContent = greeting + (SESSION.name ? ', ' + SESSION.name.split(' ')[0] : '') + '.';
 
+  var periodDays = typeof currentDashPeriod !== 'undefined' ? currentDashPeriod : 14;
+
   google.script.run
     .withSuccessHandler(function(data) {
       if (!data || !data.success) return;
@@ -6585,114 +6818,192 @@ function loadDashboardHome() {
       deltaTag('dDeltaRevenue',   data.revenueToday,    prev.revenueToday,    false);
       deltaTag('dDeltaBreach',    data.slaBreaches24h,  prev.slaBreaches24h,  true);
 
-      // Health badge
+      // Health badge - only shown when channel data is available (admin roles)
       var badge = document.getElementById('dashHealthBadge');
       if (badge) {
-        var sev = data.healthScore != null ? data.healthScore : 100;
-        var label = sev >= 90 ? 'All systems healthy' : sev >= 70 ? 'Minor issues' : 'Action needed';
-        var cls   = sev >= 90 ? 'badge-success' : sev >= 70 ? 'badge-warning' : 'badge-danger';
-        badge.className = 'badge ' + cls;
-        badge.style.padding = '6px 10px';
-        badge.style.borderRadius = '20px';
-        badge.textContent = label + ' (' + sev + '%)';
+        if (data.healthScore != null) {
+          var sev = data.healthScore;
+          var bLabel = sev >= 90 ? 'All systems healthy' : sev >= 70 ? 'Minor issues' : 'Action needed';
+          var bCls   = sev >= 90 ? 'badge-success' : sev >= 70 ? 'badge-warning' : 'badge-danger';
+          badge.className = 'badge ' + bCls;
+          badge.style.cssText = 'font-size:11px;padding:6px 10px;border-radius:20px;display:inline-block;';
+          badge.textContent = bLabel + ' (' + sev + '%)';
+        } else {
+          badge.style.display = 'none';
+        }
       }
 
-      // Pulse chart
+      // Update pulse subtitle to reflect the actual period returned
+      var pulseSubEl = document.getElementById('dashPulseSubtitle');
+      if (pulseSubEl) pulseSubEl.textContent = 'Tickets opened, orders placed and deliveries completed in the last ' + (data.periodDays || periodDays) + ' days.';
+
+      // Pulse chart - use chart series palette (distinct from KPI accent colours)
+      // Fix flat-line: if all values are zero set suggestedMax so axis is meaningful
       var pulseLabels = (data.pulseSeries || []).map(function(p){ return p.label; });
       var pulseCanvas = document.getElementById('dashPulseChart');
       if (pulseCanvas && pulseLabels.length) {
-        if (dashChartPulse) dashChartPulse.destroy();
+        var ticketVals    = (data.pulseSeries||[]).map(function(p){return p.tickets;});
+        var orderVals     = (data.pulseSeries||[]).map(function(p){return p.orders;});
+        var deliveredVals = (data.pulseSeries||[]).map(function(p){return p.delivered;});
+        var allMax = Math.max.apply(null, ticketVals.concat(orderVals, deliveredVals).concat([0]));
+        if (dashChartPulse) { try { dashChartPulse.destroy(); } catch(e){} }
         dashChartPulse = new Chart(pulseCanvas.getContext('2d'), {
           data: {
             labels: pulseLabels,
             datasets: [
-              { type:'line', label:'Tickets',   data:(data.pulseSeries||[]).map(function(p){return p.tickets;}),   borderColor:'#1A237E', backgroundColor:'rgba(26,35,126,0.08)', tension:0.35, pointRadius:3, fill:true },
-              { type:'line', label:'Orders',    data:(data.pulseSeries||[]).map(function(p){return p.orders;}),    borderColor:'#FF6F00', backgroundColor:'rgba(255,111,0,0.08)', tension:0.35, pointRadius:3, fill:true },
-              { type:'line', label:'Delivered', data:(data.pulseSeries||[]).map(function(p){return p.delivered;}), borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,0.08)', tension:0.35, pointRadius:3, fill:true },
+              { type:'line', label:'Tickets',   data: ticketVals,    borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.08)',  tension:0.35, pointRadius:3, fill:true },
+              { type:'line', label:'Orders',    data: orderVals,     borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.08)', tension:0.35, pointRadius:3, fill:true },
+              { type:'line', label:'Delivered', data: deliveredVals, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,0.08)', tension:0.35, pointRadius:3, fill:true },
             ],
           },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'top', labels:{boxWidth:10,font:{size:11}}} }, scales:{ x:{ grid:{display:false} }, y:{ beginAtZero:true, grid:{color:'rgba(226,232,240,0.6)'} } } },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position:'top', labels:{ boxWidth:10, font:{ size:11 } } } },
+            scales: {
+              x: { grid:{ display:false } },
+              y: { beginAtZero:true, suggestedMax: allMax > 0 ? undefined : 10, grid:{ color:'rgba(226,232,240,0.6)' } }
+            }
+          },
         });
       }
 
-      // Affiliate doughnut
-      var affCanvas = document.getElementById('dashAffiliateChart');
-      var affLabels = (data.affiliateActivity || []).map(function(a){ return a.label; });
-      if (affCanvas && affLabels.length) {
-        var palette = ['#1A237E','#FF6F00','#0d9488','#7c3aed','#db2777','#ea580c','#0284c7','#16a34a','#64748b'];
-        if (dashChartAffiliate) dashChartAffiliate.destroy();
-        dashChartAffiliate = new Chart(affCanvas.getContext('2d'), {
-          type: 'doughnut',
-          data: { labels: affLabels, datasets: [{ data: (data.affiliateActivity||[]).map(function(a){return a.orders;}), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }] },
-          options: { responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{position:'bottom', labels:{boxWidth:10, font:{size:11}}} } },
-        });
+      // Affiliate donut - hide when viewing a single affiliate (no meaningful comparison)
+      // Also hide when server reports COUNTRY scope (single affiliate)
+      var scopeInfo = data.scopeInfo || {};
+      var isSingleAffiliate = (currentAffiliate && currentAffiliate !== 'ALL') || scopeInfo.scope === 'COUNTRY';
+      var affCard = document.getElementById('dashAffiliateCard');
+      if (affCard) {
+        if (isSingleAffiliate) {
+          affCard.style.display = 'none';
+        } else {
+          affCard.style.display = '';
+          var affCanvas = document.getElementById('dashAffiliateChart');
+          var affData   = data.affiliateActivity || [];
+          var affLabels = affData.map(function(a){ return a.label; });
+          var affPalette = ['#2563eb','#f59e0b','#10b981','#8b5cf6','#f43f5e','#06b6d4','#84cc16','#fb923c'];
+          var affSubtitle = document.getElementById('dashAffiliateSubtitle');
+          if (affSubtitle) affSubtitle.textContent = 'Active orders by affiliate, last ' + (data.periodDays || periodDays) + ' days. Click a segment to filter.';
+          if (affCanvas && affLabels.length) {
+            if (dashChartAffiliate) { try { dashChartAffiliate.destroy(); } catch(e){} }
+            dashChartAffiliate = new Chart(affCanvas.getContext('2d'), {
+              type: 'doughnut',
+              data: { labels: affLabels, datasets: [{ data: affData.map(function(a){return a.orders;}), backgroundColor: affPalette, borderWidth: 2, borderColor:'#fff' }] },
+              options: {
+                responsive: true, maintainAspectRatio: false, cutout:'60%',
+                plugins: { legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:11 } } } },
+                onClick: function(evt, elements) {
+                  if (!elements || !elements.length) return;
+                  var idx = elements[0].index;
+                  var affCode = affLabels[idx];
+                  if (!affCode || affCode === 'Unknown') return;
+                  // Switch global affiliate filter to this country
+                  var afSel = document.getElementById('affiliateFilter');
+                  if (afSel) {
+                    afSel.value = affCode;
+                    onAffiliateChange(affCode);
+                  }
+                }
+              },
+            });
+          } else if (affCanvas && !affLabels.length) {
+            if (affCanvas.getContext) {
+              var ctx = affCanvas.getContext('2d');
+              ctx.clearRect(0, 0, affCanvas.width, affCanvas.height);
+              ctx.fillStyle = '#94a3b8';
+              ctx.font = '13px DM Sans, sans-serif';
+              ctx.textAlign = 'center';
+              ctx.fillText('No order data in this period', affCanvas.width / 2, affCanvas.height / 2);
+            }
+          }
+        }
       }
 
-      // Customer service queue
+      // Customer service queue - tickets clickable to open detail
       var tl = document.getElementById('dashTicketList');
       if (tl) {
         if (data.recentTickets && data.recentTickets.length > 0) {
           tl.innerHTML = data.recentTickets.map(function(t){
             var color = t.priority==='CRITICAL'?'#dc2626':t.priority==='HIGH'?'#d97706':'#64748b';
             var slaWarn = t.sla_risk ? '<span style="font-size:10px;color:#dc2626;background:#fef2f2;padding:1px 6px;border-radius:8px;margin-left:6px;">SLA RISK</span>' : '';
-            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
-              + '<div style="overflow:hidden;"><div style="font-size:13px;font-weight:600;color:#1e293b;">'+t.ticket_number+slaWarn+'</div><div style="font-size:12px;color:#64748b;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'+(t.subject||'').substring(0,55)+'</div></div>'
-              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+t.priority+'</span></div>';
+            var safeId = (t.ticket_id || '').replace(/'/g,"\\'");
+            var clickAttr = safeId ? 'onclick="showPage(\'tickets\');setTimeout(function(){openTicketDetail(\''+safeId+'\');},400);" style="cursor:pointer;"' : '';
+            return '<div '+clickAttr+' style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<div style="overflow:hidden;"><div style="font-size:13px;font-weight:600;color:#1e293b;">'+escapeHtml(t.ticket_number||'')+slaWarn+'</div><div style="font-size:12px;color:#64748b;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">'+(t.subject||'').substring(0,55)+'</div></div>'
+              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+escapeHtml(t.priority||'')+'</span></div>';
           }).join('');
         } else {
           tl.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No open tickets right now.</div>';
         }
       }
 
-      // Recent orders
+      // Recent orders - clickable to open detail
       var ol = document.getElementById('dashOrderList');
       if (ol) {
         if (data.recentOrders && data.recentOrders.length > 0) {
           ol.innerHTML = data.recentOrders.map(function(o){
             var color = o.status==='IN_TRANSIT'?'#0284c7':o.status==='DELIVERED'?'#16a34a':'#d97706';
-            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
-              + '<div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+o.order_number+'</div><div style="font-size:12px;color:#64748b;">'+(o.country_code||'')+(o.total_amount?' &middot; KES '+fmtCurrency(o.total_amount):'')+'</div></div>'
-              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+String(o.status||'').replace('_',' ')+'</span></div>';
+            var safeId = (o.order_id || '').replace(/'/g,"\\'");
+            var clickAttr = safeId ? 'onclick="showPage(\'orders\');setTimeout(function(){openOrderDetail(\''+safeId+'\');},400);" style="cursor:pointer;"' : '';
+            return '<div '+clickAttr+' style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
+              + '<div><div style="font-size:13px;font-weight:600;color:#1e293b;">'+escapeHtml(o.order_number||o.order_id||'')+'</div><div style="font-size:12px;color:#64748b;">'+(o.country_code||'')+(o.total_amount?' &middot; KES '+fmtCurrency(o.total_amount):'')+'</div></div>'
+              + '<span style="font-size:10px;font-weight:700;color:#fff;background:'+color+';padding:3px 8px;border-radius:10px;">'+String(o.status||'').replace(/_/g,' ')+'</span></div>';
           }).join('');
         } else {
           ol.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No recent orders.</div>';
         }
       }
 
-      // Channel health
+      // Channel health - only shown to admin roles (server gates returning data)
       var ch = document.getElementById('dashChannelHealth');
-      if (ch) {
-        var channels = data.channelHealth || [];
-        if (channels.length) {
-          ch.innerHTML = channels.map(function(c) {
+      var channelCard = document.getElementById('dashChannelCard');
+      if (data.channelHealth && data.channelHealth.length) {
+        if (channelCard) channelCard.style.display = '';
+        if (ch) {
+          ch.innerHTML = data.channelHealth.map(function(c) {
             var status = c.status || 'unknown';
             var color  = status === 'ok' ? '#16a34a' : status === 'warn' ? '#d97706' : status === 'down' ? '#dc2626' : '#94a3b8';
             var label  = status === 'ok' ? 'Healthy' : status === 'warn' ? 'Degraded' : status === 'down' ? 'Down' : 'Idle';
             return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border-radius:8px;">'
-              + '<div style="font-size:13px;color:#1e293b;font-weight:600;">'+c.label+'</div>'
-              + '<div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:'+color+';"></span><span style="font-size:11px;color:'+color+';font-weight:700;">'+label+'</span></div></div>';
+              + '<div style="font-size:13px;color:#1e293b;font-weight:600;">'+escapeHtml(c.label)+'</div>'
+              + '<div style="display:flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:'+color+';display:inline-block;"></span><span style="font-size:11px;color:'+color+';font-weight:700;">'+label+'</span></div></div>';
           }).join('');
-        } else {
-          ch.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">No integrations configured.</div>';
         }
       }
 
-      // My tasks
+      // My Tasks - each item navigates to the relevant module
       var mt = document.getElementById('dashMyTasks');
       if (mt) {
         var tasks = data.myTasks || [];
         if (tasks.length) {
           mt.innerHTML = tasks.map(function(t){
-            return '<div style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;">'
-              + '<div><div style="font-size:13px;color:#1e293b;font-weight:600;">'+(t.title||'')+'</div><div style="font-size:11px;color:#64748b;">'+(t.context||'')+'</div></div>'
-              + '<span style="font-size:11px;color:#1A237E;">'+(t.due||'')+'</span></div>';
+            var typeIcon = t.type === 'ticket' ? '🎫' : t.type === 'approval' ? '✅' : '📦';
+            var clickFn = '';
+            if (t.type === 'ticket' && t.id) {
+              var sid = String(t.id).replace(/'/g,"\\'");
+              clickFn = "showPage('tickets');setTimeout(function(){openTicketDetail('"+sid+"');},400);";
+            } else if (t.type === 'approval' || t.type === 'order') {
+              var oid = String(t.id||'').replace(/'/g,"\\'");
+              clickFn = oid ? "showPage('orders');setTimeout(function(){openOrderDetail('"+oid+"');},400);" : "showPage('orders');";
+            }
+            return '<div onclick="'+clickFn+'" style="padding:9px 10px;background:#f8fafc;border-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;">'
+              + '<div><div style="font-size:13px;color:#1e293b;font-weight:600;">'+typeIcon+' '+(t.title||'')+'</div><div style="font-size:11px;color:#64748b;">'+(t.context||'')+'</div></div>'
+              + '<span style="font-size:11px;font-weight:600;color:#1A237E;white-space:nowrap;">'+(t.due||'')+'</span></div>';
           }).join('');
         } else {
           mt.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;padding:14px;">Inbox zero. Nothing assigned to you.</div>';
         }
       }
     })
-    .handleDashboardRequest({ action:'getDashboardSummary', affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL' });
+    .withFailureHandler(function(e) {
+      console.error('loadDashboardHome failed:', e && e.message);
+    })
+    .handleDashboardRequest({
+      action:    'getDashboardSummary',
+      affiliate: typeof currentAffiliate !== 'undefined' ? currentAffiliate : 'ALL',
+      period:    periodDays,
+      token:     SESSION.token
+    });
 }
 
 /* ══════════ INIT ══════════ */
