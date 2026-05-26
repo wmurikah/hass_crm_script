@@ -26,7 +26,7 @@
  */
 
 // ---- Configuration ----
-var SCRIPT_ID = 'PASTE_YOUR_SCRIPT_ID_HERE';
+var SCRIPT_ID = '1Wxq9M7FtPwiEBG6oYY8JZ-QejD6ZPBLvGXHhNMGdIaEXLQ4XxCAXekbk';
 var DEPLOYMENT_ID = 'AKfycbzaUVMghqie8EmgLvIMl-fa_5YeFDGurxjTA2QN5hhkCbOsKUN5MaaQRjq9VjMTj9LI';
 var MANIFEST_FILE_NAME = 'appsscript';
 // ------------------------
