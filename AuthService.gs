@@ -56,6 +56,174 @@ function hashPassword(plain) {
 function trim2(v) { return String(v || '').trim(); }
 
 // ================================================================
+// PASSWORD POLICY  (G-009)
+// ================================================================
+
+// Top-20 most-common passwords; configurable via Script Property COMMON_PASSWORDS_CSV.
+var _DEFAULT_COMMON_PASSWORDS_ = [
+  'password','123456','12345678','1234567890','qwerty','abc123','monkey',
+  'letmein','111111','password1','iloveyou','adobe123','123123','sunshine',
+  'princess','welcome','password123','dragon','master','passw0rd'
+];
+
+/**
+ * Returns policy rules from Config, falling back to sane defaults.
+ * Keys: PW_MIN_LENGTH, PW_HISTORY_N, PW_MAX_AGE_DAYS
+ */
+function _getPasswordPolicy_() {
+  var defaults = { minLength: 12, historyN: 5, maxAgeDays: 90 };
+  try {
+    if (typeof getConfigValues === 'function') {
+      var vals = getConfigValues(['PW_MIN_LENGTH', 'PW_HISTORY_N', 'PW_MAX_AGE_DAYS']);
+      var ml = parseInt(vals['PW_MIN_LENGTH'], 10);
+      var hn = parseInt(vals['PW_HISTORY_N'],  10);
+      var ma = parseInt(vals['PW_MAX_AGE_DAYS'], 10);
+      return {
+        minLength:  (!isNaN(ml) && ml > 0)  ? ml : defaults.minLength,
+        historyN:   (!isNaN(hn) && hn >= 0) ? hn : defaults.historyN,
+        maxAgeDays: (!isNaN(ma) && ma > 0)  ? ma : defaults.maxAgeDays,
+      };
+    }
+  } catch(e) {}
+  return defaults;
+}
+
+/**
+ * Validates password complexity and checks against common-password list.
+ * Throws with a clear message on violation; returns true on pass.
+ *
+ * @param {string} password  - plaintext candidate
+ * @param {string} [userId]  - optional, for history check
+ * @param {string} [userType] - 'STAFF' | 'CUSTOMER'
+ */
+function validatePasswordPolicy(password, userId, userType) {
+  if (!password || typeof password !== 'string') {
+    throw new Error('Password is required.');
+  }
+  var policy = _getPasswordPolicy_();
+  if (password.length < policy.minLength) {
+    throw new Error('Password must be at least ' + policy.minLength + ' characters.');
+  }
+  if (!/[A-Z]/.test(password)) throw new Error('Password must contain at least one uppercase letter.');
+  if (!/[a-z]/.test(password)) throw new Error('Password must contain at least one lowercase letter.');
+  if (!/[0-9]/.test(password)) throw new Error('Password must contain at least one digit.');
+  if (!/[^A-Za-z0-9]/.test(password)) throw new Error('Password must contain at least one special character.');
+
+  // Common/breached password check.
+  var commonList = _DEFAULT_COMMON_PASSWORDS_;
+  try {
+    var customCsv = PropertiesService.getScriptProperties().getProperty('COMMON_PASSWORDS_CSV');
+    if (customCsv) commonList = customCsv.split(',').map(function(p) { return p.trim().toLowerCase(); });
+  } catch(e) {}
+  if (commonList.indexOf(password.toLowerCase()) !== -1) {
+    throw new Error('This password is too common. Please choose a more unique password.');
+  }
+
+  // History check (if userId supplied).
+  if (userId && policy.historyN > 0) {
+    var hashed = hashPassword(password);
+    if (checkPasswordReuse(userId, userType || 'STAFF', hashed, policy.historyN)) {
+      throw new Error('You cannot reuse one of your last ' + policy.historyN + ' passwords.');
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Returns true if the hashed password matches any of the last N entries
+ * in password_history for this user.
+ */
+function checkPasswordReuse(userId, userType, newPasswordHash, historyN) {
+  if (!userId || !newPasswordHash || !(historyN > 0)) return false;
+  try {
+    var rows = tursoSelect(
+      'SELECT password_hash FROM password_history WHERE user_id = ? AND user_type = ? ' +
+      'ORDER BY created_at DESC LIMIT ?',
+      [userId, userType || 'STAFF', historyN]
+    );
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].password_hash === newPasswordHash) return true;
+    }
+  } catch(e) {
+    Logger.log('[AuthService] checkPasswordReuse error: ' + e.message);
+  }
+  return false;
+}
+
+/**
+ * Saves the current password hash to password_history.
+ */
+function recordPasswordHistory(userId, userType, passwordHash) {
+  if (!userId || !passwordHash) return;
+  try {
+    tursoWrite(
+      'INSERT INTO password_history (history_id, user_id, user_type, password_hash, created_at) VALUES (?,?,?,?,?)',
+      [generateId('PWH'), userId, userType || 'STAFF', passwordHash, new Date().toISOString()]
+    );
+  } catch(e) {
+    Logger.log('[AuthService] recordPasswordHistory error: ' + e.message);
+  }
+}
+
+/**
+ * Returns true if the user's password is older than maxAgeDays.
+ */
+function isPasswordExpired(userId, userType) {
+  var policy = _getPasswordPolicy_();
+  try {
+    var table    = (userType === 'CUSTOMER') ? 'contacts' : 'users';
+    var idField  = (userType === 'CUSTOMER') ? 'contact_id' : 'user_id';
+    var rows     = tursoSelect('SELECT password_changed_at FROM ' + table + ' WHERE ' + idField + ' = ? LIMIT 1', [userId]);
+    if (!rows.length) return false;
+    var changedAt = rows[0].password_changed_at;
+    if (!changedAt) return false; // no history = not expired (migration grace)
+    var changedDate = new Date(changedAt);
+    if (isNaN(changedDate.getTime())) return false;
+    var ageMs = Date.now() - changedDate.getTime();
+    return ageMs > policy.maxAgeDays * 24 * 60 * 60 * 1000;
+  } catch(e) {
+    Logger.log('[AuthService] isPasswordExpired error: ' + e.message);
+    return false;
+  }
+}
+
+// ================================================================
+// SESSION CONSTANTS (G-010)
+// ================================================================
+
+var SESSION_IDLE_TIMEOUT_DEFAULT_MIN_ = 30;
+var SESSION_MAX_CONCURRENT_            = 5;
+
+/**
+ * Returns idle timeout in minutes from Config (default 30).
+ */
+function _getIdleTimeoutMinutes_() {
+  try {
+    if (typeof getConfigValues === 'function') {
+      var v = getConfigValues(['SESSION_IDLE_TIMEOUT_MIN']);
+      var n = parseInt(v['SESSION_IDLE_TIMEOUT_MIN'], 10);
+      if (!isNaN(n) && n > 0) return n;
+    }
+  } catch(e) {}
+  return SESSION_IDLE_TIMEOUT_DEFAULT_MIN_;
+}
+
+/**
+ * Returns max concurrent sessions per user from Config (default 5).
+ */
+function _getMaxConcurrentSessions_() {
+  try {
+    if (typeof getConfigValues === 'function') {
+      var v = getConfigValues(['SESSION_MAX_CONCURRENT']);
+      var n = parseInt(v['SESSION_MAX_CONCURRENT'], 10);
+      if (!isNaN(n) && n > 0) return n;
+    }
+  } catch(e) {}
+  return SESSION_MAX_CONCURRENT_;
+}
+
+// ================================================================
 // LOGIN
 // ================================================================
 
@@ -166,10 +334,32 @@ function createSession(userId, userType, role, hoursValid) {
   var sessionId = generateUUID();
   var now       = new Date().toISOString();
   var expiresAt = new Date(Date.now() + hoursValid * 3600000).toISOString();
+
+  // Concurrent session control: invalidate oldest sessions over the limit.
+  try {
+    var maxSessions = _getMaxConcurrentSessions_();
+    var activeSessions = tursoSelect(
+      "SELECT session_id FROM sessions WHERE user_id = ? AND is_active = 1 AND expires_at > ? " +
+      "ORDER BY created_at ASC",
+      [userId, now]
+    );
+    if (activeSessions.length >= maxSessions) {
+      var toExpire = activeSessions.slice(0, activeSessions.length - maxSessions + 1);
+      toExpire.forEach(function(s) {
+        try {
+          tursoWrite('UPDATE sessions SET is_active = 0, updated_at = ? WHERE session_id = ?',
+            [now, s.session_id]);
+        } catch(e) {}
+      });
+    }
+  } catch(e) {
+    Logger.log('[AuthService] concurrent session cleanup error: ' + e.message);
+  }
+
   tursoWrite(
     'INSERT INTO sessions (session_id, user_id, user_type, role, token_hash, ' +
-    'is_active, expires_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
-    [sessionId, userId, userType, role, tokenHash, 1, expiresAt, now, now]
+    'is_active, expires_at, last_active_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    [sessionId, userId, userType, role, tokenHash, 1, expiresAt, now, now, now]
   );
   return rawToken;
 }
@@ -179,9 +369,35 @@ function checkSession(params) {
   if (!token) return { valid: false };
   var tokenHash = hashPassword(token);
   var session = findRow('Sessions', 'token_hash', tokenHash);
-  if (!session) return { valid: false };
+  if (!session)              return { valid: false };
   if (session.is_active != 1) return { valid: false };
-  if (new Date(session.expires_at) < new Date()) return { valid: false };
+  var now = new Date();
+  if (new Date(session.expires_at) < now) return { valid: false };
+
+  // Idle timeout check (G-010).
+  if (session.last_active_at) {
+    var idleMs      = now - new Date(session.last_active_at);
+    var idleTimeout = _getIdleTimeoutMinutes_() * 60 * 1000;
+    if (idleMs > idleTimeout) {
+      try {
+        tursoWrite('UPDATE sessions SET is_active = 0, updated_at = ? WHERE session_id = ?',
+          [now.toISOString(), session.session_id]);
+      } catch(e) {}
+      try {
+        auditLogCustom(session.user_type === 'STAFF' ? 'User' : 'Contact',
+          session.user_id, session.user_id, 'SESSION_IDLE_EXPIRED',
+          { session_id: session.session_id, idle_minutes: Math.round(idleMs / 60000) }, '');
+      } catch(e) {}
+      return { valid: false, reason: 'idle_timeout' };
+    }
+  }
+
+  // Touch last_active_at to keep the idle clock fresh (best-effort).
+  try {
+    tursoWrite('UPDATE sessions SET last_active_at = ?, updated_at = ? WHERE session_id = ?',
+      [now.toISOString(), now.toISOString(), session.session_id]);
+  } catch(e) {}
+
   return {
     valid:    true,
     userId:   session.user_id,
@@ -231,7 +447,8 @@ function signupCustomer(params) {
   if (!email)    return { success: false, error: 'Email is required.' };
   if (!name)     return { success: false, error: 'Full name is required.' };
   if (!password) return { success: false, error: 'Password is required.' };
-  if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters.' };
+  // G-009: enforce full policy on new signups.
+  try { validatePasswordPolicy(password); } catch(pe) { return { success: false, error: pe.message }; }
   if (accountType === 'Corporate Account' && !String(extra.kraPin || '').trim()) {
     return { success: false, error: 'KRA PIN is required for corporate sign-ups.' };
   }
@@ -478,15 +695,25 @@ function setNewPassword(params) {
   var email    = String(params.email       || '').trim().toLowerCase();
   var password = String(params.newPassword || '').trim();
   if (!email || !password) return { success: false, error: 'Email and new password are required.' };
-  if (password.length < 8) return { success: false, error: 'Password must be at least 8 characters.' };
-  var hashed = hashPassword(password);
 
-  // Try Users first, then Contacts
-  var staffRow    = findRow('Users',    'email', email);
-  var contactRow  = findRow('Contacts', 'email', email);
+  // Apply full password policy (G-009).
+  // Resolve userId first for history check.
+  var staffRow   = findRow('Users',    'email', email);
+  var contactRow = findRow('Contacts', 'email', email);
+  var userId   = staffRow ? staffRow.user_id : (contactRow ? contactRow.contact_id : null);
+  var userType = staffRow ? 'STAFF' : 'CUSTOMER';
+  try {
+    validatePasswordPolicy(password, userId, userType);
+  } catch(pe) {
+    return { success: false, error: pe.message };
+  }
+
+  var hashed = hashPassword(password);
+  var now    = new Date().toISOString();
 
   if (staffRow) {
-    updateRow('Users', 'user_id', staffRow.user_id, { password_hash: hashed });
+    recordPasswordHistory(staffRow.user_id, 'STAFF', String(staffRow.password_hash || ''));
+    updateRow('Users', 'user_id', staffRow.user_id, { password_hash: hashed, password_changed_at: now });
     try {
       auditLogCustom('User', staffRow.user_id, staffRow.user_id, 'PASSWORD_RESET_COMPLETED',
         { email: email, userType: 'STAFF' }, staffRow.country_code || '');
@@ -494,7 +721,8 @@ function setNewPassword(params) {
     return { success: true };
   }
   if (contactRow) {
-    updateRow('Contacts', 'contact_id', contactRow.contact_id, { password_hash: hashed });
+    recordPasswordHistory(contactRow.contact_id, 'CUSTOMER', String(contactRow.password_hash || ''));
+    updateRow('Contacts', 'contact_id', contactRow.contact_id, { password_hash: hashed, password_changed_at: now });
     try {
       auditLogCustom('Contact', contactRow.contact_id, contactRow.contact_id, 'PASSWORD_RESET_COMPLETED',
         { email: email, userType: 'CUSTOMER' }, '');
@@ -529,6 +757,23 @@ function getStaffInfo(userId) {
 // ================================================================
 
 function _completeStaffLogin_(user, email) {
+  // G-009: Force password change if expired.
+  var expired = false;
+  try { expired = isPasswordExpired(user.user_id, 'STAFF'); } catch(e) {}
+  if (expired) {
+    try {
+      auditLogCustom('User', user.user_id, user.user_id, 'PASSWORD_EXPIRED',
+        { email: email, userType: 'STAFF' }, user.country_code || '');
+    } catch(e) {}
+    return {
+      success:          false,
+      passwordExpired:  true,
+      email:            email,
+      error:            'Your password has expired. Please reset it to continue.',
+      redirectUrl:      getScriptUrl() + '?page=reset-password&email=' + encodeURIComponent(email),
+    };
+  }
+
   var token = createSession(user.user_id, 'STAFF', user.role, 8);
   try {
     updateRow('Users', 'user_id', user.user_id, {

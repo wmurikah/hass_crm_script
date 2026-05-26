@@ -757,14 +757,104 @@ function scheduleSLABreachSweep() {
  * Job handler invoked by JobProcessor._dispatch_ when type=SLA_BREACH_SWEEP.
  */
 function _jobSlaBreachSweep_(payload) {
-  var ticketResult   = detectTicketBreaches();
-  var orderResult    = detectOrderBreaches();
-  var documentResult = detectDocumentExpiryAlerts();
+  var ticketResult    = detectTicketBreaches();
+  var orderResult     = detectOrderBreaches();
+  var documentResult  = detectDocumentExpiryAlerts();
+  var autoCloseResult = detectResolvedAutoClose();
   return {
     tickets:   ticketResult,
     orders:    orderResult,
     documents: documentResult,
+    autoClose: autoCloseResult,
   };
+}
+
+// ============================================================================
+// AUTO-CLOSE: resolved tickets 24 h after customer confirmation (Section 3.3 step 6)
+// ============================================================================
+
+/**
+ * Closes tickets that have been in RESOLVED status for ≥ 24 hours after the
+ * customer confirmed resolution (resolved_at / customer_confirmed_at).
+ * Idempotent: tickets already CLOSED are ignored.
+ *
+ * @returns {Object} { success, checked, closed, errors }
+ */
+function detectResolvedAutoClose() {
+  var now      = new Date();
+  var cutoffMs = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+  var stats = { success: true, checked: 0, closed: 0, errors: 0 };
+  try {
+    var res = findWhere('Tickets', { status: 'RESOLVED' }, { limit: 2000 });
+    var tickets = (res && res.data) || [];
+    stats.checked = tickets.length;
+
+    for (var i = 0; i < tickets.length; i++) {
+      var t = tickets[i];
+      try {
+        // Use customer_confirmed_at first; fall back to resolved_at.
+        var tsRaw = t.customer_confirmed_at || t.resolved_at;
+        if (!tsRaw) continue;
+        var ts = new Date(tsRaw);
+        if (isNaN(ts.getTime())) continue;
+        if ((now - ts) < cutoffMs) continue;
+
+        // Auto-close it.
+        updateRow('Tickets', 'ticket_id', t.ticket_id, {
+          status:     'CLOSED',
+          closed_at:  now.toISOString(),
+          updated_at: now.toISOString(),
+        });
+
+        audit_log({
+          entity_type:   'Ticket',
+          entity_id:     t.ticket_id,
+          action:        'AUTO_CLOSED',
+          actor_user_id: SLA_BREACH_SYSTEM_ACTOR,
+          changes: {
+            status: { from: 'RESOLVED', to: 'CLOSED' },
+            closed_after_hours: Math.round((now - ts) / 3600000),
+          },
+          metadata: {
+            ticket_number:       t.ticket_number,
+            resolved_at:         t.resolved_at,
+            customer_confirmed_at: t.customer_confirmed_at || '',
+          },
+          country_code: t.country_code,
+        });
+
+        // Best-effort customer notification.
+        if (t.contact_id && typeof createNotification === 'function') {
+          try {
+            createNotification({
+              recipient_type:    'CUSTOMER_CONTACT',
+              recipient_id:      t.contact_id,
+              notification_type: 'TICKET_CLOSED',
+              reference_type:    'Ticket',
+              reference_id:      t.ticket_id,
+              title:             'Ticket ' + t.ticket_number + ' has been closed',
+              message:           'Your ticket has been automatically closed 24 hours after resolution. ' +
+                                 'If you still need help, please open a new ticket.',
+              action_url:        '/portal/tickets',
+              priority:          'NORMAL',
+            });
+          } catch(ne) { Logger.log('[SLABreachDetector] auto-close notif error: ' + ne.message); }
+        }
+
+        stats.closed++;
+      } catch(te) {
+        stats.errors++;
+        Logger.log('[SLABreachDetector] auto-close error for ticket ' + t.ticket_id + ': ' + te.message);
+      }
+    }
+
+    if (stats.closed > 0) { try { clearSheetCache('Tickets'); } catch(e) {} }
+  } catch(e) {
+    Logger.log('[SLABreachDetector] detectResolvedAutoClose error: ' + e.message);
+    return { success: false, error: e.message };
+  }
+  return stats;
 }
 
 /**

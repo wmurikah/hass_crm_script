@@ -1068,14 +1068,34 @@ function _exchangeRateToKES_(currencyCode) {
   return { rate: rate, stale: stale };
 }
 
+/**
+ * Returns the approval tier thresholds in KES.
+ * Reads APPROVAL_THRESHOLD_LOW_KES and APPROVAL_THRESHOLD_MID_KES from
+ * the Config table; falls back to the original defaults (100k / 1M).
+ */
+function _getApprovalThresholds_() {
+  try {
+    if (typeof getConfigValues === 'function') {
+      var vals = getConfigValues(['APPROVAL_THRESHOLD_LOW_KES', 'APPROVAL_THRESHOLD_MID_KES']);
+      var low = parseFloat(vals['APPROVAL_THRESHOLD_LOW_KES']);
+      var mid = parseFloat(vals['APPROVAL_THRESHOLD_MID_KES']);
+      if (!isNaN(low) && low > 0 && !isNaN(mid) && mid > low) {
+        return { low: low, mid: mid };
+      }
+    }
+  } catch(e) { /* fall through to defaults */ }
+  return { low: 100000, mid: 1000000 };
+}
+
 function requireOrderApprovalPermission(userId, orderAmount, currencyCode) {
   var amt = parseFloat(orderAmount) || 0;
-  var fx = _exchangeRateToKES_(currencyCode);
-  var kesAmount = amt * fx.rate;
+  var fx  = _exchangeRateToKES_(currencyCode);
+  var kesAmount  = amt * fx.rate;
+  var thresholds = _getApprovalThresholds_();
   var perm;
-  if (kesAmount <= 100000)        perm = 'order.approve_low';
-  else if (kesAmount <= 1000000)  perm = 'order.approve_mid';
-  else                            perm = 'order.approve_high';
+  if (kesAmount <= thresholds.low)       perm = 'order.approve_low';
+  else if (kesAmount <= thresholds.mid)  perm = 'order.approve_mid';
+  else                                   perm = 'order.approve_high';
   if (!userHasPermission(userId, perm)) {
     _logPermissionDenied(userId, 'order.approve', '', '', perm);
     throw PermissionDeniedError(
@@ -1083,7 +1103,7 @@ function requireOrderApprovalPermission(userId, orderAmount, currencyCode) {
       perm
     );
   }
-  return { tier: perm, kesAmount: kesAmount, fx: fx };
+  return { tier: perm, kesAmount: kesAmount, fx: fx, thresholds: thresholds };
 }
 
 /**
