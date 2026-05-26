@@ -234,6 +234,9 @@ function loginUser(params) {
   if (!password) return { success: false, error: 'Password is required.' };
   var hashed = hashPassword(password);
 
+  // Clear any expired MFA challenge tokens left in script properties.
+  try { clearStaleMfaChallenges(); } catch(e) {}
+
   var sr = findStaffByEmail(email, hashed);
   if (sr.error) {
     _auditLoginFailed_(email, sr.error, sr.user && sr.user.user_id, 'STAFF');
@@ -241,7 +244,10 @@ function loginUser(params) {
   }
   if (sr.found) {
     // G-008: enforce MFA for privileged roles before issuing a session.
-    if (typeof userRequiresMfa === 'function' && userRequiresMfa(sr.user.user_id)) {
+    // Entire block is gated by MFA_ENFORCED flag (default false); when off,
+    // a valid password is sufficient to complete login.
+    if (isMfaEnforced() &&
+        typeof userRequiresMfa === 'function' && userRequiresMfa(sr.user.user_id)) {
       var enrolled = String(sr.user.mfa_enabled || '0') === '1';
       var mode = enrolled ? 'verify' : 'enroll';
       var challengeToken = createMfaChallenge(sr.user.user_id, 'STAFF', sr.user.role, mode);

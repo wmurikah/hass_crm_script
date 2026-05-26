@@ -44,6 +44,56 @@ var MFA_CHALLENGE_MAX_FAILS_   = 5;
 var MFA_CHALLENGE_PREFIX_      = 'MFA_CHL_';
 
 // ----------------------------------------------------------------
+// Global MFA enforcement gate
+// ----------------------------------------------------------------
+
+/**
+ * Returns true only when MFA should be enforced system-wide.
+ * Check order: script property MFA_ENFORCED → Config table → default false.
+ * Set the script property (or Config key) to the string "true" to enable.
+ */
+function isMfaEnforced() {
+  try {
+    var prop = PropertiesService.getScriptProperties().getProperty('MFA_ENFORCED');
+    if (prop !== null) return String(prop).trim().toLowerCase() === 'true';
+  } catch(e) {}
+  try {
+    if (typeof getConfigValues === 'function') {
+      var vals = getConfigValues(['MFA_ENFORCED']);
+      if (vals['MFA_ENFORCED'] !== undefined && vals['MFA_ENFORCED'] !== '') {
+        return String(vals['MFA_ENFORCED']).trim().toLowerCase() === 'true';
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+/**
+ * Deletes all script properties whose key starts with MFA_CHL_ and whose
+ * stored entry is expired or unparseable. Safe to call on every login.
+ */
+function clearStaleMfaChallenges() {
+  try {
+    var scriptProps = PropertiesService.getScriptProperties();
+    var all = scriptProps.getProperties();
+    var now = new Date();
+    Object.keys(all).forEach(function(key) {
+      if (key.indexOf(MFA_CHALLENGE_PREFIX_) !== 0) return;
+      var stale = false;
+      try {
+        var entry = JSON.parse(all[key]);
+        if (!entry || new Date(entry.expires_at) < now) stale = true;
+      } catch(e) {
+        stale = true;
+      }
+      if (stale) scriptProps.deleteProperty(key);
+    });
+  } catch(e) {
+    Logger.log('[MfaService] clearStaleMfaChallenges: ' + e.message);
+  }
+}
+
+// ----------------------------------------------------------------
 // Role check
 // ----------------------------------------------------------------
 
