@@ -275,6 +275,15 @@ function doPost(e) {
     var params = JSON.parse(e.postData.contents);
     var service = params.service;
 
+    // --- M-Pesa Daraja C2B callbacks arrive as raw JSON (no 'service' field) ---
+    // They must be handled before the authentication guard.
+    if (typeof isMpesaDarajaCallback === 'function' && isMpesaDarajaCallback(params)) {
+      var urlParams = (e && e.parameter) ? e.parameter : {};
+      var rawResult = handleMpesaCallback(params, urlParams);
+      return ContentService.createTextOutput(rawResult)
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     // --- Authentication guard ---
     if (AUTHENTICATED_SERVICES_.indexOf(service) !== -1) {
       var token = String(params.token || '').trim();
