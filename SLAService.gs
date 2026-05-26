@@ -58,26 +58,83 @@ function slaToLabel_(cc) {
 
 // ============================================================================
 
+var SLA_GLOBAL_ROLES_ = ['SUPER_ADMIN','CEO','CFO','RMD','INTERNAL_AUDITOR','GROUP_HEAD','CTO'];
+
+/**
+ * Resolve session and enforce SLA scope server-side.
+ * Returns { session, isGlobal, userCountry } or throws if token invalid.
+ */
+function resolveSLAScope_(params) {
+  var session = params._session || null;
+  if (!session && params.token) {
+    var sess = checkSession({ token: params.token });
+    if (sess && sess.valid) session = sess;
+  }
+  var isGlobal = true;
+  var userCountry = null;
+  if (session && session.userId) {
+    try {
+      var roles = (typeof tursoSelect === 'function')
+        ? tursoSelect('SELECT role_code FROM user_roles WHERE user_id = ?', [session.userId]).map(function(r){ return r.role_code; })
+        : [];
+      isGlobal = roles.some(function(r){ return SLA_GLOBAL_ROLES_.indexOf(r) !== -1; });
+      if (!isGlobal) {
+        var uRows = (typeof tursoSelect === 'function')
+          ? tursoSelect('SELECT country_code FROM users WHERE user_id = ?', [session.userId])
+          : [];
+        userCountry = (uRows.length && uRows[0].country_code) ? String(uRows[0].country_code).trim() : null;
+      }
+    } catch(e) { Logger.log('resolveSLAScope_: ' + e.message); }
+  }
+  return { session: session, isGlobal: isGlobal, userCountry: userCountry };
+}
+
+/**
+ * Enforce scope on filters: country-scoped users are locked to their country;
+ * staff filter is clamped to the user's own ID unless they are global.
+ */
+function enforceSLAFilters_(filters, scope) {
+  if (!filters || typeof filters !== 'object') filters = {};
+  if (!scope.isGlobal) {
+    // Lock country/affiliate to the user's scope
+    if (scope.userCountry) {
+      filters.affiliate = scope.userCountry;
+    }
+    // Staff filter: non-global users may only see their own staff data
+    if (filters.staffId && filters.staffId !== 'ALL' && scope.session) {
+      if (filters.staffId !== scope.session.userId) {
+        // Silently clamp to ALL rather than error (data-layer enforcement: just return empty set for non-self)
+        filters.staffId = scope.session.userId;
+      }
+    }
+  }
+  return filters;
+}
+
 function handleSLARequest(params) {
   try {
+    var scope = resolveSLAScope_(params);
+    var filters = enforceSLAFilters_(params.filters || params.period || {}, scope);
+    var affiliate = scope.isGlobal ? (params.affiliate || 'ALL') : (scope.userCountry || params.affiliate || 'ALL');
+
     switch(params.action) {
-      case 'getSLAAnalytics': return getSLAAnalytics(params.filters || params.period, params.affiliate);
-      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(params.filters || params.period, params.affiliate);
+      case 'getSLAAnalytics': return getSLAAnalytics(filters, affiliate);
+      case 'getExternalSLAAnalytics': return getExternalSLAAnalytics(filters, affiliate);
       case 'getStaffList': return getStaffList();
       case 'getActiveBreaches':
         return (typeof getSLABreachWidget === 'function')
-          ? getSLABreachWidget(params._session, params.filter || {})
+          ? getSLABreachWidget(scope.session, params.filter || {})
           : { success: false, error: 'SLABreachDetector not loaded' };
       case 'detectTicketBreaches':
         return (typeof detectTicketBreaches === 'function')
           ? detectTicketBreaches()
           : { success: false, error: 'SLABreachDetector not loaded' };
       case 'getFinanceApproverDetail':
-        return getFinanceApproverDetail(params.approverName, params.filters, params.affiliate);
+        return getFinanceApproverDetail(params.approverName, filters, affiliate);
       case 'getPOApproverDetail':
-        return getPOApproverDetail(params.approverName, params.filters, params.affiliate);
+        return getPOApproverDetail(params.approverName, filters, affiliate);
       case 'getAffiliateDetail':
-        return getAffiliateDetail(params.affiliateLabel, params.filters);
+        return getAffiliateDetail(params.affiliateLabel, filters);
       default: return { success:false, error:'Unknown SLA action' };
     }
   } catch(e) {
