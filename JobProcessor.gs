@@ -15,6 +15,7 @@
  *  AUDIT_CLEANUP        Hard-delete AuditLog rows older than 90 days
  *  ORACLE_SYNC          POST data to Oracle integration endpoint
  *  APPROVAL_TIMEOUT_CHECK Re-run ApprovalEngine timeout/escalation sweep
+ *  RECURRING_ORDER_GEN   Generate one order from a due recurring_schedule row
  *
  * RETRY POLICY
  * ────────────
@@ -126,14 +127,15 @@ function _runOneJob_(job) {
 
 function _dispatch_(type, payload) {
   switch (type) {
-    case 'SEND_EMAIL':         return _jobEmail_(payload);
-    case 'SEND_NOTIFICATION':  return _jobNotification_(payload);
-    case 'SLA_BREACH_CHECK':   return _jobSlaCheck_(payload);
-    case 'SLA_BREACH_SWEEP':   return _jobSlaBreachSweep_(payload);
-    case 'SESSION_CLEANUP':    return _jobSessionClean_();
-    case 'AUDIT_CLEANUP':      return _jobAuditClean_();
-    case 'ORACLE_SYNC':        return _jobOracleSync_(payload);
+    case 'SEND_EMAIL':             return _jobEmail_(payload);
+    case 'SEND_NOTIFICATION':      return _jobNotification_(payload);
+    case 'SLA_BREACH_CHECK':       return _jobSlaCheck_(payload);
+    case 'SLA_BREACH_SWEEP':       return _jobSlaBreachSweep_(payload);
+    case 'SESSION_CLEANUP':        return _jobSessionClean_();
+    case 'AUDIT_CLEANUP':          return _jobAuditClean_();
+    case 'ORACLE_SYNC':            return _jobOracleSync_(payload);
     case 'APPROVAL_TIMEOUT_CHECK': return _jobApprovalTimeoutCheck_(payload);
+    case 'RECURRING_ORDER_GEN':    return _jobRecurringOrderGen_(payload);
     default:
       throw new Error('Unknown job type: ' + type);
   }
