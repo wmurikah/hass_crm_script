@@ -1,50 +1,59 @@
 /**
  * 00_errors.gs  —  Hass CMS rebuild foundation
  *
- * Custom error hierarchy. Each class carries a stable `code` string that
- * clients can switch on without parsing the message text.
+ * Custom error hierarchy wrapped in the Errors namespace to avoid collisions
+ * with legacy global error classes that remain until Stage 10 cutover.
  *
  * Hierarchy:
  *   Error
- *   └─ AppError              (code: 'APP_ERROR')
- *      ├─ PermissionDeniedError  (code: 'PERMISSION_DENIED')
- *      ├─ NotFoundError          (code: 'NOT_FOUND')
- *      ├─ ValidationError        (code: 'VALIDATION_ERROR')
- *      └─ IntegrationError       (code: 'INTEGRATION_ERROR')
+ *   └─ Errors.AppError              (code: 'APP_ERROR')
+ *      ├─ Errors.PermissionDenied   (code: 'PERMISSION_DENIED')
+ *      ├─ Errors.NotFound           (code: 'NOT_FOUND')
+ *      ├─ Errors.Validation         (code: 'VALIDATION_ERROR')
+ *      └─ Errors.Integration        (code: 'INTEGRATION_ERROR')
+ *
+ * Usage: throw new Errors.NotFound('User not found');
  */
 
-class AppError extends Error {
-  constructor(message, code) {
-    super(message);
-    this.name = 'AppError';
-    this.code = code || 'APP_ERROR';
-  }
-}
+var Errors = (function () {
 
-class PermissionDeniedError extends AppError {
-  constructor(message) {
-    super(message || 'Permission denied', 'PERMISSION_DENIED');
-    this.name = 'PermissionDeniedError';
+  class AppError extends Error {
+    constructor(message, code) {
+      super(message);
+      this.name = 'AppError';
+      this.code = code || 'APP_ERROR';
+    }
   }
-}
 
-class NotFoundError extends AppError {
-  constructor(message) {
-    super(message || 'Not found', 'NOT_FOUND');
-    this.name = 'NotFoundError';
+  class PermissionDenied extends AppError {
+    constructor(message) {
+      super(message || 'Permission denied', 'PERMISSION_DENIED');
+      this.name = 'PermissionDenied';
+    }
   }
-}
 
-class ValidationError extends AppError {
-  constructor(message) {
-    super(message || 'Validation failed', 'VALIDATION_ERROR');
-    this.name = 'ValidationError';
+  class NotFound extends AppError {
+    constructor(message) {
+      super(message || 'Not found', 'NOT_FOUND');
+      this.name = 'NotFound';
+    }
   }
-}
 
-class IntegrationError extends AppError {
-  constructor(message) {
-    super(message || 'Integration error', 'INTEGRATION_ERROR');
-    this.name = 'IntegrationError';
+  class Validation extends AppError {
+    constructor(message) {
+      super(message || 'Validation failed', 'VALIDATION_ERROR');
+      this.name = 'Validation';
+    }
   }
-}
+
+  class Integration extends AppError {
+    constructor(message) {
+      super(message || 'Integration error', 'INTEGRATION_ERROR');
+      this.name = 'Integration';
+    }
+  }
+
+  return { AppError: AppError, PermissionDenied: PermissionDenied,
+           NotFound: NotFound, Validation: Validation, Integration: Integration };
+
+})();

@@ -21,7 +21,7 @@ function _tursoCfg_() {
   var url   = props.getProperty('TURSO_URL');
   var token = props.getProperty('TURSO_TOKEN');
   if (!url || !token) {
-    throw new AppError(
+    throw new Errors.AppError(
       'TURSO_URL and TURSO_TOKEN must be set in Script Properties',
       'CONFIG_ERROR'
     );
@@ -85,7 +85,7 @@ function _tursoPipeline_(statements) {
   var code = response.getResponseCode();
   if (code !== 200) {
     var masked = cfg.token.substring(0, 8) + '***';
-    throw new IntegrationError(
+    throw new Errors.Integration(
       'Turso HTTP ' + code + ' (token prefix: ' + masked + '): ' +
       response.getContentText().substring(0, 300)
     );
@@ -111,7 +111,7 @@ var TursoClient = {
     if (!resp.results || resp.results.length < 2) return [];
     var r = resp.results[1];
     if (r.type === 'error') {
-      throw new IntegrationError('Turso select error: ' + (r.error && r.error.message));
+      throw new Errors.Integration('Turso select error: ' + (r.error && r.error.message));
     }
     var rows = _tursoRows_(r.response && r.response.result);
     Log.debug({ service: 'turso', action: 'select', durationMs: Date.now() - t0,
@@ -131,7 +131,7 @@ var TursoClient = {
     if (!resp.results || resp.results.length < 2) return { lastInsertId: null, rowsAffected: 0 };
     var r = resp.results[1];
     if (r.type === 'error') {
-      throw new IntegrationError('Turso write error: ' + (r.error && r.error.message));
+      throw new Errors.Integration('Turso write error: ' + (r.error && r.error.message));
     }
     var result = r.response && r.response.result;
     Log.debug({ service: 'turso', action: 'write', durationMs: Date.now() - t0,
@@ -159,7 +159,7 @@ var TursoClient = {
     for (var i = 1; i < resp.results.length - 1; i++) {
       var r = resp.results[i];
       if (r.type === 'error') {
-        throw new IntegrationError(
+        throw new Errors.Integration(
           'Turso batch error at statement ' + i + ': ' + (r.error && r.error.message)
         );
       }
