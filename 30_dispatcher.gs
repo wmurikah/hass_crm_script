@@ -71,16 +71,16 @@ function dispatch(ctx, call) {
     var result = spec.handler(ctx, call.params || {});
     return { ok: true, data: result };
   } catch (e) {
-    if (e instanceof PermissionDeniedError) {
+    if (e instanceof Errors.PermissionDenied) {
       return { ok: false, error: { code: e.code, message: e.message } };
     }
-    if (e instanceof NotFoundError) {
+    if (e instanceof Errors.NotFound) {
       return { ok: false, error: { code: e.code, message: e.message } };
     }
-    if (e instanceof ValidationError) {
+    if (e instanceof Errors.Validation) {
       return { ok: false, error: { code: e.code, message: e.message } };
     }
-    if (e instanceof AppError) {
+    if (e instanceof Errors.AppError) {
       return { ok: false, error: { code: e.code, message: e.message } };
     }
     Log.error({

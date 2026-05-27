@@ -26,7 +26,7 @@ function _repoTable_(table) {
 function _repoPk_(table) {
   var physTable = _repoTable_(table);
   var pkCol = PK[physTable] || PK[table];
-  if (!pkCol) throw new AppError('No PK registered for table: ' + table, 'CONFIG_ERROR');
+  if (!pkCol) throw new Errors.AppError('No PK registered for table: ' + table, 'CONFIG_ERROR');
   return pkCol;
 }
 
@@ -99,7 +99,7 @@ var Repo = {
   create: function (table, row) {
     var t    = _repoTable_(table);
     var keys = Object.keys(row);
-    if (!keys.length) throw new ValidationError('create: no columns provided for ' + t);
+    if (!keys.length) throw new Errors.Validation('create: no columns provided for ' + t);
     var cols   = keys.join(', ');
     var places = keys.map(function () { return '?'; }).join(', ');
     var args   = keys.map(function (k) { return row[k]; });
@@ -115,7 +115,7 @@ var Repo = {
     var t     = _repoTable_(table);
     var pkCol = _repoPk_(table);
     var keys  = Object.keys(patch).filter(function (k) { return k !== pkCol; });
-    if (!keys.length) throw new ValidationError('update: no columns to update for ' + t);
+    if (!keys.length) throw new Errors.Validation('update: no columns to update for ' + t);
     var sets = keys.map(function (k) { return k + ' = ?'; }).join(', ');
     var args = keys.map(function (k) { return patch[k]; });
     args.push(id);
