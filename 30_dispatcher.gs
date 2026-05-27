@@ -30,11 +30,24 @@ function register(spec) {
   Log.debug({ service: 'dispatcher', action: 'register', msg: 'registered ' + key });
 }
 
-// ── Permission gate (Stage 1 stub) ────────────────────────────────────────────
+// ── Public actions (no session required) ─────────────────────────────────────
 
-function _dispatchPermit_(ctx, permission) {
-  // Stage 3 replaces this with: return RBAC.userHasPermission(ctx.actor, permission)
-  return true;
+var _DISPATCH_PUBLIC_ = [
+  'auth.login', 'auth.signup', 'auth.verifyAccount',
+  'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
+];
+
+// ── Permission gate ───────────────────────────────────────────────────────────
+
+function _dispatchPermit_(ctx, spec) {
+  var key = (spec.service || '') + '.' + (spec.action || '');
+  if (_DISPATCH_PUBLIC_.indexOf(key) !== -1) return true; // public bypass
+  if (!spec.permission) return true;                       // no permission declared
+  if (!ctx || !ctx.session || !ctx.session.userId) {
+    // Caller had no session – should have been caught in the router, but guard here.
+    return false;
+  }
+  return Rbac.userHasPermission(ctx.session.userId, spec.permission);
 }
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -60,10 +73,22 @@ function dispatch(ctx, call) {
     };
   }
 
-  if (!_dispatchPermit_(ctx, spec.permission)) {
+  if (!_dispatchPermit_(ctx, spec)) {
+    var permMsg = 'Missing permission: ' + spec.permission;
+    try {
+      Audit.log({
+        actor:    ctx && ctx.actor || '',
+        action:   'PERMISSION_DENIED',
+        entity:   spec.service,
+        entityId: spec.action,
+        ip:       ctx && ctx.ip || '',
+        ua:       ctx && ctx.ua || '',
+        metadata: { service: spec.service, action: spec.action, permission: spec.permission },
+      });
+    } catch (_) {}
     return {
       ok:    false,
-      error: { code: 'PERMISSION_DENIED', message: 'Missing permission: ' + spec.permission },
+      error: { code: 'PERMISSION_DENIED', message: permMsg },
     };
   }
 
