@@ -1,0 +1,84 @@
+<script>
+Router.register('portal-tickets', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">Support Tickets</h2>' +
+      '<button class="btn btn-primary btn-sm" id="pTktNew">+ New Ticket</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Ticket #</th><th>Subject</th><th>Priority</th><th>Status</th><th>Date</th><th></th></tr></thead>' +
+      '<tbody id="pTktBody"></tbody></table></div></div>';
+
+  function load() {
+    API.call('tickets', 'list', { limit: 50 }).then(function (rows) {
+      var tbody = document.getElementById('pTktBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No tickets.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
+               '<td>' + statusBadge(r.priority) + '</td><td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.created_at) + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="pViewTicket(\'' + esc(r.ticket_id) + '\')">View</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('pTktBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('pTktNew').onclick = function () { pNewTicketModal(load); };
+  load();
+});
+
+function pViewTicket(id) {
+  var l = Loader.show();
+  API.call('tickets', 'get', { ticketId: id }).then(function (t) {
+    Loader.hide(l);
+    var comments = (t.comments || []).map(function (c) {
+      return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+             fmtDateTime(c.created_at) + ' — ' + esc(c.content) + '</div>';
+    }).join('');
+    Modal.open({
+      title: t.ticket_number + ': ' + t.subject,
+      body: statusBadge(t.status) + ' ' + statusBadge(t.priority) +
+            '<p style="font-size:13px;margin:10px 0">' + esc(t.description) + '</p>' +
+            '<div style="max-height:180px;overflow-y:auto;margin-bottom:10px">' +
+              (comments || '<p style="color:#9ca3af;font-size:12px">No comments yet.</p>') +
+            '</div>' +
+            '<textarea class="form-control" id="pTktCommentText" rows="3" placeholder="Add a comment…"></textarea>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              '<button class="btn btn-primary btn-sm" onclick="pAddComment(\'' + id + '\')">Send</button>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function pAddComment(id) {
+  var content = document.getElementById('pTktCommentText').value.trim();
+  if (!content) return;
+  API.call('tickets', 'addComment', { ticketId: id, content: content })
+    .then(function () { Modal.close(); Toast.success('Comment sent.'); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function pNewTicketModal(onSuccess) {
+  Modal.open({
+    title: 'New Support Ticket',
+    body: '<div class="form-group"><label class="form-label">Category</label>' +
+            '<select class="form-control" id="pntCat"><option>BILLING</option><option>DELIVERY</option><option>TECHNICAL</option><option>GENERAL</option></select></div>' +
+          '<div class="form-group"><label class="form-label">Subject</label><input class="form-control" id="pntSubj"></div>' +
+          '<div class="form-group"><label class="form-label">Description</label><textarea class="form-control" id="pntDesc" rows="3"></textarea></div>' +
+          '<div id="pntErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="pntSave">Submit</button>',
+    onOpen: function () {
+      document.getElementById('pntSave').onclick = function () {
+        var subj = document.getElementById('pntSubj').value.trim();
+        if (!subj) { document.getElementById('pntErr').textContent = 'Subject required.'; return; }
+        API.call('tickets', 'create', {
+          category: document.getElementById('pntCat').value,
+          subject: subj,
+          description: document.getElementById('pntDesc').value,
+          priority: 'MEDIUM',
+        }).then(function () { Modal.close(); Toast.success('Ticket submitted.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('pntErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>
