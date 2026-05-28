@@ -69,25 +69,33 @@ function dispatch(ctx, call) {
     'auth.requestPasswordReset', 'auth.verifyOtp',
     'auth.setNewPassword', 'system.health'
   ];
+
   var isPublic = PUBLIC_ACTIONS.indexOf(service + '.' + action) !== -1;
 
   if (!isPublic) {
-    var rawToken = params.sessionToken
-                  || (ctx && ctx.sessionToken)
-                  || null;
-    if (!rawToken) {
-      return { ok: false,
-               error: { code: 'NO_SESSION',
-                        message: 'Authentication required.' } };
+    var rawToken = null;
+    if (params && typeof params.sessionToken === 'string' && params.sessionToken.length > 0) {
+      rawToken = params.sessionToken;
+    } else if (ctx && typeof ctx.sessionToken === 'string' && ctx.sessionToken.length > 0) {
+      rawToken = ctx.sessionToken;
     }
+
+    if (rawToken === null) {
+      return {
+        ok: false,
+        error: { code: 'NO_SESSION', message: 'Authentication required.' }
+      };
+    }
+
     var session = Session.validate(rawToken);
     if (!session) {
-      return { ok: false,
-               error: { code: 'SESSION_INVALID',
-                        message: 'Session expired or invalid.' } };
+      return {
+        ok: false,
+        error: { code: 'SESSION_INVALID', message: 'Session expired or invalid.' }
+      };
     }
+
     ctx.session = session;
-    ctx.actor   = session.userId;
   }
 
   var key  = service + '.' + action;

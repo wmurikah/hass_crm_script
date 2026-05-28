@@ -71,7 +71,7 @@ var Session = (function () {
       [sessionId, userType, userId, tokenHash, ip || '', ua || '',
        countryCode || '', role, expiresAt, idleMin]
     );
-    return rawToken;
+    return { token: rawToken, session_id: sessionId };
   }
 
   function validate(token) {

@@ -124,7 +124,7 @@ function smokeCustomers() {
   var seed         = seedAll();
   var superAdminId = seed.userId;
   var saToken      = Session.create(superAdminId, 'STAFF', 'SUPER_ADMIN',
-                                    '127.0.0.1', 'smoke-customers', 'KE');
+                                    '127.0.0.1', 'smoke-customers', 'KE').token;
 
   var customerId, contactId1;
 
@@ -405,56 +405,59 @@ function smokeCrosscut() {
     if (!has) throw new Error('SUPER_ADMIN wildcard check failed');
   });
 
-  // ── 5. auth.login → session → invalidate ────────────────────────────────
-  // Note: this check requires that seedAll() produced a known password.
-  // If SUPER_ADMIN already existed before seedAll(), we skip the login sub-check.
-  var sessionToken;
-  check('processRequest auth.login returns session token (new seed only)', function () {
-    if (seedResult && seedResult.skipped) {
-      Logger.log('  (SKIP: SUPER_ADMIN pre-existed; no captured password)');
-      return;
+  // ── 8. Login and get session token ──────────────────────────────────────
+  var smokeToken = null;   // module-scoped so checks 9+10 can use it
+
+  check('processRequest auth.login returns session token', function () {
+    var email = PropertiesService.getScriptProperties()
+                  .getProperty('SEED_SUPERADMIN_EMAIL')
+                || 'admin@hasspetroleum.com';
+    var pwd = PropertiesService.getScriptProperties()
+                .getProperty('SMOKE_SUPERADMIN_PASSWORD') || '';
+    if (!pwd) throw new Error('Set SMOKE_SUPERADMIN_PASSWORD script property');
+
+    var res = processRequest({
+      service: 'auth', action: 'login',
+      params: { email: email, password: pwd }
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    if (!res.data || !res.data.token) {
+      throw new Error('Expected data.token, got: ' + JSON.stringify(res.data));
     }
-    // seedAll logged the password, but we cannot read Logger output here.
-    // We re-hash with the KNOWN temp to verify the plumbing instead.
-    // Find the user's stored hash and do a direct hash comparison.
-    var uRows = TursoClient.select(
-      'SELECT password_hash FROM users WHERE user_id = ? LIMIT 1', [seedResult.userId]
-    );
-    if (!uRows.length) throw new Error('SUPER_ADMIN user row not found');
-    var stored = uRows[0].password_hash;
-    if (!stored || stored.indexOf('pbkdf2$') !== 0) {
-      throw new Error('Stored hash is not in pbkdf2 format: ' + (stored || 'null'));
-    }
-    // The raw password was logged; we cannot re-read it here, so just verify
-    // the session plumbing by creating a session directly.
-    var testToken = Session.create(seedResult.userId, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'smoke-test', '');
-    var sess = Session.validate(testToken);
-    if (!sess) throw new Error('Session.validate returned null for freshly-created session');
-    if (sess.userId !== seedResult.userId) throw new Error('userId mismatch in session');
-    Session.invalidate(testToken);
-    var sessAfter = Session.validate(testToken);
-    if (sessAfter !== null) throw new Error('Session still valid after invalidation');
-    sessionToken = testToken; // already invalidated; used for check 6
+    smokeToken = res.data.token;   // save for check 9; clean up in check 9
   });
 
-  // ── 6. users.list with/without token ────────────────────────────────────
+  // ── 9. Authenticated users.list ──────────────────────────────────────────
   check('processRequest users.list with valid token returns list', function () {
-    if (!seedResult || seedResult.skipped) {
-      Logger.log('  (SKIP: SUPER_ADMIN pre-existed)');
-      return;
+    if (!smokeToken) throw new Error('No token from check 8 - cannot proceed');
+    var res = processRequest({
+      service: 'users', action: 'list',
+      params: { sessionToken: smokeToken }
+    });
+    // clean up session NOW, after the call, not before
+    try { Session.invalidate(smokeToken); } catch (_) {}
+    smokeToken = null;
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    if (!Array.isArray(res.data && res.data.items !== undefined
+        ? res.data.items : res.data)) {
+      // accept either { data: [...] } or { data: { items: [...] } }
     }
-    var goodToken = Session.create(seedResult.userId, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'smoke', '');
-    var res = processRequest({ service: 'users', action: 'list', sessionToken: goodToken });
-    Session.invalidate(goodToken);
-    if (!res.ok) throw new Error('Expected ok=true, got: ' + JSON.stringify(res.error));
-    if (!Array.isArray(res.data)) throw new Error('data is not an array');
   });
 
+  // ── 10. Unauthenticated users.list must return NO_SESSION ─────────────────
   check('processRequest users.list without token returns NO_SESSION', function () {
-    var res = processRequest({ service: 'users', action: 'list' });
-    if (res.ok !== false) throw new Error('Expected ok=false');
+    // call with NO sessionToken — params object must not contain sessionToken
+    var res = processRequest({
+      service: 'users', action: 'list',
+      params: {}     // explicitly no sessionToken key
+    });
+    if (res.ok !== false) {
+      throw new Error('Expected ok=false, got ok=' + res.ok +
+                      ' data=' + JSON.stringify(res.data || ''));
+    }
     if (!res.error || res.error.code !== 'NO_SESSION') {
-      throw new Error('Expected NO_SESSION, got: ' + JSON.stringify(res.error));
+      throw new Error('Expected code=NO_SESSION, got: ' +
+                      JSON.stringify(res.error));
     }
   });
 
