@@ -3,7 +3,7 @@
  *
  * seedAll()  —  idempotent bootstrap for development/staging.
  *
- *   1. Adds missing columns to existing tables (graceful ALTER TABLE).
+ *   1. Returns early if a SUPER_ADMIN binding already exists in user_roles.
  *   2. Creates ONE SUPER_ADMIN user if no SUPER_ADMIN exists in user_roles.
  *      Email from Script Property SEED_SUPERADMIN_EMAIL
  *      (default: admin@hasspetroleum.com).
@@ -15,35 +15,20 @@
 function seedAll() {
   Logger.log('[Seed] seedAll() start');
 
-  // ── 1. Schema migrations ───────────────────────────────────────────────────
-  _seedAddColumnIfMissing_('users',   'must_change_password', 'INTEGER DEFAULT 0');
-  _seedAddColumnIfMissing_('users',   'password_changed_at',  'TEXT');
-  _seedAddColumnIfMissing_('contacts','must_change_password',  'INTEGER DEFAULT 0');
-  _seedAddColumnIfMissing_('contacts','password_changed_at',   'TEXT');
-  _seedAddColumnIfMissing_('contacts','portal_role',           'TEXT');
-  _seedAddColumnIfMissing_('roles',   'mfa_required',         'INTEGER DEFAULT 0');
-  // Seed mfa_required on known high-privilege roles.
-  var mfaRoles = ['SUPER_ADMIN','CEO','CFO','RMD','INTERNAL_AUDITOR','FINANCE_MANAGER'];
-  mfaRoles.forEach(function (r) {
-    try {
-      TursoClient.write('UPDATE roles SET mfa_required = 1 WHERE role_code = ?', [r]);
-    } catch (_) {}
-  });
-
-  // ── 2. Check for existing SUPER_ADMIN ─────────────────────────────────────
+  // ── 1. Idempotency check ───────────────────────────────────────────────────
   var existing = TursoClient.select(
     "SELECT ur.user_id FROM user_roles ur WHERE ur.role_code = 'SUPER_ADMIN' LIMIT 1"
   );
   if (existing.length) {
-    Logger.log('[Seed] SUPER_ADMIN already exists (user_id=' + existing[0].user_id + '). Nothing to do.');
-    return { skipped: true, userId: existing[0].user_id };
+    Logger.log('[Seed] SUPER_ADMIN already seeded.');
+    return;
   }
 
-  // ── 3. Create SUPER_ADMIN user ────────────────────────────────────────────
+  // ── 2. Credentials ────────────────────────────────────────────────────────
   var props = PropertiesService.getScriptProperties();
   var email = (props.getProperty('SEED_SUPERADMIN_EMAIL') || 'admin@hasspetroleum.com').trim();
 
-  // Generate a random 16-char password: 4 segments of [A-Za-z0-9@!#]
+  // Generate a random 16-char password: 4 segments of [A-Za-z0-9@!#$]
   var chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@!#$';
   var rawPwd = '';
   for (var i = 0; i < 16; i++) {
@@ -52,6 +37,7 @@ function seedAll() {
   // Ensure it satisfies the default policy: uppercase, lowercase, digit, special.
   rawPwd = 'Aa1!' + rawPwd.substring(4);
 
+  // ── 5. One-time password block (printed before hashing) ───────────────────
   Logger.log('╔══════════════════════════════════════════════════╗');
   Logger.log('║  SUPER_ADMIN ONE-TIME PASSWORD — CAPTURE NOW     ║');
   Logger.log('║  Email:    ' + email);
@@ -59,14 +45,16 @@ function seedAll() {
   Logger.log('╚══════════════════════════════════════════════════╝');
 
   var passwordHash = Password.hash(rawPwd);
-  var userId = uuidv4();
+  var userId = genId('USR');
   var now    = nowIso();
 
+  // ── 3. Insert users row (new-schema columns only) ─────────────────────────
   TursoClient.write(
-    'INSERT INTO users (user_id, email, first_name, last_name, role, status, ' +
-    'password_hash, must_change_password, failed_login_attempts, created_at, updated_at) ' +
-    'VALUES (?,?,?,?,?,?,?,1,0,?,?)',
-    [userId, email, 'Super', 'Admin', 'SUPER_ADMIN', 'ACTIVE', passwordHash, now, now]
+    'INSERT INTO users ' +
+    '(user_id, email, first_name, last_name, password_hash, password_changed_at, ' +
+    'must_change_password, status, mfa_enabled, country_code, created_at, updated_at) ' +
+    'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+    [userId, email, 'Super', 'Admin', passwordHash, now, 1, 'ACTIVE', 0, null, now, now]
   );
 
   // Record in password_history.
@@ -80,6 +68,15 @@ function seedAll() {
     'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
     [userId, 'SUPER_ADMIN', 'SEED', now]
   );
+
+  // ── 6. Audit log ───────────────────────────────────────────────────────────
+  Audit.log({
+    actor:    'SEED',
+    action:   'SUPER_ADMIN_SEEDED',
+    entity:   'users',
+    entityId: userId,
+    after:    { email: email, role_code: 'SUPER_ADMIN' },
+  });
 
   Logger.log('[Seed] Created SUPER_ADMIN user_id=' + userId + ' email=' + email);
   return { created: true, userId: userId, email: email };
