@@ -85,6 +85,236 @@ function smokeFoundation() {
 }
 
 // =============================================================================
+// smokeCustomers  —  Stage 5 customers / contacts domain services
+// =============================================================================
+
+/**
+ * Smoke test for customers.* and contacts.* handlers.
+ * Run from the GAS IDE; requires a live Turso DB with SUPER_ADMIN seeded.
+ *
+ * Checks:
+ *   1. SUPER_ADMIN creates KE customer → customer_id and account_number present
+ *   2. customers.get returns the same row
+ *   3. Two contacts created (MANAGER + OPERATOR); customer360 returns both
+ *   4. Update contact job_title; audit_log has before/after
+ *   5. softDelete → status=INACTIVE, audit row present
+ *   6. customers.list hides inactive unless include_inactive=true
+ *   7. Negative: no sessionToken → NO_SESSION
+ *   8. Negative: TZ-scoped session on KE row → NOT_FOUND + audit_log entry
+ */
+function smokeCustomers() {
+  var results = [];
+  var passed  = 0;
+  var failed  = 0;
+
+  function check(name, fn) {
+    try {
+      fn();
+      results.push('PASS  ' + name);
+      Logger.log('PASS  ' + name);
+      passed++;
+    } catch (e) {
+      results.push('FAIL  ' + name + '\n      ' + (e.message || String(e)));
+      Logger.log('FAIL  ' + name + ': ' + (e.message || String(e)));
+      failed++;
+    }
+  }
+
+  // ── Prerequisite: SUPER_ADMIN exists ──────────────────────────────────────
+  var seed         = seedAll();
+  var superAdminId = seed.userId;
+  var saToken      = Session.create(superAdminId, 'STAFF', 'SUPER_ADMIN',
+                                    '127.0.0.1', 'smoke-customers', 'KE');
+
+  var customerId, contactId1;
+
+  // ── 1. Create customer in KE ───────────────────────────────────────────────
+  check('1. Create KE customer; assert customer_id and account_number returned', function () {
+    var res = processRequest({
+      service: 'customers', action: 'create', sessionToken: saToken,
+      params: {
+        account_number: 'KE-SMOKE-001',
+        company_name:   'Smoke Test Ltd',
+        country_code:   'KE',
+        customer_type:  'DIRECT',
+      },
+    });
+    if (!res.ok)                  throw new Error('ok=false: ' + JSON.stringify(res.error));
+    if (!res.data.customer_id)    throw new Error('Missing customer_id in response');
+    if (!res.data.account_number) throw new Error('Missing account_number in response');
+    customerId = res.data.customer_id;
+  });
+
+  // ── 2. Read back ───────────────────────────────────────────────────────────
+  check('2. customers.get returns matching fields', function () {
+    if (!customerId) throw new Error('customerId not set (step 1 failed)');
+    var res = processRequest({
+      service: 'customers', action: 'get', sessionToken: saToken,
+      params: { customerId: customerId },
+    });
+    if (!res.ok)                                    throw new Error('ok=false: ' + JSON.stringify(res.error));
+    if (res.data.company_name !== 'Smoke Test Ltd') throw new Error('company_name mismatch: ' + res.data.company_name);
+    if (res.data.country_code !== 'KE')             throw new Error('country_code mismatch: ' + res.data.country_code);
+  });
+
+  // ── 3. Two contacts; customer360 returns both ─────────────────────────────
+  check('3. Create MANAGER + OPERATOR contacts; customer360 returns both', function () {
+    if (!customerId) throw new Error('customerId not set (step 1 failed)');
+
+    var r1 = processRequest({
+      service: 'contacts', action: 'create', sessionToken: saToken,
+      params: {
+        customer_id: customerId, first_name: 'Alice', last_name: 'Smoke',
+        email: 'alice.smoke@example.com', portal_role: 'MANAGER',
+      },
+    });
+    if (!r1.ok) throw new Error('Contact 1 create failed: ' + JSON.stringify(r1.error));
+    contactId1 = r1.data.contact_id;
+
+    var r2 = processRequest({
+      service: 'contacts', action: 'create', sessionToken: saToken,
+      params: {
+        customer_id: customerId, first_name: 'Bob', last_name: 'Smoke',
+        email: 'bob.smoke@example.com', portal_role: 'OPERATOR',
+      },
+    });
+    if (!r2.ok) throw new Error('Contact 2 create failed: ' + JSON.stringify(r2.error));
+
+    var r360 = processRequest({
+      service: 'customers', action: 'customer360', sessionToken: saToken,
+      params: { customerId: customerId },
+    });
+    if (!r360.ok) throw new Error('customer360 failed: ' + JSON.stringify(r360.error));
+    var cts = r360.data.contacts;
+    if (!Array.isArray(cts) || cts.length < 2) {
+      throw new Error('Expected ≥2 contacts in customer360, got: ' + JSON.stringify(cts && cts.length));
+    }
+  });
+
+  // ── 4. Update contact job_title; audit_log has before/after ───────────────
+  check('4. Update contact job_title; audit_log row has before and after', function () {
+    if (!contactId1) throw new Error('contactId1 not set (step 3 failed)');
+    var res = processRequest({
+      service: 'contacts', action: 'update', sessionToken: saToken,
+      params: { contactId: contactId1, job_title: 'Head of Finance' },
+    });
+    if (!res.ok) throw new Error('Update failed: ' + JSON.stringify(res.error));
+
+    var rows = TursoClient.select(
+      "SELECT * FROM audit_log WHERE action = 'CONTACT_UPDATED' AND entity_id = ? ORDER BY created_at DESC LIMIT 1",
+      [contactId1]
+    );
+    if (!rows.length) throw new Error('No CONTACT_UPDATED row in audit_log');
+    var changes = jsonParse(rows[0].changes, {});
+    if (!changes.before) throw new Error('Audit row missing "before": ' + JSON.stringify(changes));
+    if (!changes.after)  throw new Error('Audit row missing "after": '  + JSON.stringify(changes));
+  });
+
+  // ── 5. Soft-delete customer ────────────────────────────────────────────────
+  check('5. softDelete sets status=INACTIVE and writes audit row', function () {
+    if (!customerId) throw new Error('customerId not set (step 1 failed)');
+    var res = processRequest({
+      service: 'customers', action: 'softDelete', sessionToken: saToken,
+      params: { customerId: customerId },
+    });
+    if (!res.ok) throw new Error('softDelete failed: ' + JSON.stringify(res.error));
+
+    var row = Repo.findById('customers', customerId);
+    if (!row || row.status !== 'INACTIVE') {
+      throw new Error('Expected status=INACTIVE, got: ' + (row && row.status));
+    }
+
+    var auditRows = TursoClient.select(
+      "SELECT log_id FROM audit_log WHERE action = 'CUSTOMER_SOFT_DELETED' AND entity_id = ? LIMIT 1",
+      [customerId]
+    );
+    if (!auditRows.length) throw new Error('No CUSTOMER_SOFT_DELETED row in audit_log');
+  });
+
+  // ── 6. list hides inactive by default ─────────────────────────────────────
+  check('6. Soft-deleted customer absent from default list; present with include_inactive=true', function () {
+    if (!customerId) throw new Error('customerId not set (step 1 failed)');
+
+    var resExcl = processRequest({
+      service: 'customers', action: 'list', sessionToken: saToken, params: {},
+    });
+    if (!resExcl.ok) throw new Error('list failed: ' + JSON.stringify(resExcl.error));
+    var foundExcl = resExcl.data.some(function (r) { return r.customer_id === customerId; });
+    if (foundExcl) throw new Error('Soft-deleted customer must NOT appear in default list');
+
+    var resIncl = processRequest({
+      service: 'customers', action: 'list', sessionToken: saToken,
+      params: { include_inactive: true },
+    });
+    if (!resIncl.ok) throw new Error('list(include_inactive) failed: ' + JSON.stringify(resIncl.error));
+    var foundIncl = resIncl.data.some(function (r) { return r.customer_id === customerId; });
+    if (!foundIncl) throw new Error('Soft-deleted customer MUST appear when include_inactive=true');
+  });
+
+  // ── 7. No sessionToken → NO_SESSION ───────────────────────────────────────
+  check('7. customers.get with no sessionToken returns NO_SESSION', function () {
+    var res = processRequest({
+      service: 'customers', action: 'get',
+      params: { customerId: customerId || 'x' },
+    });
+    if (res.ok !== false) throw new Error('Expected ok=false, got: ' + res.ok);
+    if (!res.error || res.error.code !== 'NO_SESSION') {
+      throw new Error('Expected NO_SESSION, got: ' + JSON.stringify(res.error));
+    }
+  });
+
+  // ── 8. TZ-scoped session cannot read KE customer ──────────────────────────
+  check('8. TZ-scoped CS_AGENT handler throws NOT_FOUND on KE row; audit_log records rejection', function () {
+    if (!customerId) throw new Error('customerId not set (step 1 failed)');
+
+    // Stub a COUNTRY-scoped session in TZ (no real user needed for handler-level test).
+    var tzCtx = {
+      token:  '',
+      actor:  'smoke-tz-stub',
+      session: {
+        sessionId:   uuidv4(),
+        userId:      'smoke-tz-stub',
+        userType:    'STAFF',
+        role:        'CS_AGENT',
+        countryCode: 'TZ',
+        ip:          '127.0.0.1',
+        ua:          'smoke-customers',
+      },
+    };
+
+    var auditBefore = Repo.count('audit_log', {});
+
+    var threw     = false;
+    var errorCode = '';
+    try {
+      Customers._getHandler(tzCtx, { customerId: customerId });
+    } catch (e) {
+      threw     = true;
+      errorCode = e.code || '';
+    }
+
+    if (!threw)                   throw new Error('Expected handler to throw, but it did not');
+    if (errorCode !== 'NOT_FOUND') throw new Error('Expected NOT_FOUND, got: ' + errorCode);
+
+    var auditAfter = Repo.count('audit_log', {});
+    if (auditAfter <= auditBefore) {
+      throw new Error('Expected an audit_log entry for the scope rejection');
+    }
+  });
+
+  // ── Cleanup ────────────────────────────────────────────────────────────────
+  Session.invalidate(saToken);
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeCustomers: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary);
+  results.push(summary);
+  return results;
+}
+
+// =============================================================================
 // smokeCrosscut  —  Stage 2 cross-cutting layer
 // =============================================================================
 
