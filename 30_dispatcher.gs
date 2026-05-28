@@ -27,7 +27,7 @@ var _handlers_ = {};
 function register(spec) {
   var key = spec.service + '.' + spec.action;
   _handlers_[key] = spec;
-  Log.debug({ service: 'dispatcher', action: 'register', msg: 'registered ' + key });
+  Logger.log('[dispatcher] registered ' + key);
 }
 
 // ── Public actions (no session required) ─────────────────────────────────────
@@ -35,6 +35,7 @@ function register(spec) {
 var _DISPATCH_PUBLIC_ = [
   'auth.login', 'auth.signup', 'auth.verifyAccount',
   'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
+  'system.health',
 ];
 
 // ── Permission gate ───────────────────────────────────────────────────────────
@@ -59,34 +60,21 @@ function _dispatchPermit_(ctx, spec) {
  * @returns {{ ok:boolean, data?:*, error?:{code:string, message:string} }}
  */
 function dispatch(ctx, call) {
-  Logger.log('dispatch called: ' + (call.service || '') + '.' + (call.action || ''));
   var service = call.service || '';
   var action  = call.action  || '';
   var params  = call.params  || {};
-  var key = service + '.' + action;
-  var spec = _handlers_[key];
-
-  if (!spec) {
-    return {
-      ok:    false,
-      error: {
-        code:    'UNKNOWN_ACTION',
-        message: 'No handler registered for service="' + call.service +
-                 '" action="' + call.action + '"',
-      },
-    };
-  }
 
   var PUBLIC_ACTIONS = [
     'auth.login', 'auth.signup', 'auth.verifyAccount',
     'auth.requestPasswordReset', 'auth.verifyOtp',
     'auth.setNewPassword', 'system.health'
   ];
-
   var isPublic = PUBLIC_ACTIONS.indexOf(service + '.' + action) !== -1;
 
   if (!isPublic) {
-    var rawToken = params.sessionToken || (ctx && ctx.sessionToken) || null;
+    var rawToken = params.sessionToken
+                  || (ctx && ctx.sessionToken)
+                  || null;
     if (!rawToken) {
       return { ok: false,
                error: { code: 'NO_SESSION',
@@ -100,6 +88,19 @@ function dispatch(ctx, call) {
     }
     ctx.session = session;
     ctx.actor   = session.userId;
+  }
+
+  var key  = service + '.' + action;
+  var spec = _handlers_[key];
+  if (!spec) {
+    return {
+      ok:    false,
+      error: {
+        code:    'UNKNOWN_ACTION',
+        message: 'No handler registered for service="' + service +
+                 '" action="' + action + '"',
+      },
+    };
   }
 
   if (!_dispatchPermit_(ctx, spec)) {

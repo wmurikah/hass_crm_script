@@ -61,31 +61,10 @@ function doGet(e) {
 // ── doPost ────────────────────────────────────────────────────────────────────
 
 function doPost(e) {
-  var body    = jsonParse((e && e.postData && e.postData.contents) || '{}', {});
-  var token   = body.token   || (e && e.parameter && e.parameter.token) || '';
-  var service = String(body.service || '');
-  var action  = String(body.action  || '');
-  var params  = body.params  || body;
-  var key     = service + '.' + action;
-
-  // Bind a minimal audit context; actor is filled in after session resolution.
-  var ctx = { token: token, actor: null, session: null };
-
-  // Session gate: public endpoints bypass; everything else requires a valid session.
-  if (_PUBLIC_ENDPOINTS_.indexOf(key) === -1) {
-    var session = resolveSession_(token);
-    if (!session) {
-      return _routerJson_({
-        ok:    false,
-        error: { code: 'UNAUTHENTICATED', message: 'A valid session is required.' },
-      });
-    }
-    ctx.actor   = session.userId;
-    ctx.session = session;
-  }
-
-  var result = dispatch(ctx, { service: service, action: action, params: params });
-  return _routerJson_(result);
+  var result = processRequest(e && e.postData ? e.postData.contents : '{}');
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

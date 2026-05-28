@@ -28,13 +28,14 @@ var Mfa = (function () {
     TursoClient.write(
       'CREATE TABLE IF NOT EXISTS mfa_challenges (' +
       ' challenge_id TEXT PRIMARY KEY,' +
-      ' user_id TEXT NOT NULL,' +
       ' user_type TEXT NOT NULL,' +
+      ' user_id TEXT NOT NULL,' +
+      ' role TEXT,' +
       ' mode TEXT NOT NULL,' +
       ' pending_secret TEXT,' +
       ' fails INTEGER DEFAULT 0,' +
       ' expires_at TEXT NOT NULL,' +
-      ' used INTEGER DEFAULT 0,' +
+      ' consumed_at TEXT,' +
       ' created_at TEXT NOT NULL' +
       ')'
     );
@@ -141,9 +142,9 @@ var Mfa = (function () {
     var id      = uuidv4();
     var expires = addMinutes(new Date(), _TTL_MIN_).toISOString();
     TursoClient.write(
-      'INSERT INTO mfa_challenges (challenge_id,user_id,user_type,mode,pending_secret,fails,expires_at,used,created_at) ' +
-      'VALUES (?,?,?,?,?,0,?,0,?)',
-      [id, userId, userType, mode, null, expires, nowIso()]
+      'INSERT INTO mfa_challenges (challenge_id,user_type,user_id,role,mode,pending_secret,fails,expires_at,consumed_at,created_at) ' +
+      'VALUES (?,?,?,?,?,?,0,?,NULL,?)',
+      [id, userType, userId, null, mode, null, expires, nowIso()]
     );
     return id;
   }
@@ -151,7 +152,7 @@ var Mfa = (function () {
   function _getChallenge_(challengeId) {
     _ensureTable_();
     var rows = TursoClient.select(
-      'SELECT * FROM mfa_challenges WHERE challenge_id = ? AND used = 0 AND expires_at > ? LIMIT 1',
+      'SELECT * FROM mfa_challenges WHERE challenge_id = ? AND consumed_at IS NULL AND expires_at > ? LIMIT 1',
       [challengeId, nowIso()]
     );
     return rows.length ? rows[0] : null;
@@ -159,7 +160,7 @@ var Mfa = (function () {
 
   function _markUsed_(challengeId) {
     TursoClient.write(
-      'UPDATE mfa_challenges SET used = 1 WHERE challenge_id = ?', [challengeId]
+      "UPDATE mfa_challenges SET consumed_at = datetime('now') WHERE challenge_id = ?", [challengeId]
     );
   }
 

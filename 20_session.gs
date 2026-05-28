@@ -63,11 +63,13 @@ var Session = (function () {
     }
 
     TursoClient.write(
-      'INSERT INTO sessions (session_id, user_id, user_type, role, token_hash, ' +
-      'is_active, expires_at, last_activity_at, country_code, ip, ua, created_at) ' +
-      'VALUES (?,?,?,?,?,1,?,?,?,?,?,?)',
-      [sessionId, userId, userType, role, tokenHash,
-       expiresAt, now, countryCode || '', ip || '', ua || '', now]
+      'INSERT INTO sessions ' +
+      '(session_id, user_type, user_id, token_hash, ip_address, user_agent, ' +
+      'country_code, role, is_active, expires_at, idle_timeout_minutes, ' +
+      'last_activity_at, created_at) ' +
+      'VALUES (?,?,?,?,?,?,?,?,1,?,?,datetime(\'now\'),datetime(\'now\'))',
+      [sessionId, userType, userId, tokenHash, ip || '', ua || '',
+       countryCode || '', role, expiresAt, idleMin]
     );
     return rawToken;
   }
@@ -99,8 +101,8 @@ var Session = (function () {
     // Touch last_activity_at.
     try {
       TursoClient.write(
-        'UPDATE sessions SET last_activity_at = ? WHERE session_id = ?',
-        [nowStr, sess.session_id]
+        "UPDATE sessions SET last_activity_at = datetime('now') WHERE session_id = ?",
+        [sess.session_id]
       );
     } catch (_) {}
 
@@ -109,9 +111,9 @@ var Session = (function () {
       userId:      sess.user_id,
       userType:    sess.user_type,
       role:        sess.role,
-      countryCode: sess.country_code || '',
-      ip:          sess.ip           || '',
-      ua:          sess.ua           || '',
+      countryCode: sess.country_code  || '',
+      ip:          sess.ip_address    || '',
+      ua:          sess.user_agent    || '',
     };
   }
 
