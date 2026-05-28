@@ -1,0 +1,85 @@
+<script>
+Router.register('settings', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;gap:14px;margin-bottom:14px">' +
+      '<button class="btn btn-secondary btn-sm cfgTab active" data-t="config">System Config</button>' +
+      '<button class="btn btn-secondary btn-sm cfgTab" data-t="branding">Branding</button>' +
+      '<button class="btn btn-secondary btn-sm cfgTab" data-t="health">Health</button>' +
+    '</div>' +
+    '<div id="cfgPanel"></div>';
+
+  var _tab = 'config';
+  document.querySelectorAll('.cfgTab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.cfgTab').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      _tab = btn.dataset.t;
+      loadTab();
+    });
+  });
+
+  function loadTab() {
+    var panel = document.getElementById('cfgPanel');
+    if (_tab === 'config') {
+      API.call('configAdmin', 'list', {}).then(function (rows) {
+        panel.innerHTML = '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+          '<thead><tr><th>Key</th><th>Value</th><th>Country</th><th>Updated</th><th></th></tr></thead><tbody>' +
+          (rows.length ? rows.map(function (r) {
+            return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
+                   '<td>' + esc(r.country_code || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
+                   '<td><button class="btn btn-secondary btn-sm" onclick="editConfig(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(r.country_code||'') + '\')">Edit</button></td></tr>';
+          }).join('') : '<tr><td colspan="5"><div class="empty-state">No config keys.</div></td></tr>') +
+          '</tbody></table></div>' +
+          '<div style="padding:10px 16px"><button class="btn btn-primary btn-sm" onclick="newConfigKey()">+ Add Key</button></div></div>';
+      }).catch(function (e) { panel.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+    } else if (_tab === 'branding') {
+      API.call('branding', 'get', { scope_code: 'GLOBAL' }).then(function (b) {
+        panel.innerHTML = '<div class="card card-body">' +
+          '<div class="form-group"><label class="form-label">App Name</label><input class="form-control" id="brAppName" value="' + esc(b.app_name || '') + '"></div>' +
+          '<div class="form-group"><label class="form-label">Support Email</label><input class="form-control" id="brEmail" value="' + esc(b.support_email || '') + '"></div>' +
+          '<div class="form-group"><label class="form-label">Primary Color</label><input class="form-control" id="brColor" value="' + esc(b.primary_color || '#1a56db') + '"></div>' +
+          '<button class="btn btn-primary" onclick="saveBranding()">Save</button>' +
+          '</div>';
+      }).catch(function () { panel.innerHTML = '<p style="color:#9ca3af">Branding config not found.</p>'; });
+    } else {
+      API.call('system', 'health', {}).then(function (h) {
+        panel.innerHTML = '<div class="card card-body">' +
+          '<p style="font-size:14px;font-weight:600;margin-bottom:10px">Status: ' + statusBadge(h.status) + '</p>' +
+          '<table class="data-table"><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>' +
+          Object.keys(h.checks).map(function (k) {
+            return '<tr><td>' + esc(k) + '</td><td>' + statusBadge(h.checks[k]) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }).catch(function (e) { panel.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+    }
+  }
+  loadTab();
+});
+
+function editConfig(key, value, cc) {
+  var newVal = window.prompt('New value for ' + key + ':', value);
+  if (newVal === null) return;
+  API.call('configAdmin', 'set', { config_key: key, config_value: newVal, country_code: cc })
+    .then(function () { Toast.success('Config updated.'); Router.navigate('settings', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function newConfigKey() {
+  var key = window.prompt('Config key (e.g. SESSION.IDLE_TIMEOUT_MIN):');
+  if (!key) return;
+  var val = window.prompt('Value:');
+  if (val === null) return;
+  API.call('configAdmin', 'set', { config_key: key.trim(), config_value: val })
+    .then(function () { Toast.success('Config key added.'); Router.navigate('settings', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function saveBranding() {
+  API.call('branding', 'update', {
+    scope_code:    'GLOBAL',
+    app_name:      document.getElementById('brAppName').value.trim(),
+    support_email: document.getElementById('brEmail').value.trim(),
+    primary_color: document.getElementById('brColor').value.trim(),
+  }).then(function () { Toast.success('Branding saved.'); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+</script>

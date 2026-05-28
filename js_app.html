@@ -1,0 +1,188 @@
+<script>
+// ─────────────────────────────────────────────────────────────────
+//  js_app.html  — Hass CMS app framework (Stage 6)
+//  Router, Toast, Modal, and global event bus.
+// ─────────────────────────────────────────────────────────────────
+
+/* ── Toast ─────────────────────────────────────────────────────── */
+var Toast = (function () {
+  var _container;
+  function _ensure() {
+    if (!_container) {
+      _container = document.createElement('div');
+      _container.className = 'toast-container';
+      document.body.appendChild(_container);
+    }
+  }
+  function show(msg, type, duration) {
+    _ensure();
+    var el = document.createElement('div');
+    el.className = 'toast ' + (type || '');
+    el.textContent = msg;
+    _container.appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .3s';
+      setTimeout(function () { el.remove(); }, 300);
+    }, duration || 3500);
+  }
+  return {
+    success: function (m) { show(m, 'success'); },
+    error:   function (m) { show(m, 'error'); },
+    warning: function (m) { show(m, 'warning'); },
+    info:    function (m) { show(m, ''); },
+  };
+})();
+
+/* ── Modal ─────────────────────────────────────────────────────── */
+var Modal = (function () {
+  var _current;
+  function open(opts) {
+    close();
+    var backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop open';
+    backdrop.innerHTML =
+      '<div class="modal">' +
+        '<div class="modal-header">' +
+          '<span class="modal-title">' + (opts.title || '') + '</span>' +
+          '<button class="modal-close" title="Close">&times;</button>' +
+        '</div>' +
+        '<div class="modal-body">' + (opts.body || '') + '</div>' +
+        (opts.footer
+          ? '<div class="modal-footer">' + opts.footer + '</div>'
+          : '') +
+      '</div>';
+    backdrop.querySelector('.modal-close').onclick = close;
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop) close();
+    });
+    document.body.appendChild(backdrop);
+    _current = backdrop;
+    if (opts.onOpen) opts.onOpen(backdrop);
+  }
+  function close() {
+    if (_current) { _current.remove(); _current = null; }
+  }
+  function confirm(msg, onYes, onNo) {
+    open({
+      title: 'Confirm',
+      body: '<p style="margin:0 0 16px">' + msg + '</p>',
+      footer: '<button class="btn btn-secondary" id="_mno">Cancel</button>' +
+              '<button class="btn btn-danger" id="_myes">Confirm</button>',
+      onOpen: function (bd) {
+        bd.querySelector('#_mno').onclick  = function () { close(); if (onNo)  onNo(); };
+        bd.querySelector('#_myes').onclick = function () { close(); if (onYes) onYes(); };
+      },
+    });
+  }
+  return { open: open, close: close, confirm: confirm };
+})();
+
+/* ── Loading overlay ────────────────────────────────────────────── */
+var Loader = (function () {
+  function show(parent) {
+    var p = parent || document.body;
+    p.style.position = 'relative';
+    var el = document.createElement('div');
+    el.className = 'loading-overlay';
+    el.innerHTML = '<span class="spinner dark"></span>';
+    p.appendChild(el);
+    return el;
+  }
+  function hide(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
+  return { show: show, hide: hide };
+})();
+
+/* ── Badge helper ───────────────────────────────────────────────── */
+function statusBadge(status) {
+  var map = {
+    ACTIVE: 'success', APPROVED: 'success', DELIVERED: 'success', CLOSED: 'success', PUBLISHED: 'success',
+    PENDING: 'warning', SUBMITTED: 'warning', PENDING_REVIEW: 'warning', DRAFT: 'neutral', NEW: 'neutral',
+    REJECTED: 'danger',  CANCELLED: 'danger',  FAILED: 'danger',
+    OPEN: 'primary', DISPATCHED: 'primary', ISSUED: 'primary',
+    INACTIVE: 'neutral', ARCHIVED: 'neutral',
+  };
+  var cls = map[String(status).toUpperCase()] || 'neutral';
+  return '<span class="badge badge-' + cls + '">' + status + '</span>';
+}
+
+/* ── Format helpers ─────────────────────────────────────────────── */
+function fmtDate(ts) {
+  if (!ts) return '—';
+  var d = new Date(ts);
+  return isNaN(d) ? ts : d.toLocaleDateString();
+}
+function fmtDateTime(ts) {
+  if (!ts) return '—';
+  var d = new Date(ts);
+  return isNaN(d) ? ts : d.toLocaleString();
+}
+function fmtMoney(v, ccy) {
+  var n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  return (ccy || 'KES') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2 });
+}
+
+/* ── Pagination helper ──────────────────────────────────────────── */
+function renderPagination(container, page, total, perPage, onPage) {
+  var pages = Math.ceil(total / perPage) || 1;
+  var html = '';
+  html += '<button class="page-btn"' + (page<=1?' disabled':'') + ' data-p="' + (page-1) + '">&laquo;</button>';
+  var start = Math.max(1, page-2), end = Math.min(pages, page+2);
+  for (var i=start; i<=end; i++) {
+    html += '<button class="page-btn' + (i===page?' active':'') + '" data-p="' + i + '">' + i + '</button>';
+  }
+  html += '<button class="page-btn"' + (page>=pages?' disabled':'') + ' data-p="' + (page+1) + '">&raquo;</button>';
+  container.innerHTML = html;
+  container.querySelectorAll('.page-btn:not([disabled])').forEach(function (btn) {
+    btn.onclick = function () { onPage(parseInt(btn.dataset.p, 10)); };
+  });
+}
+
+/* ── Simple SPA router ──────────────────────────────────────────── */
+var Router = (function () {
+  var _routes = {};
+  var _active  = null;
+  var _content = null;
+  var _navItems = null;
+
+  function init(contentEl, navItemsSelector) {
+    _content  = contentEl;
+    _navItems = navItemsSelector;
+  }
+
+  function register(id, fn) { _routes[id] = fn; }
+
+  function navigate(id, params) {
+    if (!_routes[id]) { console.warn('Unknown route:', id); return; }
+    _active = id;
+    if (_content) _content.innerHTML = '';
+    // Update active nav item.
+    if (_navItems) {
+      document.querySelectorAll(_navItems).forEach(function (el) {
+        el.classList.toggle('active', el.dataset.route === id);
+      });
+    }
+    try {
+      _routes[id](_content, params || {});
+    } catch (e) {
+      if (_content) _content.innerHTML = '<p style="color:red">Error loading ' + id + ': ' + e.message + '</p>';
+    }
+  }
+
+  return { init: init, register: register, navigate: navigate, current: function () { return _active; } };
+})();
+
+/* ── Global logout handler ──────────────────────────────────────── */
+window.addEventListener('hass:logout', function () {
+  Toast.error('Session expired. Please log in again.');
+  setTimeout(function () { window.location.href = '?page=login'; }, 1500);
+});
+
+/* ── Escape HTML ────────────────────────────────────────────────── */
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>

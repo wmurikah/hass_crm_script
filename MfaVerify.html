@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hass CMS — Two-factor verification</title>
+  <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
+</head>
+<body>
+<div class="mfa-page">
+  <div class="mfa-card">
+    <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">Two-factor authentication</h2>
+    <p style="font-size:13px;color:#6b7280;margin-bottom:4px">
+      Enter the 6-digit code from your authenticator app.
+    </p>
+    <div class="otp-inputs" id="otpInputs">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autofocus>
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <div id="mfaError" style="display:none;color:#dc2626;font-size:13px;margin-bottom:10px"></div>
+    <button class="btn btn-primary" id="verifyBtn" style="width:100%;justify-content:center">Verify</button>
+    <p style="text-align:center;margin-top:12px;font-size:12px">
+      <a href="?page=login">Back to login</a>
+    </p>
+  </div>
+</div>
+<?!= HtmlService.createHtmlOutputFromFile('js_api').getContent(); ?>
+<script>
+(function () {
+  var errDiv = document.getElementById('mfaError');
+  var btn    = document.getElementById('verifyBtn');
+  var inputs = document.querySelectorAll('#otpInputs input');
+
+  inputs.forEach(function (inp, i) {
+    inp.addEventListener('input', function () {
+      if (inp.value.length === 1 && i < inputs.length - 1) inputs[i + 1].focus();
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Backspace' && !inp.value && i > 0) inputs[i - 1].focus();
+    });
+  });
+
+  btn.addEventListener('click', verify);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Enter') verify(); });
+
+  function verify() {
+    var code = Array.from(inputs).map(function (i) { return i.value; }).join('');
+    if (code.length < 6) { errDiv.textContent = 'Enter all 6 digits.'; errDiv.style.display = 'block'; return; }
+    errDiv.style.display = 'none';
+    btn.disabled = true;
+    API.call('auth', 'mfaVerify', { code: code })
+      .then(function (d) {
+        if (d && d.token) API.setToken(d.token);
+        window.location.href = '?page=staff';
+      })
+      .catch(function (e) {
+        errDiv.textContent = e.message || 'Invalid code.';
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        inputs.forEach(function (i) { i.value = ''; });
+        inputs[0].focus();
+      });
+  }
+})();
+</script>
+</body>
+</html>

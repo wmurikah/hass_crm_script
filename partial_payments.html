@@ -1,0 +1,59 @@
+<script>
+Router.register('payments', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="payStatus"><option value="">All statuses</option><option>PENDING_REVIEW</option><option>APPROVED</option><option>REJECTED</option></select>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Upload ID</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th><th>Uploaded</th><th></th></tr></thead>' +
+      '<tbody id="payBody"></tbody></table></div></div>';
+
+  function load() {
+    var s = document.getElementById('payStatus').value;
+    // List from audit log events as proxy for payment upload listing.
+    API.call('auditLog', 'list', { entity_type: 'payment_uploads', limit: 50 }).then(function (rows) {
+      var tbody = document.getElementById('payBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No payment records.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        var after = {};
+        try { after = JSON.parse(r.after_json || '{}'); } catch (_) {}
+        return '<tr><td style="font-size:11px">' + esc(r.entity_id) + '</td>' +
+               '<td>' + esc(after.invoice_id || '—') + '</td>' +
+               '<td>' + fmtMoney(after.amount) + '</td>' +
+               '<td>' + esc(after.payment_method || '—') + '</td>' +
+               '<td>—</td>' +
+               '<td>' + statusBadge(after.status || r.action.replace('PAYMENT_','')) + '</td>' +
+               '<td>' + fmtDate(r.created_at) + '</td>' +
+               '<td><button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('payBody').innerHTML = '<tr><td colspan="8" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('payStatus').onchange = load;
+  load();
+});
+
+function reviewPayment(uploadId) {
+  Modal.open({
+    title: 'Review Payment ' + uploadId,
+    body: '<p style="font-size:13px;margin-bottom:12px">Approve or reject this payment upload.</p>' +
+          '<div class="form-group"><label class="form-label">Reason (for rejection)</label>' +
+            '<input class="form-control" id="payReason" placeholder="Optional for approval, required for rejection"></div>' +
+          '<div id="payErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-danger btn-sm" onclick="paymentAction(\'' + uploadId + '\',\'reject\')">Reject</button>' +
+            '<button class="btn btn-primary btn-sm" onclick="paymentAction(\'' + uploadId + '\',\'approve\')">Approve</button>',
+  });
+}
+
+function paymentAction(uploadId, action) {
+  var params = { uploadId: uploadId };
+  if (action === 'reject') {
+    params.reason = document.getElementById('payReason').value.trim();
+    if (!params.reason) { document.getElementById('payErr').textContent = 'Reason required for rejection.'; return; }
+  }
+  API.call('payments', action, params)
+    .then(function () { Modal.close(); Toast.success('Payment ' + action + 'd.'); Router.navigate('payments', {}); })
+    .catch(function (e) { document.getElementById('payErr').textContent = e.message; });
+}
+</script>

@@ -1,0 +1,106 @@
+<script>
+Router.register('tickets', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="tktStatus"><option value="">All statuses</option><option>NEW</option><option>OPEN</option><option>RESOLVED</option><option>CLOSED</option></select>' +
+      '<select class="form-control" id="tktPriority"><option value="">All priorities</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select>' +
+      '<button class="btn btn-primary btn-sm" id="tktNewBtn">+ New Ticket</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Ticket #</th><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
+      '<tbody id="tktBody"></tbody></table></div></div>';
+
+  function load() {
+    var params = { limit: 50 };
+    var s = document.getElementById('tktStatus').value;
+    var p = document.getElementById('tktPriority').value;
+    if (s) params.status = s;
+    if (p) params.priority = p;
+    API.call('tickets', 'list', params).then(function (rows) {
+      var tbody = document.getElementById('tktBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No tickets.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
+               '<td>' + esc(r.company_name || r.customer_id) + '</td>' +
+               '<td>' + statusBadge(r.priority) + '</td><td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.created_at) + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="viewTicket(\'' + esc(r.ticket_id) + '\')">View</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('tktBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('tktStatus').onchange = load;
+  document.getElementById('tktPriority').onchange = load;
+  document.getElementById('tktNewBtn').onclick = function () { newTicketModal(load); };
+  load();
+});
+
+function viewTicket(id) {
+  var l = Loader.show();
+  API.call('tickets', 'get', { ticketId: id }).then(function (t) {
+    Loader.hide(l);
+    var comments = (t.comments || []).map(function (c) {
+      return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+             '<strong>' + esc(c.author_id) + '</strong> · ' + fmtDateTime(c.created_at) +
+             '<p style="margin:4px 0 0">' + esc(c.content) + '</p></div>';
+    }).join('');
+    Modal.open({
+      title: t.ticket_number + ': ' + t.subject,
+      body: '<p>' + statusBadge(t.priority) + ' &nbsp; ' + statusBadge(t.status) + '</p>' +
+            '<p style="font-size:13px;margin:8px 0">' + esc(t.description) + '</p>' +
+            '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px">' + (comments || '<p style="color:#9ca3af;font-size:12px">No comments.</p>') + '</div>' +
+            '<textarea class="form-control" id="tktComment" rows="3" placeholder="Add a comment…"></textarea>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              '<button class="btn btn-primary btn-sm" onclick="addTicketComment(\'' + id + '\')">Add Comment</button>' +
+              (t.status !== 'RESOLVED' && t.status !== 'CLOSED'
+                ? '<button class="btn btn-secondary btn-sm" onclick="resolveTicket(\'' + id + '\')">Resolve</button>' : ''),
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function addTicketComment(id) {
+  var content = document.getElementById('tktComment').value.trim();
+  if (!content) return;
+  API.call('tickets', 'addComment', { ticketId: id, content: content })
+    .then(function () { Modal.close(); Toast.success('Comment added.'); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function resolveTicket(id) {
+  var summary = window.prompt('Resolution summary:');
+  if (!summary) return;
+  API.call('tickets', 'resolve', { ticketId: id, resolution_type: 'RESOLVED', resolution_summary: summary })
+    .then(function () { Modal.close(); Toast.success('Ticket resolved.'); Router.navigate('tickets', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function newTicketModal(onSuccess) {
+  Modal.open({
+    title: 'New Ticket',
+    body: '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">Customer ID</label><input class="form-control" id="ntCust"></div>' +
+          '<div class="form-group"><label class="form-label">Category</label>' +
+            '<select class="form-control" id="ntCat"><option>BILLING</option><option>DELIVERY</option><option>TECHNICAL</option><option>GENERAL</option></select></div></div>' +
+          '<div class="form-group"><label class="form-label">Subject</label><input class="form-control" id="ntSubject"></div>' +
+          '<div class="form-group"><label class="form-label">Description</label><textarea class="form-control" id="ntDesc" rows="3"></textarea></div>' +
+          '<div class="form-group"><label class="form-label">Priority</label>' +
+            '<select class="form-control" id="ntPriority"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select></div>' +
+          '<div id="ntErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="ntSave">Create</button>',
+    onOpen: function () {
+      document.getElementById('ntSave').onclick = function () {
+        var cust    = document.getElementById('ntCust').value.trim();
+        var subject = document.getElementById('ntSubject').value.trim();
+        if (!cust || !subject) { document.getElementById('ntErr').textContent = 'Customer ID and subject required.'; return; }
+        API.call('tickets', 'create', {
+          customer_id: cust, category: document.getElementById('ntCat').value,
+          subject: subject, description: document.getElementById('ntDesc').value,
+          priority: document.getElementById('ntPriority').value,
+        }).then(function () { Modal.close(); Toast.success('Ticket created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('ntErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

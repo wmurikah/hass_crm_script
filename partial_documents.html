@@ -1,0 +1,67 @@
+<script>
+Router.register('documents', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="docStatus"><option value="">All statuses</option><option>PENDING</option><option>VERIFIED</option><option>REJECTED</option></select>' +
+      '<input class="form-control" id="docCust" placeholder="Customer ID…" style="width:200px">' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Doc Type</th><th>Customer</th><th>Country</th><th>Status</th><th>Uploaded</th><th></th></tr></thead>' +
+      '<tbody id="docBody"></tbody></table></div></div>';
+
+  function load() {
+    var params = { limit: 50 };
+    var s = document.getElementById('docStatus').value;
+    var c = document.getElementById('docCust').value.trim();
+    if (s) params.status = s;
+    if (c) params.customer_id = c;
+    API.call('documents', 'list', params).then(function (rows) {
+      var tbody = document.getElementById('docBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No documents.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.document_type) + '</td><td>' + esc(r.customer_id) + '</td>' +
+               '<td>' + esc(r.country_code || '—') + '</td><td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.uploaded_at || r.created_at) + '</td>' +
+               '<td class="actions">' +
+               (r.status === 'PENDING'
+                 ? '<button class="btn btn-danger btn-sm" onclick="verifyDoc(\'' + esc(r.document_id) + '\',\'REJECT\')">Reject</button>' +
+                   '<button class="btn btn-primary btn-sm" onclick="verifyDoc(\'' + esc(r.document_id) + '\',\'APPROVE\')">Approve</button>'
+                 : '<button class="btn btn-secondary btn-sm" onclick="viewDoc(\'' + esc(r.document_id) + '\')">View</button>') +
+               '</td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('docBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('docStatus').onchange = load;
+  document.getElementById('docCust').oninput = function () { clearTimeout(this._t); this._t = setTimeout(load, 400); };
+  load();
+});
+
+function verifyDoc(id, action) {
+  var params = { documentId: id, action: action };
+  if (action === 'REJECT') {
+    params.notes = window.prompt('Rejection reason:');
+    if (!params.notes) return;
+  }
+  API.call('documents', 'verify', params)
+    .then(function () { Toast.success('Document ' + action.toLowerCase() + 'd.'); Router.navigate('documents', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function viewDoc(id) {
+  var l = Loader.show();
+  API.call('documents', 'get', { documentId: id }).then(function (d) {
+    Loader.hide(l);
+    Modal.open({
+      title: d.document_type,
+      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+            '<dt style="color:#6b7280">Customer</dt><dd>' + esc(d.customer_id) + '</dd>' +
+            '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(d.status) + '</dd>' +
+            '<dt style="color:#6b7280">Uploaded</dt><dd>' + fmtDate(d.uploaded_at || d.created_at) + '</dd>' +
+            (d.document_url ? '<dt style="color:#6b7280">File</dt><dd><a href="' + esc(d.document_url) + '" target="_blank">View file</a></dd>' : '') +
+            (d.notes ? '<dt style="color:#6b7280">Notes</dt><dd>' + esc(d.notes) + '</dd>' : '') +
+            '</dl>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+</script>

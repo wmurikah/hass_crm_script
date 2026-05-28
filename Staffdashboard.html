@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hass CMS — Staff Portal</title>
+  <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
+</head>
+<body>
+<div class="app-shell" id="appShell" style="display:none">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">Hass CMS</div>
+    <div class="sidebar-nav" id="sidebarNav"></div>
+    <div style="padding:12px 16px;border-top:1px solid rgba(255,255,255,.08)">
+      <div style="font-size:12px;color:#64748b" id="userLabel"></div>
+      <button class="btn btn-secondary btn-sm" id="logoutBtn" style="margin-top:6px;width:100%;justify-content:center">Sign out</button>
+    </div>
+  </nav>
+
+  <!-- Main area -->
+  <div class="main-area">
+    <header class="app-header">
+      <span class="header-title" id="pageTitle">Dashboard</span>
+      <div id="headerRight" style="display:flex;gap:8px;align-items:center"></div>
+    </header>
+    <div class="page-content" id="pageContent">
+      <div style="display:flex;justify-content:center;padding:60px">
+        <span class="spinner dark"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Auth guard: shown while checking session -->
+<div id="authGuard" style="display:flex;height:100vh;align-items:center;justify-content:center">
+  <span class="spinner dark"></span>
+</div>
+
+<?!= HtmlService.createHtmlOutputFromFile('js_api').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('js_app').getContent(); ?>
+
+<!-- Load all staff module partials -->
+<?!= HtmlService.createHtmlOutputFromFile('partial_dashboard').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_customers').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_contacts').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_orders').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_tickets').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_invoices').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_payments').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_approvals').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_documents').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_users').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_catalog').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_pricing').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_settings').getContent(); ?>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Auth guard ─────────────────────────────────────────────────
+  if (!API.loadPersistedToken()) {
+    window.location.href = '?page=login';
+    return;
+  }
+
+  // ── Verify session ─────────────────────────────────────────────
+  API.call('auth', 'me', {})
+    .then(function (me) {
+      document.getElementById('authGuard').style.display  = 'none';
+      document.getElementById('appShell').style.display   = 'flex';
+      document.getElementById('userLabel').textContent    = me.first_name + ' ' + me.last_name + ' (' + me.role + ')';
+      initApp(me);
+    })
+    .catch(function () {
+      window.location.href = '?page=login';
+    });
+
+  // ── App init ───────────────────────────────────────────────────
+  function initApp(me) {
+    // Set up router.
+    Router.init(document.getElementById('pageContent'), '.nav-item');
+
+    // Build sidebar from menu API.
+    API.call('menu', 'list', {})
+      .then(function (items) { renderNav(items); })
+      .catch(function () { renderNav([]); });
+
+    // Logout.
+    document.getElementById('logoutBtn').onclick = function () {
+      API.logout().catch(function () {}).finally(function () {
+        window.location.href = '?page=login';
+      });
+    };
+
+    // Navigate to default page.
+    Router.navigate('dashboard', {});
+  }
+
+  // ── Sidebar render ──────────────────────────────────────────────
+  function renderNav(items) {
+    var nav = document.getElementById('sidebarNav');
+    var groups = {};
+    items.forEach(function (item) {
+      if (!groups[item.group]) groups[item.group] = [];
+      groups[item.group].push(item);
+    });
+    var groupLabels = { main:'Main', finance:'Finance', ops:'Operations',
+                        catalog:'Catalog', support:'Support', reports:'Reports', admin:'Admin' };
+    var html = '';
+    Object.keys(groupLabels).forEach(function (g) {
+      if (!groups[g] || !groups[g].length) return;
+      html += '<div class="nav-group-label">' + groupLabels[g] + '</div>';
+      groups[g].forEach(function (item) {
+        html += '<div class="nav-item" data-route="' + item.id + '">' +
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>' +
+                '<span>' + item.label + '</span></div>';
+      });
+    });
+    nav.innerHTML = html;
+    nav.querySelectorAll('.nav-item').forEach(function (el) {
+      el.addEventListener('click', function () {
+        document.getElementById('pageTitle').textContent = el.querySelector('span').textContent;
+        Router.navigate(el.dataset.route, {});
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
