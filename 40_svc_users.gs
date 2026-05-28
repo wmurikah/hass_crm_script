@@ -9,7 +9,7 @@
 
 function _usersList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.view');
-  var sql  = 'SELECT user_id, email, first_name, last_name, role, status, country_code, team_id, last_login_at, created_at FROM users WHERE 1=1';
+  var sql  = 'SELECT user_id, email, first_name, last_name, status, country_code, team_id, last_login_at, created_at FROM users WHERE 1=1';
   var args = [];
   if (params.status)       { sql += ' AND status = ?';                         args.push(params.status); }
   if (params.country_code) { sql += ' AND country_code = ?';                   args.push(params.country_code); }
@@ -49,15 +49,14 @@ function _usersCreate_(ctx, params) {
   var now    = nowIso();
 
   TursoClient.write(
-    'INSERT INTO users (user_id, email, first_name, last_name, role, status, ' +
+    'INSERT INTO users (user_id, email, first_name, last_name, status, ' +
     'password_hash, must_change_password, failed_login_attempts, country_code, created_at, updated_at) ' +
-    'VALUES (?,?,?,?,?,?,?,1,0,?,?,?)',
+    'VALUES (?,?,?,?,?,?,1,0,?,?,?)',
     [
       userId,
       email,
       String(params.firstName || params.first_name || ''),
       String(params.lastName  || params.last_name  || ''),
-      String(params.role      || 'CS_AGENT'),
       'ACTIVE',
       passwordHash,
       String(params.countryCode || params.country_code || ''),
@@ -83,7 +82,7 @@ function _usersUpdate_(ctx, params) {
   var rows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
   if (!rows.length) throw new Errors.NotFound('User not found.');
   var before = rows[0];
-  var allowed = ['first_name', 'last_name', 'phone', 'role', 'team_id',
+  var allowed = ['first_name', 'last_name', 'phone', 'team_id',
                  'country_code', 'countries_access', 'reports_to'];
   var patch = { updated_at: nowIso() };
   allowed.forEach(function (k) { if (params[k] !== undefined) patch[k] = params[k]; });
@@ -169,11 +168,6 @@ function _usersSetRoles_(ctx, params) {
       [userId, code, ctx.actor || 'SYSTEM', now]
     );
   });
-  // Mirror primary role on legacy users.role column.
-  if (roleCodes.length) {
-    TursoClient.write('UPDATE users SET role = ?, updated_at = ? WHERE user_id = ?',
-      [roleCodes[0], now, userId]);
-  }
   Audit.log({ actor: ctx.actor || '', action: 'ROLES_ASSIGNED', entity: 'users',
               entityId: userId, after: { roles: roleCodes }, metadata: {} });
   return { success: true, roles: roleCodes };

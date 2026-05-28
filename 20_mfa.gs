@@ -208,9 +208,6 @@ var Mfa = (function () {
     for (var i = 0; i < roleRows.length; i++) {
       if (Rbac.isMfaRequiredForRole(roleRows[i].role_code)) return true;
     }
-    // Legacy fallback: check users.role column.
-    var uRows = TursoClient.select('SELECT role FROM users WHERE user_id = ? LIMIT 1', [userId]);
-    if (uRows.length && Rbac.isMfaRequiredForRole(uRows[0].role)) return true;
     return false;
   }
 
