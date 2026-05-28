@@ -20,6 +20,7 @@ function seedAll() {
   _seedAddColumnIfMissing_('users',   'password_changed_at',  'TEXT');
   _seedAddColumnIfMissing_('contacts','must_change_password',  'INTEGER DEFAULT 0');
   _seedAddColumnIfMissing_('contacts','password_changed_at',   'TEXT');
+  _seedAddColumnIfMissing_('contacts','portal_role',           'TEXT');
   _seedAddColumnIfMissing_('roles',   'mfa_required',         'INTEGER DEFAULT 0');
   // Seed mfa_required on known high-privilege roles.
   var mfaRoles = ['SUPER_ADMIN','CEO','CFO','RMD','INTERNAL_AUDITOR','FINANCE_MANAGER'];
