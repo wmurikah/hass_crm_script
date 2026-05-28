@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hass Petroleum — Customer Portal</title>
+  <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
+</head>
+<body>
+<div id="authGuard" style="display:flex;height:100vh;align-items:center;justify-content:center">
+  <span class="spinner dark"></span>
+</div>
+
+<div class="portal-shell" id="portalShell" style="display:none">
+  <header class="portal-header">
+    <span style="font-weight:700;font-size:16px;flex:1">Hass Petroleum — Customer Portal</span>
+    <nav class="portal-nav" id="portalNav">
+      <div class="portal-nav-item active" data-tab="portal-dashboard">Dashboard</div>
+      <div class="portal-nav-item" data-tab="portal-orders">Orders</div>
+      <div class="portal-nav-item" data-tab="portal-tickets">Support</div>
+      <div class="portal-nav-item" data-tab="portal-invoices">Invoices</div>
+      <div class="portal-nav-item" data-tab="portal-documents">Documents</div>
+      <div class="portal-nav-item" data-tab="portal-profile">Profile</div>
+    </nav>
+    <button class="btn btn-secondary btn-sm" id="portalLogout" style="color:#fff;border-color:rgba(255,255,255,.3)">Sign out</button>
+  </header>
+  <div class="portal-content" id="portalContent">
+    <div style="display:flex;justify-content:center;padding:60px">
+      <span class="spinner dark"></span>
+    </div>
+  </div>
+  <footer class="portal-footer">
+    &copy; <?= new Date().getFullYear() ?> Hass Petroleum Group. All rights reserved.
+  </footer>
+</div>
+
+<?!= HtmlService.createHtmlOutputFromFile('js_api').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('js_app').getContent(); ?>
+
+<!-- Portal partials -->
+<?!= HtmlService.createHtmlOutputFromFile('portal_dashboard').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('portal_orders').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('portal_tickets').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('portal_invoices').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('portal_documents').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('portal_profile').getContent(); ?>
+
+<script>
+(function () {
+  'use strict';
+
+  if (!API.loadPersistedToken()) {
+    window.location.href = '?page=login';
+    return;
+  }
+
+  API.call('auth', 'me', {})
+    .then(function (me) {
+      if (me.user_type !== 'CUSTOMER') {
+        window.location.href = '?page=staff';
+        return;
+      }
+      document.getElementById('authGuard').style.display  = 'none';
+      document.getElementById('portalShell').style.display = 'flex';
+      initPortal(me);
+    })
+    .catch(function () { window.location.href = '?page=login'; });
+
+  function initPortal(me) {
+    Router.init(document.getElementById('portalContent'), '.portal-nav-item');
+
+    document.getElementById('portalLogout').onclick = function () {
+      API.logout().catch(function () {}).finally(function () {
+        window.location.href = '?page=login';
+      });
+    };
+
+    document.querySelectorAll('.portal-nav-item').forEach(function (el) {
+      el.addEventListener('click', function () {
+        document.querySelectorAll('.portal-nav-item').forEach(function (x) { x.classList.remove('active'); });
+        el.classList.add('active');
+        Router.navigate(el.dataset.tab, { me: me });
+      });
+    });
+
+    Router.navigate('portal-dashboard', { me: me });
+  }
+})();
+</script>
+</body>
+</html>
