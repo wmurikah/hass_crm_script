@@ -67,30 +67,21 @@ var _PUBLIC_ACTIONS_ = [
 
 /**
  * Convenience entry point usable from tests and IDE scripts.
- * Mirrors the same session-gating logic as doPost in 30_router.gs.
+ * Session gating is handled entirely by dispatch().
  */
 function processRequest(call) {
-  var service = String(call.service || '');
-  var action  = String(call.action  || '');
-  var key     = service + '.' + action;
-  var token   = String(call.sessionToken || call.token || '');
-  var params  = call.params || {};
-
-  var ctx = { token: token, actor: null, session: null };
-
-  if (_PUBLIC_ACTIONS_.indexOf(key) === -1) {
-    if (!token) {
-      return { ok: false, error: { code: 'NO_SESSION', message: 'Session token required.' } };
-    }
-    var sess = Session.validate(token);
-    if (!sess) {
-      return { ok: false, error: { code: 'NO_SESSION', message: 'Session invalid or expired.' } };
-    }
-    ctx.actor   = sess.userId;
-    ctx.session = sess;
+  try {
+    var service = String(call.service || '');
+    var action  = String(call.action  || '');
+    var token   = String(call.sessionToken || call.token || '');
+    var params  = call.params || {};
+    var ctx = { token: token, sessionToken: token, actor: null, session: null };
+    return dispatch(ctx, { service: service, action: action, params: params });
+  } catch (e) {
+    Logger.log('[processRequest] Unhandled error: ' + e.message + '\n' + e.stack);
+    return { ok: false, error: { code: e.code || 'INTERNAL_ERROR',
+             message: e.message || 'An unexpected error occurred.' } };
   }
-
-  return dispatch(ctx, { service: service, action: action, params: params });
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
