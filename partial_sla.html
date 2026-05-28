@@ -1,0 +1,95 @@
+<script>
+Router.register('sla', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">SLA Configuration</h2>' +
+      '<button class="btn btn-primary btn-sm" id="slaSaveBtn">Save Changes</button>' +
+    '</div>' +
+
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:12px">SLA Thresholds (hours)</div>' +
+      '<table class="data-table"><thead><tr>' +
+        '<th>Priority</th><th>Response SLA</th><th>Resolve SLA</th>' +
+      '</tr></thead>' +
+      '<tbody id="slaTbody"></tbody></table>' +
+    '</div>' +
+
+    '<div class="card">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:12px">SLA Breach Report (last 30 days)</div>' +
+      '<div class="table-wrapper"><table class="data-table">' +
+        '<thead><tr><th>Ticket #</th><th>Subject</th><th>Priority</th><th>Breached At</th><th>Status</th></tr></thead>' +
+        '<tbody id="slaBreachBody"></tbody>' +
+      '</table></div>' +
+    '</div>';
+
+  var priorities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  var defaults   = { CRITICAL: { res: 1,  resolve: 4  },
+                     HIGH:     { res: 4,  resolve: 24 },
+                     MEDIUM:   { res: 8,  resolve: 48 },
+                     LOW:      { res: 24, resolve: 72 } };
+
+  function loadConfig() {
+    API.call('config', 'list', { group: 'sla' }).then(function (rows) {
+      var map = {};
+      (rows || []).forEach(function (r) { map[r.config_key] = r.config_value; });
+      var tbody = document.getElementById('slaTbody');
+      tbody.innerHTML = priorities.map(function (p) {
+        var resKey  = 'sla_response_' + p.toLowerCase();
+        var resVal  = map[resKey]  || defaults[p].res;
+        var solKey  = 'sla_resolve_' + p.toLowerCase();
+        var solVal  = map[solKey]  || defaults[p].resolve;
+        return '<tr>' +
+          '<td><span class="badge">' + esc(p) + '</span></td>' +
+          '<td><input class="form-control" style="width:80px" id="slaR_' + p + '" type="number" min="1" value="' + esc(String(resVal)) + '"></td>' +
+          '<td><input class="form-control" style="width:80px" id="slaS_' + p + '" type="number" min="1" value="' + esc(String(solVal)) + '"></td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function () {
+      document.getElementById('slaTbody').innerHTML =
+        '<tr><td colspan="3" style="color:#9ca3af;font-size:12px">Unable to load SLA config.</td></tr>';
+    });
+  }
+
+  function loadBreaches() {
+    API.call('tickets', 'list', { sla_breached: true, limit: 50 }).then(function (rows) {
+      var tbody = document.getElementById('slaBreachBody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No SLA breaches in the last 30 days.</div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr>' +
+          '<td>' + esc(r.ticket_number) + '</td>' +
+          '<td>' + esc(r.subject) + '</td>' +
+          '<td>' + statusBadge(r.priority) + '</td>' +
+          '<td>' + fmtDateTime(r.sla_resolve_by) + '</td>' +
+          '<td>' + statusBadge(r.status) + '</td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function () {
+      document.getElementById('slaBreachBody').innerHTML =
+        '<tr><td colspan="5" style="color:#dc2626">Unable to load breach data.</td></tr>';
+    });
+  }
+
+  document.getElementById('slaSaveBtn').onclick = function () {
+    var updates = {};
+    priorities.forEach(function (p) {
+      updates['sla_response_' + p.toLowerCase()] = document.getElementById('slaR_' + p).value;
+      updates['sla_resolve_'  + p.toLowerCase()] = document.getElementById('slaS_' + p).value;
+    });
+    var keys = Object.keys(updates);
+    var chain = Promise.resolve();
+    keys.forEach(function (k) {
+      chain = chain.then(function () {
+        return API.call('config', 'set', { key: k, value: updates[k] });
+      });
+    });
+    chain.then(function () { Toast.success('SLA config saved.'); })
+         .catch(function (e) { Toast.error(e.message); });
+  };
+
+  loadConfig();
+  loadBreaches();
+});
+</script>
