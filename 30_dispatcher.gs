@@ -73,21 +73,33 @@ function dispatch(ctx, call) {
     };
   }
 
-  var isPublic = ['auth.login', 'auth.signup', 'auth.requestPasswordReset',
-                  'auth.verifyOtp', 'auth.setNewPassword', 'auth.verifyAccount',
-                  'system.health'].indexOf(key) >= 0;
+  var PUBLIC_ACTIONS = [
+    'auth.login', 'auth.signup', 'auth.verifyAccount',
+    'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
+    'system.health'
+  ];
+  var isPublic = PUBLIC_ACTIONS.indexOf(key) !== -1;
+
   if (!isPublic) {
-    var rawToken = (call.params && call.params.sessionToken) || ctx.token || '';
-    if (!rawToken && !ctx.session) {
-      return { ok: false, error: { code: 'NO_SESSION', message: 'Authentication required' } };
+    var rawToken = (call.params && call.params.sessionToken) || (ctx && ctx.token);
+
+    if (!rawToken) {
+      return {
+        ok: false,
+        error: { code: 'NO_SESSION', message: 'Authentication required.' }
+      };
     }
-    if (!ctx.session) {
-      var resolvedSess = Session.validate(rawToken);
-      if (!resolvedSess) {
-        return { ok: false, error: { code: 'SESSION_INVALID', message: 'Session expired or invalid' } };
-      }
-      ctx.session = resolvedSess;
+
+    var session = Session.validate(rawToken);
+
+    if (!session) {
+      return {
+        ok: false,
+        error: { code: 'SESSION_INVALID', message: 'Session expired or invalid.' }
+      };
     }
+
+    ctx.session = session;
   }
 
   if (!_dispatchPermit_(ctx, spec)) {

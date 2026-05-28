@@ -71,6 +71,21 @@ function seedAll() {
   return { userId: userId };
 }
 
+// ── One-off migrations ────────────────────────────────────────────────────────
+
+/**
+ * Run once from the IDE to backfill the role column added to the sessions table.
+ * Safe to run again — catches the "duplicate column" error silently.
+ */
+function migrateAddSessionRole() {
+  try {
+    TursoClient.write('ALTER TABLE sessions ADD COLUMN role TEXT');
+    Logger.log('sessions.role column added OK');
+  } catch (e) {
+    Logger.log('sessions.role migration: ' + e.message);
+  }
+}
+
 // ── Internal helper ───────────────────────────────────────────────────────────
 
 function _seedAddColumnIfMissing_(tableName, columnName, columnDef) {
