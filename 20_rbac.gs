@@ -30,16 +30,6 @@ var Rbac = (function () {
         'SELECT role_code FROM user_roles WHERE user_id = ?', [userId]
       );
 
-      if (!roles.length) {
-        // Legacy fallback: read users.role directly.
-        var uRows = TursoClient.select(
-          'SELECT role FROM users WHERE user_id = ? LIMIT 1', [userId]
-        );
-        if (uRows.length && uRows[0].role) {
-          roles = [{ role_code: uRows[0].role }];
-        }
-      }
-
       var hasWildcard = false;
       var seen = {};
       roles.forEach(function (r) {

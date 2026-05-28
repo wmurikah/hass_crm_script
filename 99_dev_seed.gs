@@ -13,14 +13,12 @@
  */
 
 function seedAll() {
-  Logger.log('[Seed] seedAll() start');
-
   // ── 1. Idempotency check ───────────────────────────────────────────────────
   var existing = TursoClient.select(
-    "SELECT ur.user_id FROM user_roles ur WHERE ur.role_code = 'SUPER_ADMIN' LIMIT 1"
+    "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
   );
   if (existing.length) {
-    Logger.log('[Seed] SUPER_ADMIN already seeded.');
+    Logger.log('SUPER_ADMIN already seeded - skipping');
     return;
   }
 
@@ -28,27 +26,19 @@ function seedAll() {
   var props = PropertiesService.getScriptProperties();
   var email = (props.getProperty('SEED_SUPERADMIN_EMAIL') || 'admin@hasspetroleum.com').trim();
 
-  // Generate a random 16-char password: 4 segments of [A-Za-z0-9@!#$]
-  var chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@!#$';
-  var rawPwd = '';
-  for (var i = 0; i < 16; i++) {
-    rawPwd += chars.charAt(Math.floor(Math.random() * chars.length));
+  // ── 3. Generate 16-char password with upper, lower, digit, symbol mix ─────
+  var chars    = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@!#$';
+  var password = 'Aa1!';
+  for (var i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  // Ensure it satisfies the default policy: uppercase, lowercase, digit, special.
-  rawPwd = 'Aa1!' + rawPwd.substring(4);
 
-  // ── 5. One-time password block (printed before hashing) ───────────────────
-  Logger.log('╔══════════════════════════════════════════════════╗');
-  Logger.log('║  SUPER_ADMIN ONE-TIME PASSWORD — CAPTURE NOW     ║');
-  Logger.log('║  Email:    ' + email);
-  Logger.log('║  Password: ' + rawPwd);
-  Logger.log('╚══════════════════════════════════════════════════╝');
-
-  var passwordHash = Password.hash(rawPwd);
+  // ── 4. Hash password ───────────────────────────────────────────────────────
+  var passwordHash = Password.hash(password);
   var userId = genId('USR');
   var now    = nowIso();
 
-  // ── 3. Insert users row (new-schema columns only) ─────────────────────────
+  // ── 5. Insert ONE row into users (only rebuilt-schema columns) ─────────────
   TursoClient.write(
     'INSERT INTO users ' +
     '(user_id, email, first_name, last_name, password_hash, password_changed_at, ' +
@@ -57,29 +47,27 @@ function seedAll() {
     [userId, email, 'Super', 'Admin', passwordHash, now, 1, 'ACTIVE', 0, null, now, now]
   );
 
-  // Record in password_history.
+  // ── 6. Insert ONE row into user_roles ──────────────────────────────────────
   TursoClient.write(
-    'INSERT INTO password_history (history_id, user_id, user_type, password_hash, created_at) VALUES (?,?,?,?,?)',
-    [uuidv4(), userId, 'STAFF', passwordHash, now]
-  );
-
-  // ── 4. Bind to SUPER_ADMIN role ────────────────────────────────────────────
-  TursoClient.write(
-    'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
+    'INSERT INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
     [userId, 'SUPER_ADMIN', 'SEED', now]
   );
 
-  // ── 6. Audit log ───────────────────────────────────────────────────────────
+  // ── 7. Audit log ───────────────────────────────────────────────────────────
   Audit.log({
     actor:    'SEED',
     action:   'SUPER_ADMIN_SEEDED',
     entity:   'users',
     entityId: userId,
-    after:    { email: email, role_code: 'SUPER_ADMIN' },
+    after:    { email: email },
   });
 
-  Logger.log('[Seed] Created SUPER_ADMIN user_id=' + userId + ' email=' + email);
-  return { created: true, userId: userId, email: email };
+  // ── 8. Print one-time password ─────────────────────────────────────────────
+  Logger.log('╔════════════════════════════════════════╗');
+  Logger.log('║ SUPER_ADMIN ONE-TIME PASSWORD          ║');
+  Logger.log('║ Email:    ' + email);
+  Logger.log('║ Password: ' + password);
+  Logger.log('╚════════════════════════════════════════╝');
 }
 
 // ── Internal helper ───────────────────────────────────────────────────────────
