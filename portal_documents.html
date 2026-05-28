@@ -1,0 +1,57 @@
+<script>
+Router.register('portal-documents', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">KYC Documents</h2>' +
+      '<button class="btn btn-primary btn-sm" id="pDocUpload">+ Upload Document</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Document Type</th><th>Status</th><th>Uploaded</th><th>Notes</th></tr></thead>' +
+      '<tbody id="pDocBody"></tbody></table></div></div>';
+
+  function load() {
+    API.call('documents', 'list', { limit: 30 }).then(function (rows) {
+      var tbody = document.getElementById('pDocBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">No documents uploaded.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.document_type) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.uploaded_at || r.created_at) + '</td>' +
+               '<td style="font-size:12px;color:#6b7280">' + esc(r.notes || '—') + '</td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('pDocBody').innerHTML = '<tr><td colspan="4" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('pDocUpload').onclick = function () { pDocUploadModal(load); };
+  load();
+});
+
+function pDocUploadModal(onSuccess) {
+  Modal.open({
+    title: 'Upload KYC Document',
+    body: '<div class="form-group"><label class="form-label">Document Type</label>' +
+            '<select class="form-control" id="pduType">' +
+              ['NATIONAL_ID','PASSPORT','KRA_PIN','VAT_CERT','BUSINESS_PERMIT','OTHER'].map(function(t){return '<option>'+t+'</option>';}).join('') +
+            '</select></div>' +
+          '<div class="form-group"><label class="form-label">Document URL</label>' +
+            '<input class="form-control" id="pduUrl" placeholder="https://…"></div>' +
+          '<div class="form-group"><label class="form-label">Notes (optional)</label>' +
+            '<textarea class="form-control" id="pduNotes" rows="2"></textarea></div>' +
+          '<div id="pduErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="pduSave">Upload</button>',
+    onOpen: function () {
+      document.getElementById('pduSave').onclick = function () {
+        var url = document.getElementById('pduUrl').value.trim();
+        if (!url) { document.getElementById('pduErr').textContent = 'Document URL required.'; return; }
+        API.call('documents', 'upload', {
+          document_type: document.getElementById('pduType').value,
+          document_url:  url,
+          notes:         document.getElementById('pduNotes').value.trim(),
+        }).then(function () { Modal.close(); Toast.success('Document uploaded.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('pduErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

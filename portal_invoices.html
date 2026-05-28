@@ -1,0 +1,69 @@
+<script>
+Router.register('portal-invoices', function (el) {
+  el.innerHTML =
+    '<h2 style="font-size:16px;font-weight:600;margin-bottom:14px">Invoices &amp; Payments</h2>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Invoice #</th><th>Total</th><th>Due Date</th><th>Status</th><th>Payment</th><th></th></tr></thead>' +
+      '<tbody id="pInvBody"></tbody></table></div></div>';
+
+  API.call('invoices', 'list', { limit: 30 }).then(function (rows) {
+    var tbody = document.getElementById('pInvBody');
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No invoices.</div></td></tr>'; return; }
+    tbody.innerHTML = rows.map(function (r) {
+      return '<tr><td>' + esc(r.invoice_number) + '</td>' +
+             '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
+             '<td>' + fmtDate(r.due_date) + '</td>' +
+             '<td>' + statusBadge(r.status) + '</td>' +
+             '<td>' + statusBadge(r.payment_status) + '</td>' +
+             '<td>' + (r.payment_status === 'UNPAID' && r.status !== 'CANCELLED'
+               ? '<button class="btn btn-primary btn-sm" onclick="pUploadPayment(\'' + esc(r.invoice_id) + '\')">Pay</button>'
+               : '<button class="btn btn-secondary btn-sm" onclick="pViewInvoice(\'' + esc(r.invoice_id) + '\')">View</button>') +
+             '</td></tr>';
+    }).join('');
+  }).catch(function (e) { document.getElementById('pInvBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+});
+
+function pViewInvoice(id) {
+  var l = Loader.show();
+  API.call('invoices', 'get', { invoiceId: id }).then(function (inv) {
+    Loader.hide(l);
+    Modal.open({
+      title: inv.invoice_number,
+      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+            '<dt style="color:#6b7280">Total</dt><dd>' + fmtMoney(inv.total_amount, inv.currency_code) + '</dd>' +
+            '<dt style="color:#6b7280">Due Date</dt><dd>' + fmtDate(inv.due_date) + '</dd>' +
+            '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(inv.payment_status) + '</dd>' +
+            '</dl>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function pUploadPayment(invoiceId) {
+  Modal.open({
+    title: 'Record Payment',
+    body: '<div class="form-group"><label class="form-label">Amount</label><input class="form-control" type="number" id="pupAmt"></div>' +
+          '<div class="form-group"><label class="form-label">Payment Method</label>' +
+            '<select class="form-control" id="pupMethod"><option>MPESA</option><option>BANK_TRANSFER</option><option>CASH</option><option>CHEQUE</option></select></div>' +
+          '<div class="form-group"><label class="form-label">Reference / Transaction ID</label><input class="form-control" id="pupRef"></div>' +
+          '<div class="form-group"><label class="form-label">Proof URL (optional)</label><input class="form-control" id="pupUrl" placeholder="https://…"></div>' +
+          '<div id="pupErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="pupSave">Submit</button>',
+    onOpen: function () {
+      document.getElementById('pupSave').onclick = function () {
+        var amt = parseFloat(document.getElementById('pupAmt').value);
+        var ref = document.getElementById('pupRef').value.trim();
+        if (!amt || amt <= 0) { document.getElementById('pupErr').textContent = 'Valid amount required.'; return; }
+        if (!ref) { document.getElementById('pupErr').textContent = 'Reference required.'; return; }
+        API.call('payments', 'upload', {
+          invoiceId: invoiceId, amount: amt,
+          payment_method: document.getElementById('pupMethod').value,
+          reference: ref,
+          proof_url: document.getElementById('pupUrl').value.trim(),
+        }).then(function () { Modal.close(); Toast.success('Payment submitted for review.'); Router.navigate('portal-invoices', {}); })
+          .catch(function (e) { document.getElementById('pupErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

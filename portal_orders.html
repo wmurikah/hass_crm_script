@@ -1,0 +1,39 @@
+<script>
+Router.register('portal-orders', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">My Orders</h2>' +
+      '<button class="btn btn-primary btn-sm" id="pOrdNew">+ Place Order</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Order #</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>' +
+      '<tbody id="pOrdBody"></tbody></table></div></div>';
+
+  function load() {
+    API.call('orders', 'list', { limit: 50 }).then(function (rows) {
+      var tbody = document.getElementById('pOrdBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No orders yet.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.order_number) + '</td>' +
+               '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.created_at) + '</td>' +
+               '<td>' + (r.status === 'DRAFT' ? '<button class="btn btn-secondary btn-sm" onclick="pSubmitOrder(\'' + esc(r.order_id) + '\')">Submit</button>' : '') + '</td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('pOrdBody').innerHTML = '<tr><td colspan="5" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('pOrdNew').onclick = function () {
+    Toast.info('Contact your account manager to place a new order.');
+  };
+  load();
+});
+
+function pSubmitOrder(id) {
+  Modal.confirm('Submit this order for approval?', function () {
+    API.call('orders', 'submit', { orderId: id })
+      .then(function () { Toast.success('Order submitted.'); Router.navigate('portal-orders', {}); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+</script>

@@ -1,0 +1,52 @@
+<script>
+Router.register('portal-profile', function (el, params) {
+  var me = (params && params.me) || {};
+  el.innerHTML =
+    '<h2 style="font-size:16px;font-weight:600;margin-bottom:14px">My Profile</h2>' +
+    '<div class="card card-body" style="max-width:480px">' +
+      '<div class="form-group"><label class="form-label">First Name</label>' +
+        '<input class="form-control" id="pfFn" value="' + esc(me.first_name || '') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Last Name</label>' +
+        '<input class="form-control" id="pfLn" value="' + esc(me.last_name || '') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Email</label>' +
+        '<input class="form-control" id="pfEmail" value="' + esc(me.email || '') + '" readonly style="background:#f9fafb"></div>' +
+      '<div class="form-group"><label class="form-label">Phone</label>' +
+        '<input class="form-control" id="pfPhone" value="' + esc(me.phone || '') + '"></div>' +
+      '<div id="pfMsg" style="font-size:12px;margin-bottom:8px"></div>' +
+      '<button class="btn btn-primary" id="pfSave">Save Changes</button>' +
+    '</div>' +
+    '<div class="card card-body" style="max-width:480px;margin-top:14px">' +
+      '<h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Change Password</h3>' +
+      '<div class="form-group"><label class="form-label">Current Password</label>' +
+        '<input class="form-control" type="password" id="pfCurPw"></div>' +
+      '<div class="form-group"><label class="form-label">New Password</label>' +
+        '<input class="form-control" type="password" id="pfNewPw"></div>' +
+      '<div id="pfPwMsg" style="font-size:12px;margin-bottom:8px"></div>' +
+      '<button class="btn btn-secondary" id="pfChangePw">Change Password</button>' +
+    '</div>';
+
+  document.getElementById('pfSave').onclick = function () {
+    var msgEl = document.getElementById('pfMsg');
+    API.call('users', 'updateProfile', {
+      first_name: document.getElementById('pfFn').value.trim(),
+      last_name:  document.getElementById('pfLn').value.trim(),
+      phone:      document.getElementById('pfPhone').value.trim(),
+    }).then(function () { msgEl.style.color = '#16a34a'; msgEl.textContent = 'Profile updated.'; })
+      .catch(function (e) { msgEl.style.color = '#dc2626'; msgEl.textContent = e.message; });
+  };
+
+  document.getElementById('pfChangePw').onclick = function () {
+    var msgEl = document.getElementById('pfPwMsg');
+    var cur   = document.getElementById('pfCurPw').value;
+    var nw    = document.getElementById('pfNewPw').value;
+    if (!cur || !nw) { msgEl.style.color = '#dc2626'; msgEl.textContent = 'Both fields required.'; return; }
+    API.call('auth', 'changePassword', { currentPassword: cur, newPassword: nw })
+      .then(function () {
+        msgEl.style.color = '#16a34a'; msgEl.textContent = 'Password changed.';
+        document.getElementById('pfCurPw').value = '';
+        document.getElementById('pfNewPw').value = '';
+      })
+      .catch(function (e) { msgEl.style.color = '#dc2626'; msgEl.textContent = e.message; });
+  };
+});
+</script>
