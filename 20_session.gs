@@ -52,8 +52,8 @@ var Session = (function () {
         toKill.forEach(function (s) {
           try {
             TursoClient.write(
-              'UPDATE sessions SET is_active = 0, updated_at = ? WHERE session_id = ?',
-              [now, s.session_id]
+              'UPDATE sessions SET is_active = 0 WHERE session_id = ?',
+              [s.session_id]
             );
           } catch (_) {}
         });
@@ -64,10 +64,10 @@ var Session = (function () {
 
     TursoClient.write(
       'INSERT INTO sessions (session_id, user_id, user_type, role, token_hash, ' +
-      'is_active, expires_at, last_active_at, country_code, ip, ua, created_at, updated_at) ' +
-      'VALUES (?,?,?,?,?,1,?,?,?,?,?,?,?)',
+      'is_active, expires_at, last_activity_at, country_code, ip, ua, created_at) ' +
+      'VALUES (?,?,?,?,?,1,?,?,?,?,?,?)',
       [sessionId, userId, userType, role, tokenHash,
-       expiresAt, now, countryCode || '', ip || '', ua || '', now, now]
+       expiresAt, now, countryCode || '', ip || '', ua || '', now]
     );
     return rawToken;
   }
@@ -86,21 +86,21 @@ var Session = (function () {
     var sess = rows[0];
 
     // Idle timeout check.
-    var idleMs = now - new Date(sess.last_active_at || sess.created_at);
+    var idleMs = now - new Date(sess.last_activity_at || sess.created_at);
     var idleLimit = _idleTimeoutMin_() * 60000;
     if (idleMs > idleLimit) {
       TursoClient.write(
-        'UPDATE sessions SET is_active = 0, updated_at = ? WHERE session_id = ?',
-        [nowStr, sess.session_id]
+        'UPDATE sessions SET is_active = 0 WHERE session_id = ?',
+        [sess.session_id]
       );
       return null;
     }
 
-    // Touch last_active_at.
+    // Touch last_activity_at.
     try {
       TursoClient.write(
-        'UPDATE sessions SET last_active_at = ?, updated_at = ? WHERE session_id = ?',
-        [nowStr, nowStr, sess.session_id]
+        'UPDATE sessions SET last_activity_at = ? WHERE session_id = ?',
+        [nowStr, sess.session_id]
       );
     } catch (_) {}
 
@@ -119,15 +119,15 @@ var Session = (function () {
     if (!token) return;
     var tokenHash = _sha256Hex_(token);
     TursoClient.write(
-      'UPDATE sessions SET is_active = 0, updated_at = ? WHERE token_hash = ?',
-      [nowIso(), tokenHash]
+      'UPDATE sessions SET is_active = 0 WHERE token_hash = ?',
+      [tokenHash]
     );
   }
 
   function invalidateAllForUser(userId, userType) {
     if (!userId) return;
-    var sql  = 'UPDATE sessions SET is_active = 0, updated_at = ? WHERE user_id = ?';
-    var args = [nowIso(), userId];
+    var sql  = 'UPDATE sessions SET is_active = 0 WHERE user_id = ?';
+    var args = [userId];
     if (userType) { sql += ' AND user_type = ?'; args.push(userType); }
     TursoClient.write(sql, args);
   }

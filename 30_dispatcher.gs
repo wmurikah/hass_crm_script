@@ -59,7 +59,11 @@ function _dispatchPermit_(ctx, spec) {
  * @returns {{ ok:boolean, data?:*, error?:{code:string, message:string} }}
  */
 function dispatch(ctx, call) {
-  var key  = (call.service || '') + '.' + (call.action || '');
+  Logger.log('dispatch called: ' + (call.service || '') + '.' + (call.action || ''));
+  var service = call.service || '';
+  var action  = call.action  || '';
+  var params  = call.params  || {};
+  var key = service + '.' + action;
   var spec = _handlers_[key];
 
   if (!spec) {
@@ -75,31 +79,27 @@ function dispatch(ctx, call) {
 
   var PUBLIC_ACTIONS = [
     'auth.login', 'auth.signup', 'auth.verifyAccount',
-    'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
-    'system.health'
+    'auth.requestPasswordReset', 'auth.verifyOtp',
+    'auth.setNewPassword', 'system.health'
   ];
-  var isPublic = PUBLIC_ACTIONS.indexOf(key) !== -1;
+
+  var isPublic = PUBLIC_ACTIONS.indexOf(service + '.' + action) !== -1;
 
   if (!isPublic) {
-    var rawToken = (call.params && call.params.sessionToken) || (ctx && ctx.token);
-
+    var rawToken = params.sessionToken || (ctx && ctx.sessionToken) || null;
     if (!rawToken) {
-      return {
-        ok: false,
-        error: { code: 'NO_SESSION', message: 'Authentication required.' }
-      };
+      return { ok: false,
+               error: { code: 'NO_SESSION',
+                        message: 'Authentication required.' } };
     }
-
     var session = Session.validate(rawToken);
-
     if (!session) {
-      return {
-        ok: false,
-        error: { code: 'SESSION_INVALID', message: 'Session expired or invalid.' }
-      };
+      return { ok: false,
+               error: { code: 'SESSION_INVALID',
+                        message: 'Session expired or invalid.' } };
     }
-
     ctx.session = session;
+    ctx.actor   = session.userId;
   }
 
   if (!_dispatchPermit_(ctx, spec)) {
