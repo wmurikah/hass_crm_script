@@ -1,0 +1,96 @@
+<script>
+Router.register('audit', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">Audit Log</h2>' +
+      '<button class="btn btn-secondary btn-sm" id="auditExport">Export CSV</button>' +
+    '</div>' +
+
+    '<div class="card" style="margin-bottom:12px;padding:12px">' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">' +
+        '<div class="form-group" style="margin:0;flex:1;min-width:140px"><label class="form-label">Entity Type</label>' +
+          '<input class="form-control" id="auditEntity" placeholder="orders, tickets…"></div>' +
+        '<div class="form-group" style="margin:0;flex:1;min-width:140px"><label class="form-label">Actor (user_id)</label>' +
+          '<input class="form-control" id="auditActor" placeholder="user_id"></div>' +
+        '<div class="form-group" style="margin:0;flex:1;min-width:130px"><label class="form-label">From</label>' +
+          '<input class="form-control" id="auditFrom" type="date"></div>' +
+        '<div class="form-group" style="margin:0;flex:1;min-width:130px"><label class="form-label">To</label>' +
+          '<input class="form-control" id="auditTo" type="date"></div>' +
+        '<button class="btn btn-primary btn-sm" id="auditSearch" style="margin-bottom:0">Search</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Entity ID</th><th></th></tr></thead>' +
+      '<tbody id="auditTbody"></tbody>' +
+    '</table></div></div>';
+
+  function load() {
+    var params = { limit: 100 };
+    var entity = document.getElementById('auditEntity').value.trim();
+    var actor  = document.getElementById('auditActor').value.trim();
+    var from   = document.getElementById('auditFrom').value;
+    var to     = document.getElementById('auditTo').value;
+    if (entity) params.entityType = entity;
+    if (actor)  params.actorId    = actor;
+    if (from)   params.from       = from;
+    if (to)     params.to         = to;
+
+    var tbody = document.getElementById('auditTbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center"><span class="spinner"></span></td></tr>';
+
+    API.call('auditLog', 'list', params).then(function (rows) {
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No audit entries found.</div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr>' +
+          '<td style="white-space:nowrap;font-size:11px">' + fmtDateTime(r.created_at) + '</td>' +
+          '<td style="font-size:11px">' + esc(r.actor_email || r.actor_id || r.actor_type || '') + '</td>' +
+          '<td><code style="font-size:11px">' + esc(r.action) + '</code></td>' +
+          '<td style="font-size:11px">' + esc(r.entity_type) + '</td>' +
+          '<td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis">' + esc(r.entity_id) + '</td>' +
+          '<td><button class="btn btn-secondary btn-sm" onclick="auditViewDetail(\'' + esc(r.log_id) + '\')">Detail</button></td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function (e) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
+    });
+  }
+
+  document.getElementById('auditSearch').onclick = load;
+  document.getElementById('auditExport').onclick = function () {
+    Toast.info('CSV export queued — check your email.');
+    API.call('auditLog', 'export', {}).catch(function (e) { Toast.error(e.message); });
+  };
+
+  load();
+});
+
+function auditViewDetail(logId) {
+  var l = Loader.show();
+  API.call('auditLog', 'get', { logId: logId }).then(function (entry) {
+    Loader.hide(l);
+    var before = entry.before_json ? JSON.stringify(JSON.parse(entry.before_json), null, 2) : '—';
+    var after  = entry.after_json  ? JSON.stringify(JSON.parse(entry.after_json),  null, 2) : '—';
+    Modal.open({
+      title: 'Audit Entry — ' + entry.action,
+      body:
+        '<table class="data-table" style="font-size:12px"><tbody>' +
+          '<tr><th>Time</th><td>' + fmtDateTime(entry.created_at) + '</td></tr>' +
+          '<tr><th>Actor</th><td>' + esc(entry.actor_email || entry.actor_id || '') + ' (' + esc(entry.actor_type || '') + ')</td></tr>' +
+          '<tr><th>IP</th><td>' + esc(entry.actor_ip || '—') + '</td></tr>' +
+          '<tr><th>Entity</th><td>' + esc(entry.entity_type) + ' / ' + esc(entry.entity_id) + '</td></tr>' +
+        '</tbody></table>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
+          '<div><div style="font-size:11px;font-weight:600;margin-bottom:4px">Before</div>' +
+            '<pre style="background:#f8f8f8;padding:8px;border-radius:4px;font-size:10px;overflow:auto;max-height:160px">' + esc(before) + '</pre></div>' +
+          '<div><div style="font-size:11px;font-weight:600;margin-bottom:4px">After</div>' +
+            '<pre style="background:#f8f8f8;padding:8px;border-radius:4px;font-size:10px;overflow:auto;max-height:160px">' + esc(after) + '</pre></div>' +
+        '</div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+</script>

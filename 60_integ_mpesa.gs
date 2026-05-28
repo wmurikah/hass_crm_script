@@ -3,23 +3,25 @@
  *
  * M-Pesa Daraja API integration.
  *
- * Exposed surface (called from 40_svc_invoices.gs or job layer):
- *   MpesaInteg.stkPush(phone, amount, accountRef, description)
- *   MpesaInteg.queryStatus(checkoutRequestId)
- *   MpesaInteg.handleCallback(body)   — called from doPost when source=mpesa
+ * MpesaInteg.initiate(params)        — initiate STK push payment
+ * MpesaInteg.callback(payload)       — handle Daraja callback from doPost
+ * MpesaInteg.reconcile()             — reconcile PENDING payment_uploads vs M-Pesa status API
  *
  * Script Properties required:
- *   MPESA_ENV            — 'sandbox' | 'production'
+ *   MPESA_ENV              — 'sandbox' | 'production'
  *   MPESA_CONSUMER_KEY
  *   MPESA_CONSUMER_SECRET
- *   MPESA_SHORTCODE      — Lipa Na M-Pesa shortcode
- *   MPESA_PASSKEY        — from Daraja portal
- *   MPESA_CALLBACK_URL   — your /exec?source=mpesa URL
+ *   MPESA_SHORTCODE        — Lipa Na M-Pesa shortcode
+ *   MPESA_PASSKEY          — from Daraja portal
+ *   MPESA_CALLBACK_URL     — your /exec?source=mpesa URL
+ *
+ * Every call writes one row to integration_log.
+ * Throws Errors.Integration on failure so the job runner can retry.
  */
 
 var MpesaInteg = (function () {
-  var _SANDBOX_BASE_   = 'https://sandbox.safaricom.co.ke';
-  var _PROD_BASE_      = 'https://api.safaricom.co.ke';
+  var _SANDBOX_BASE_ = 'https://sandbox.safaricom.co.ke';
+  var _PROD_BASE_    = 'https://api.safaricom.co.ke';
 
   function _base_() {
     var env = PropertiesService.getScriptProperties().getProperty('MPESA_ENV') || 'sandbox';
@@ -30,13 +32,12 @@ var MpesaInteg = (function () {
     var props = PropertiesService.getScriptProperties();
     var key   = props.getProperty('MPESA_CONSUMER_KEY')    || '';
     var sec   = props.getProperty('MPESA_CONSUMER_SECRET') || '';
-    if (!key || !sec) throw new Error('MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET not configured.');
-    var cred  = Utilities.base64Encode(key + ':' + sec);
-    var resp  = UrlFetchApp.fetch(_base_() + '/oauth/v1/generate?grant_type=client_credentials', {
-      headers: { Authorization: 'Basic ' + cred },
-      muteHttpExceptions: true,
+    if (!key || !sec) throw new Errors.Integration('MPESA_CONSUMER_KEY / MPESA_CONSUMER_SECRET not configured.');
+    var cred = Utilities.base64Encode(key + ':' + sec);
+    var resp = UrlFetchApp.fetch(_base_() + '/oauth/v1/generate?grant_type=client_credentials', {
+      headers: { Authorization: 'Basic ' + cred }, muteHttpExceptions: true,
     });
-    if (resp.getResponseCode() !== 200) throw new Error('M-Pesa token request failed: ' + resp.getContentText().substring(0, 200));
+    if (resp.getResponseCode() !== 200) throw new Errors.Integration('M-Pesa token request failed: ' + resp.getContentText().substring(0, 200));
     return JSON.parse(resp.getContentText()).access_token;
   }
 
@@ -44,100 +45,152 @@ var MpesaInteg = (function () {
     return Utilities.formatDate(new Date(), 'Africa/Nairobi', 'yyyyMMddHHmmss');
   }
 
-  function stkPush(phone, amount, accountRef, description) {
-    var props      = PropertiesService.getScriptProperties();
-    var shortcode  = props.getProperty('MPESA_SHORTCODE')    || '';
-    var passkey    = props.getProperty('MPESA_PASSKEY')      || '';
-    var callbackUrl= props.getProperty('MPESA_CALLBACK_URL') || '';
-    if (!shortcode || !passkey) throw new Error('MPESA_SHORTCODE / MPESA_PASSKEY not configured.');
+  function _logInteg_(action, status, requestSummary, responseSummary, errorMessage) {
+    try {
+      TursoClient.write(
+        'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'mpesa', action, status,
+         (requestSummary  || '').substring(0, 500),
+         (responseSummary || '').substring(0, 500),
+         (errorMessage    || null), nowIso()]
+      );
+    } catch (_) {}
+  }
 
-    var ts      = _timestamp_();
+  /**
+   * params: { phone, amount, account_ref, description, upload_id }
+   */
+  function initiate(params) {
+    var props       = PropertiesService.getScriptProperties();
+    var shortcode   = props.getProperty('MPESA_SHORTCODE')    || '';
+    var passkey     = props.getProperty('MPESA_PASSKEY')      || '';
+    var callbackUrl = props.getProperty('MPESA_CALLBACK_URL') || '';
+    if (!shortcode || !passkey) throw new Errors.Integration('MPESA_SHORTCODE / MPESA_PASSKEY not configured.');
+
+    var ts       = _timestamp_();
     var password = Utilities.base64Encode(shortcode + passkey + ts);
-    var token   = _token_();
+    var token    = _token_();
 
-    var payload = {
+    var body = {
       BusinessShortCode: shortcode,
       Password:          password,
       Timestamp:         ts,
       TransactionType:   'CustomerPayBillOnline',
-      Amount:            Math.ceil(parseFloat(amount) || 0),
-      PartyA:            String(phone).replace(/^\+/, ''),
+      Amount:            Math.ceil(parseFloat(params.amount) || 0),
+      PartyA:            String(params.phone).replace(/^\+/, ''),
       PartyB:            shortcode,
-      PhoneNumber:       String(phone).replace(/^\+/, ''),
+      PhoneNumber:       String(params.phone).replace(/^\+/, ''),
       CallBackURL:       callbackUrl,
-      AccountReference:  String(accountRef || 'HASS').substring(0, 12),
-      TransactionDesc:   String(description || 'Payment').substring(0, 13),
+      AccountReference:  String(params.account_ref || 'HASS').substring(0, 12),
+      TransactionDesc:   String(params.description || 'Payment').substring(0, 13),
     };
 
     var resp = UrlFetchApp.fetch(_base_() + '/mpesa/stkpush/v1/processrequest', {
-      method:             'post',
-      contentType:        'application/json',
-      headers:            { Authorization: 'Bearer ' + token },
-      payload:            JSON.stringify(payload),
-      muteHttpExceptions: true,
+      method: 'post', contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify(body), muteHttpExceptions: true,
     });
-    var result = JSON.parse(resp.getContentText());
-    if (resp.getResponseCode() !== 200 || result.ResponseCode !== '0') {
-      throw new Error('STK push failed: ' + (result.ResponseDescription || result.errorMessage || resp.getContentText().substring(0, 200)));
+
+    var code   = resp.getResponseCode();
+    var result = {};
+    try { result = JSON.parse(resp.getContentText()); } catch (_) {}
+
+    if (code !== 200 || result.ResponseCode !== '0') {
+      _logInteg_('initiate', 'FAILED', 'phone=' + params.phone + ' amount=' + params.amount,
+                 JSON.stringify(result).substring(0, 300), 'HTTP ' + code + ' RC=' + result.ResponseCode);
+      throw new Errors.Integration('STK push failed: ' + (result.ResponseDescription || result.errorMessage || String(code)));
     }
-    return result; // { CheckoutRequestID, MerchantRequestID, ResponseCode, CustomerMessage }
+
+    _logInteg_('initiate', 'SUCCESS', 'phone=' + params.phone + ' amount=' + params.amount,
+               'CheckoutRequestID=' + result.CheckoutRequestID, null);
+
+    // Record CheckoutRequestID against upload for callback matching.
+    if (params.upload_id && result.CheckoutRequestID) {
+      try {
+        TursoClient.write(
+          "UPDATE payment_uploads SET reference=?, updated_at=? WHERE upload_id=?",
+          [result.CheckoutRequestID, nowIso(), params.upload_id]
+        );
+      } catch (_) {}
+    }
+
+    return result;
   }
 
-  function queryStatus(checkoutRequestId) {
+  function callback(payload) {
+    var data    = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    var stk     = (data.Body || {}).stkCallback || {};
+    var code    = stk.ResultCode;
+    var checkId = stk.CheckoutRequestID || '';
+    var metaArr = ((stk.CallbackMetadata || {}).Item) || [];
+    var meta    = {};
+    metaArr.forEach(function (item) { meta[item.Name] = item.Value; });
+
+    var success = code === 0;
+    Audit.log({
+      actor: 'MPESA', action: success ? 'MPESA_PAYMENT_SUCCESS' : 'MPESA_PAYMENT_FAILED',
+      entity: 'payment_uploads', entityId: checkId,
+      after: { result_code: code, amount: meta.Amount, receipt: meta.MpesaReceiptNumber, phone: meta.PhoneNumber },
+    });
+    _logInteg_('callback', success ? 'SUCCESS' : 'FAILED',
+               'CheckoutRequestID=' + checkId,
+               'receipt=' + (meta.MpesaReceiptNumber || '') + ' amount=' + (meta.Amount || ''),
+               success ? null : 'ResultCode=' + code);
+
+    if (success && meta.MpesaReceiptNumber) {
+      var matchRows = TursoClient.select(
+        "SELECT upload_id FROM payment_uploads WHERE reference=? LIMIT 1", [checkId]
+      );
+      if (matchRows.length) {
+        var now = nowIso();
+        TursoClient.write(
+          "UPDATE payment_uploads SET status='APPROVED',reviewed_by='MPESA',reviewed_at=?,updated_at=? WHERE upload_id=?",
+          [now, now, matchRows[0].upload_id]
+        );
+      }
+    }
+  }
+
+  function reconcile() {
     var props     = PropertiesService.getScriptProperties();
     var shortcode = props.getProperty('MPESA_SHORTCODE') || '';
     var passkey   = props.getProperty('MPESA_PASSKEY')   || '';
-    var ts        = _timestamp_();
-    var password  = Utilities.base64Encode(shortcode + passkey + ts);
-    var token     = _token_();
+    if (!shortcode || !passkey) { _logInteg_('reconcile', 'SKIPPED', '', '', 'MPESA not configured'); return; }
 
-    var resp = UrlFetchApp.fetch(_base_() + '/mpesa/stkpushquery/v1/query', {
-      method:             'post',
-      contentType:        'application/json',
-      headers:            { Authorization: 'Bearer ' + token },
-      payload:            JSON.stringify({
-        BusinessShortCode: shortcode, Password: password, Timestamp: ts,
-        CheckoutRequestID: checkoutRequestId,
-      }),
-      muteHttpExceptions: true,
-    });
-    return JSON.parse(resp.getContentText());
-  }
+    var pending = TursoClient.select(
+      "SELECT upload_id, reference FROM payment_uploads WHERE status='PENDING' AND reference IS NOT NULL ORDER BY created_at LIMIT 50"
+    );
 
-  function handleCallback(body) {
-    try {
-      var data     = JSON.parse(body);
-      var stk      = data.Body && data.Body.stkCallback;
-      var code     = stk && stk.ResultCode;
-      var checkId  = stk && stk.CheckoutRequestID;
-      var metaArr  = (stk && stk.CallbackMetadata && stk.CallbackMetadata.Item) || [];
-      var meta     = {};
-      metaArr.forEach(function (item) { meta[item.Name] = item.Value; });
+    var ts       = _timestamp_();
+    var password = Utilities.base64Encode(shortcode + passkey + ts);
+    var token    = _token_();
+    var reconciled = 0;
 
-      Audit.log({
-        actor: 'MPESA', action: code === 0 ? 'MPESA_PAYMENT_SUCCESS' : 'MPESA_PAYMENT_FAILED',
-        entity: 'payment_uploads', entityId: checkId || '',
-        after: { result_code: code, amount: meta.Amount, receipt: meta.MpesaReceiptNumber, phone: meta.PhoneNumber },
-      });
-
-      if (code === 0 && meta.MpesaReceiptNumber) {
-        // Auto-record payment upload for matching invoice.
-        var matchRows = TursoClient.select(
-          "SELECT pu.upload_id FROM payment_uploads pu WHERE pu.reference = ? LIMIT 1",
-          [String(checkId || '')]
-        );
-        if (matchRows.length) {
+    pending.forEach(function (row) {
+      try {
+        var resp = UrlFetchApp.fetch(_base_() + '/mpesa/stkpushquery/v1/query', {
+          method: 'post', contentType: 'application/json',
+          headers: { Authorization: 'Bearer ' + token },
+          payload: JSON.stringify({ BusinessShortCode: shortcode, Password: password, Timestamp: ts,
+                                    CheckoutRequestID: row.reference }),
+          muteHttpExceptions: true,
+        });
+        var result = {};
+        try { result = JSON.parse(resp.getContentText()); } catch (_) {}
+        if (result.ResultCode === '0' || result.ResultCode === 0) {
           var now = nowIso();
           TursoClient.write(
-            "UPDATE payment_uploads SET status='APPROVED', reviewed_by='MPESA', reviewed_at=?, updated_at=? WHERE upload_id=?",
-            [now, now, matchRows[0].upload_id]
+            "UPDATE payment_uploads SET status='APPROVED',reviewed_by='MPESA_RECON',reviewed_at=?,updated_at=? WHERE upload_id=?",
+            [now, now, row.upload_id]
           );
+          reconciled++;
         }
-      }
-    } catch (e) {
-      Log.error({ service: 'integ_mpesa', action: 'callback', msg: e.message });
-    }
+      } catch (_) {}
+    });
+
+    _logInteg_('reconcile', 'SUCCESS', 'checked=' + pending.length, 'reconciled=' + reconciled, null);
+    Logger.log('MpesaInteg.reconcile: checked=' + pending.length + ' reconciled=' + reconciled);
   }
 
-  return { stkPush: stkPush, queryStatus: queryStatus, handleCallback: handleCallback };
+  return { initiate: initiate, callback: callback, reconcile: reconcile };
 })();

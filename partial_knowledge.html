@@ -1,0 +1,172 @@
+<script>
+Router.register('knowledge', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">Knowledge Base</h2>' +
+      '<button class="btn btn-primary btn-sm" id="kbNewArticle">+ New Article</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:220px 1fr;gap:12px">' +
+      '<div class="card" id="kbCategories" style="height:fit-content">' +
+        '<div style="font-weight:600;font-size:13px;margin-bottom:8px">Categories</div>' +
+        '<div id="kbCatList"></div>' +
+        '<button class="btn btn-secondary btn-sm" id="kbNewCat" style="margin-top:8px;width:100%">+ Category</button>' +
+      '</div>' +
+      '<div>' +
+        '<div class="card" style="margin-bottom:10px;padding:10px">' +
+          '<div style="display:flex;gap:6px">' +
+            '<input class="form-control" id="kbSearch" placeholder="Search articles…" style="flex:1">' +
+            '<button class="btn btn-secondary btn-sm" id="kbSearchBtn">Search</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+          '<thead><tr><th>Title</th><th>Category</th><th>Status</th><th>Updated</th><th></th></tr></thead>' +
+          '<tbody id="kbArticleTbody"></tbody>' +
+        '</table></div></div>' +
+      '</div>' +
+    '</div>';
+
+  var _activeCat = null;
+
+  function loadCategories() {
+    API.call('knowledge', 'listCategories', {}).then(function (cats) {
+      var el = document.getElementById('kbCatList');
+      if (!cats.length) { el.innerHTML = '<p style="color:#9ca3af;font-size:12px">No categories yet.</p>'; return; }
+      el.innerHTML = cats.map(function (c) {
+        return '<div class="nav-item" style="padding:6px 8px;font-size:13px;cursor:pointer" ' +
+               'id="kbCat_' + esc(c.category_id) + '" onclick="kbSelectCat(\'' + esc(c.category_id) + '\')">' +
+               esc(c.name) + '</div>';
+      }).join('');
+    }).catch(function () {});
+  }
+
+  function loadArticles(params) {
+    var tbody = document.getElementById('kbArticleTbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center"><span class="spinner"></span></td></tr>';
+    API.call('knowledge', 'list', params || {}).then(function (rows) {
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No articles found.</div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr>' +
+          '<td>' + esc(r.title) + '</td>' +
+          '<td style="font-size:12px">' + esc(r.category_name || '—') + '</td>' +
+          '<td>' + statusBadge(r.status) + '</td>' +
+          '<td style="font-size:11px">' + fmtDate(r.updated_at) + '</td>' +
+          '<td style="white-space:nowrap">' +
+            '<button class="btn btn-secondary btn-sm" onclick="kbViewArticle(\'' + esc(r.article_id) + '\')">View</button> ' +
+            '<button class="btn btn-secondary btn-sm" onclick="kbEditArticle(\'' + esc(r.article_id) + '\')">Edit</button>' +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function (e) {
+      tbody.innerHTML = '<tr><td colspan="5" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
+    });
+  }
+
+  window.kbSelectCat = function (catId) {
+    _activeCat = catId;
+    document.querySelectorAll('#kbCatList .nav-item').forEach(function (n) { n.classList.remove('active'); });
+    var el = document.getElementById('kbCat_' + catId);
+    if (el) el.classList.add('active');
+    loadArticles({ categoryId: catId });
+  };
+
+  document.getElementById('kbSearchBtn').onclick = function () {
+    var q = document.getElementById('kbSearch').value.trim();
+    loadArticles(q ? { search: q } : {});
+  };
+
+  document.getElementById('kbNewArticle').onclick = function () { kbArticleModal(null, function () { loadArticles(_activeCat ? { categoryId: _activeCat } : {}); }); };
+
+  document.getElementById('kbNewCat').onclick = function () {
+    Modal.open({
+      title: 'New Category',
+      body: '<div class="form-group"><label class="form-label">Name</label><input class="form-control" id="kbCatName"></div>' +
+            '<div id="kbCatErr" style="color:#dc2626;font-size:12px"></div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+              '<button class="btn btn-primary" id="kbCatSave">Create</button>',
+      onOpen: function () {
+        document.getElementById('kbCatSave').onclick = function () {
+          var name = document.getElementById('kbCatName').value.trim();
+          if (!name) { document.getElementById('kbCatErr').textContent = 'Name required.'; return; }
+          API.call('knowledge', 'createCategory', { name: name })
+            .then(function () { Modal.close(); Toast.success('Category created.'); loadCategories(); })
+            .catch(function (e) { document.getElementById('kbCatErr').textContent = e.message; });
+        };
+      },
+    });
+  };
+
+  loadCategories();
+  loadArticles({});
+});
+
+function kbViewArticle(id) {
+  var l = Loader.show();
+  API.call('knowledge', 'get', { articleId: id }).then(function (a) {
+    Loader.hide(l);
+    Modal.open({
+      title: a.title,
+      body: '<div style="font-size:11px;color:#6b7280;margin-bottom:8px">' + esc(a.category_name || '') + ' · ' + fmtDate(a.updated_at) + '</div>' +
+            '<div style="font-size:13px;line-height:1.6;white-space:pre-wrap">' + esc(a.body) + '</div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              '<button class="btn btn-primary btn-sm" onclick="Modal.close();kbEditArticle(\'' + esc(id) + '\')">Edit</button>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function kbEditArticle(id) {
+  var l = Loader.show();
+  API.call('knowledge', 'get', { articleId: id }).then(function (a) {
+    Loader.hide(l);
+    kbArticleModal(a, function () {});
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function kbArticleModal(article, onSuccess) {
+  var isEdit = !!article;
+  API.call('knowledge', 'listCategories', {}).then(function (cats) {
+    var catOptions = cats.map(function (c) {
+      return '<option value="' + esc(c.category_id) + '"' +
+             (isEdit && article.category_id === c.category_id ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+    }).join('');
+    Modal.open({
+      title: isEdit ? 'Edit Article' : 'New Article',
+      body:
+        '<div class="form-group"><label class="form-label">Category</label>' +
+          '<select class="form-control" id="kbAmCat">' + catOptions + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Title</label>' +
+          '<input class="form-control" id="kbAmTitle" value="' + esc((article && article.title) || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Body</label>' +
+          '<textarea class="form-control" id="kbAmBody" rows="8">' + esc((article && article.body) || '') + '</textarea></div>' +
+        '<div class="form-group"><label class="form-label">Status</label>' +
+          '<select class="form-control" id="kbAmStatus">' +
+            '<option' + (isEdit && article.status === 'DRAFT'     ? ' selected' : '') + '>DRAFT</option>' +
+            '<option' + (isEdit && article.status === 'PUBLISHED' ? ' selected' : '') + '>PUBLISHED</option>' +
+            '<option' + (isEdit && article.status === 'ARCHIVED'  ? ' selected' : '') + '>ARCHIVED</option>' +
+          '</select></div>' +
+        '<div id="kbAmErr" style="color:#dc2626;font-size:12px"></div>',
+      footer:
+        '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+        '<button class="btn btn-primary" id="kbAmSave">' + (isEdit ? 'Save' : 'Create') + '</button>',
+      onOpen: function () {
+        document.getElementById('kbAmSave').onclick = function () {
+          var catId  = document.getElementById('kbAmCat').value;
+          var title  = document.getElementById('kbAmTitle').value.trim();
+          var body   = document.getElementById('kbAmBody').value.trim();
+          var status = document.getElementById('kbAmStatus').value;
+          document.getElementById('kbAmErr').textContent = '';
+          if (!title) { document.getElementById('kbAmErr').textContent = 'Title required.'; return; }
+          var action = isEdit ? 'update' : 'create';
+          var params = { categoryId: catId, title: title, body: body, status: status };
+          if (isEdit) params.articleId = article.article_id;
+          API.call('knowledge', action, params)
+            .then(function () { Modal.close(); Toast.success(isEdit ? 'Article updated.' : 'Article created.'); if (onSuccess) onSuccess(); })
+            .catch(function (e) { document.getElementById('kbAmErr').textContent = e.message; });
+        };
+      },
+    });
+  }).catch(function (e) { Toast.error(e.message); });
+}
+</script>

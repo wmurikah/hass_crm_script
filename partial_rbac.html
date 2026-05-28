@@ -1,0 +1,117 @@
+<script>
+Router.register('rbac', function (el) {
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+      '<h2 style="font-size:16px;font-weight:600">Roles & Permissions</h2>' +
+      '<button class="btn btn-primary btn-sm" id="rbacNewRole">+ New Role</button>' +
+    '</div>' +
+
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:10px">Roles</div>' +
+      '<div class="table-wrapper"><table class="data-table">' +
+        '<thead><tr><th>Role Code</th><th>Label</th><th>Scope</th><th>Country</th><th>Permissions</th><th></th></tr></thead>' +
+        '<tbody id="rbacRoleTbody"></tbody>' +
+      '</table></div>' +
+    '</div>' +
+
+    '<div class="card">' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:10px">Assign Role to User</div>' +
+      '<div style="display:flex;gap:8px;align-items:flex-end">' +
+        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">User ID</label>' +
+          '<input class="form-control" id="rbacUserId" placeholder="user_id"></div>' +
+        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">Role Code</label>' +
+          '<input class="form-control" id="rbacRoleCode" placeholder="SALES_REP"></div>' +
+        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">Country (optional)</label>' +
+          '<input class="form-control" id="rbacCountry" placeholder="KE"></div>' +
+        '<button class="btn btn-primary btn-sm" id="rbacAssignBtn" style="margin-bottom:0">Assign</button>' +
+      '</div>' +
+      '<div id="rbacAssignErr" style="color:#dc2626;font-size:12px;margin-top:6px"></div>' +
+    '</div>';
+
+  function loadRoles() {
+    API.call('rbac', 'listRoles', {}).then(function (roles) {
+      var tbody = document.getElementById('rbacRoleTbody');
+      if (!roles.length) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No roles defined.</div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = roles.map(function (r) {
+        var perms = (r.permissions || []).join(', ') || '—';
+        return '<tr>' +
+          '<td><code>' + esc(r.role_code) + '</code></td>' +
+          '<td>' + esc(r.label) + '</td>' +
+          '<td>' + statusBadge(r.scope) + '</td>' +
+          '<td>' + esc(r.country_code || 'ALL') + '</td>' +
+          '<td style="font-size:11px;max-width:260px;white-space:normal">' + esc(perms) + '</td>' +
+          '<td><button class="btn btn-secondary btn-sm" onclick="rbacEditRole(\'' + esc(r.role_id) + '\')">Edit</button></td>' +
+        '</tr>';
+      }).join('');
+    }).catch(function (e) {
+      document.getElementById('rbacRoleTbody').innerHTML =
+        '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
+    });
+  }
+
+  document.getElementById('rbacNewRole').onclick = function () { rbacRoleModal(null, loadRoles); };
+
+  document.getElementById('rbacAssignBtn').onclick = function () {
+    var userId   = document.getElementById('rbacUserId').value.trim();
+    var roleCode = document.getElementById('rbacRoleCode').value.trim();
+    var country  = document.getElementById('rbacCountry').value.trim();
+    document.getElementById('rbacAssignErr').textContent = '';
+    if (!userId || !roleCode) { document.getElementById('rbacAssignErr').textContent = 'User ID and Role Code required.'; return; }
+    API.call('rbac', 'assignRole', { userId: userId, roleCode: roleCode, countryCode: country || null })
+      .then(function () { Toast.success('Role assigned.'); loadRoles(); })
+      .catch(function (e) { document.getElementById('rbacAssignErr').textContent = e.message; });
+  };
+
+  loadRoles();
+});
+
+function rbacEditRole(roleId) {
+  var l = Loader.show();
+  API.call('rbac', 'getRole', { roleId: roleId }).then(function (role) {
+    Loader.hide(l);
+    rbacRoleModal(role, function () {});
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function rbacRoleModal(role, onSuccess) {
+  var isEdit = !!role;
+  Modal.open({
+    title: isEdit ? 'Edit Role' : 'New Role',
+    body:
+      '<div class="form-group"><label class="form-label">Role Code</label>' +
+        '<input class="form-control" id="rrmCode" value="' + esc((role && role.role_code) || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>' +
+      '<div class="form-group"><label class="form-label">Label</label>' +
+        '<input class="form-control" id="rrmLabel" value="' + esc((role && role.label) || '') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Scope</label>' +
+        '<select class="form-control" id="rrmScope">' +
+          '<option' + ((role && role.scope === 'GLOBAL')  ? ' selected' : '') + '>GLOBAL</option>' +
+          '<option' + ((role && role.scope === 'COUNTRY') ? ' selected' : '') + '>COUNTRY</option>' +
+        '</select></div>' +
+      '<div class="form-group"><label class="form-label">Permissions (comma-separated)</label>' +
+        '<textarea class="form-control" id="rrmPerms" rows="3">' + esc(((role && role.permissions) || []).join(', ')) + '</textarea></div>' +
+      '<div id="rrmErr" style="color:#dc2626;font-size:12px"></div>',
+    footer:
+      '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+      '<button class="btn btn-primary" id="rrmSave">' + (isEdit ? 'Save' : 'Create') + '</button>',
+    onOpen: function () {
+      document.getElementById('rrmSave').onclick = function () {
+        var code  = document.getElementById('rrmCode').value.trim();
+        var label = document.getElementById('rrmLabel').value.trim();
+        var scope = document.getElementById('rrmScope').value;
+        var perms = document.getElementById('rrmPerms').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        document.getElementById('rrmErr').textContent = '';
+        if (!code || !label) { document.getElementById('rrmErr').textContent = 'Code and Label required.'; return; }
+        var action = isEdit ? 'updateRole' : 'createRole';
+        var params = { roleCode: code, label: label, scope: scope, permissions: perms };
+        if (isEdit) params.roleId = role.role_id;
+        API.call('rbac', action, params)
+          .then(function () { Modal.close(); Toast.success(isEdit ? 'Role updated.' : 'Role created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('rrmErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>
