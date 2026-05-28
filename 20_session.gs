@@ -64,12 +64,12 @@ var Session = (function () {
 
     TursoClient.write(
       'INSERT INTO sessions ' +
-      '(session_id, user_type, user_id, token_hash, ip_address, user_agent, ' +
-      'country_code, role, is_active, expires_at, idle_timeout_minutes, ' +
-      'last_activity_at, created_at) ' +
-      'VALUES (?,?,?,?,?,?,?,?,1,?,?,datetime(\'now\'),datetime(\'now\'))',
+      '(session_id, user_type, user_id, token_hash, ip, ua, ' +
+      'country_code, role, is_active, expires_at, ' +
+      "last_active_at, created_at, updated_at) " +
+      "VALUES (?,?,?,?,?,?,?,?,1,?,datetime('now'),datetime('now'),datetime('now'))",
       [sessionId, userType, userId, tokenHash, ip || '', ua || '',
-       countryCode || '', role, expiresAt, idleMin]
+       countryCode || '', role, expiresAt]
     );
     return { token: rawToken, session_id: sessionId };
   }
@@ -88,7 +88,7 @@ var Session = (function () {
     var sess = rows[0];
 
     // Idle timeout check.
-    var idleMs = now - new Date(sess.last_activity_at || sess.created_at);
+    var idleMs = now - new Date(sess.last_active_at || sess.created_at);
     var idleLimit = _idleTimeoutMin_() * 60000;
     if (idleMs > idleLimit) {
       TursoClient.write(
@@ -98,10 +98,10 @@ var Session = (function () {
       return null;
     }
 
-    // Touch last_activity_at.
+    // Touch last_active_at.
     try {
       TursoClient.write(
-        "UPDATE sessions SET last_activity_at = datetime('now') WHERE session_id = ?",
+        "UPDATE sessions SET last_active_at = datetime('now'), updated_at = datetime('now') WHERE session_id = ?",
         [sess.session_id]
       );
     } catch (_) {}
@@ -111,9 +111,9 @@ var Session = (function () {
       userId:      sess.user_id,
       userType:    sess.user_type,
       role:        sess.role,
-      countryCode: sess.country_code  || '',
-      ip:          sess.ip_address    || '',
-      ua:          sess.user_agent    || '',
+      countryCode: sess.country_code || '',
+      ip:          sess.ip           || '',
+      ua:          sess.ua           || '',
     };
   }
 
