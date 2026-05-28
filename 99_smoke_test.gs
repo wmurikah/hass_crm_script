@@ -693,3 +693,221 @@ function smokeOrders() {
   results.push(summary);
   return results;
 }
+
+// =============================================================================
+// smokeTickets  —  Stage 7 tickets domain service
+// =============================================================================
+
+/**
+ * Smoke test for tickets.* handlers.
+ * Run from the GAS IDE; requires live Turso DB with SUPER_ADMIN + one KE customer.
+ *
+ * Checks:
+ *   1. Create ticket (NEW) → ticket_id + ticket_number returned
+ *   2. tickets.get returns ticket with comments array
+ *   3. Assign ticket → status=OPEN + audit row
+ *   4. Add comment; ticket.comments count increases
+ *   5. Escalate → escalation_level increases
+ *   6. Resolve ticket → status=RESOLVED + audit row
+ *   7. Close ticket → status=CLOSED
+ *   8. Reopen → status=OPEN
+ *   9. Negative: no sessionToken → NO_SESSION
+ *  10. Negative: TZ-scoped session on KE ticket → NOT_FOUND
+ */
+function smokeTickets() {
+  var results = [];
+  var passed  = 0;
+  var failed  = 0;
+
+  function check(name, fn) {
+    try {
+      fn();
+      results.push('PASS  ' + name);
+      Logger.log('PASS  ' + name);
+      passed++;
+    } catch (e) {
+      results.push('FAIL  ' + name + '\n      ' + (e.message || String(e)));
+      Logger.log('FAIL  ' + name + ': ' + (e.message || String(e)));
+      failed++;
+    }
+  }
+
+  // ── Prereq ────────────────────────────────────────────────────────────────
+  var seed    = seedAll();
+  var saId    = seed.userId;
+  var saToken = Session.create(saId, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'smoke-tickets', 'KE').token;
+
+  var custRes = processRequest({
+    service: 'customers', action: 'create', sessionToken: saToken,
+    params: {
+      account_number: 'KE-TKT-SMOKE-' + Date.now(),
+      company_name:   'Ticket Smoke Ltd',
+      country_code:   'KE',
+      customer_type:  'DIRECT',
+    },
+  });
+  if (!custRes.ok) throw new Error('Prereq customer failed: ' + JSON.stringify(custRes.error));
+  var customerId = custRes.data.customer_id;
+
+  var ticketId;
+
+  // ── 1. Create ticket ──────────────────────────────────────────────────────
+  check('1. Create ticket → ticket_id + ticket_number', function () {
+    var res = processRequest({
+      service: 'tickets', action: 'create', sessionToken: saToken,
+      params: {
+        customer_id: customerId, category: 'BILLING',
+        subject: 'Smoke test billing inquiry',
+        description: 'This is a smoke test ticket.',
+        priority: 'MEDIUM',
+      },
+    });
+    if (!res.ok)               throw new Error('ok=false: ' + JSON.stringify(res.error));
+    if (!res.data.ticket_id)   throw new Error('Missing ticket_id');
+    if (!res.data.ticket_number) throw new Error('Missing ticket_number');
+    if (res.data.status !== 'NEW') throw new Error('Expected NEW, got ' + res.data.status);
+    ticketId = res.data.ticket_id;
+  });
+
+  // ── 2. Get ticket with comments ───────────────────────────────────────────
+  check('2. tickets.get returns ticket with comments array', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var res = processRequest({
+      service: 'tickets', action: 'get', sessionToken: saToken,
+      params: { ticketId: ticketId },
+    });
+    if (!res.ok)                           throw new Error(JSON.stringify(res.error));
+    if (res.data.subject !== 'Smoke test billing inquiry') throw new Error('subject mismatch');
+    if (!Array.isArray(res.data.comments)) throw new Error('comments not an array');
+  });
+
+  // ── 3. Assign → OPEN + audit ──────────────────────────────────────────────
+  check('3. Assign ticket → status=OPEN + audit row', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var res = processRequest({
+      service: 'tickets', action: 'assign', sessionToken: saToken,
+      params: { ticketId: ticketId, assigned_to: saId },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    var row = Repo.findById('tickets', ticketId);
+    if (!row || row.status !== 'OPEN') throw new Error('Expected OPEN, got ' + (row && row.status));
+    var auditRows = TursoClient.select(
+      "SELECT log_id FROM audit_log WHERE action='TICKET_ASSIGNED' AND entity_id=? LIMIT 1",
+      [ticketId]
+    );
+    if (!auditRows.length) throw new Error('No TICKET_ASSIGNED audit row');
+  });
+
+  // ── 4. Add comment ────────────────────────────────────────────────────────
+  check('4. addComment; comments count increases', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var before = TursoClient.select(
+      'SELECT COUNT(*) AS n FROM ticket_comments WHERE ticket_id = ?', [ticketId]
+    );
+    var res = processRequest({
+      service: 'tickets', action: 'addComment', sessionToken: saToken,
+      params: { ticketId: ticketId, content: 'Follow-up comment from smoke test.' },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    var after = TursoClient.select(
+      'SELECT COUNT(*) AS n FROM ticket_comments WHERE ticket_id = ?', [ticketId]
+    );
+    if (parseInt(after[0].n, 10) <= parseInt(before[0].n, 10)) {
+      throw new Error('Comment count did not increase');
+    }
+  });
+
+  // ── 5. Escalate ───────────────────────────────────────────────────────────
+  check('5. Escalate → escalation_level increases', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var before = Repo.findById('tickets', ticketId);
+    var res = processRequest({
+      service: 'tickets', action: 'escalate', sessionToken: saToken,
+      params: { ticketId: ticketId },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    var after = Repo.findById('tickets', ticketId);
+    if (parseInt(after.escalation_level, 10) <= parseInt(before.escalation_level, 10)) {
+      throw new Error('escalation_level did not increase');
+    }
+  });
+
+  // ── 6. Resolve ────────────────────────────────────────────────────────────
+  check('6. Resolve ticket → status=RESOLVED + audit row', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var res = processRequest({
+      service: 'tickets', action: 'resolve', sessionToken: saToken,
+      params: {
+        ticketId: ticketId,
+        resolution_type: 'RESOLVED',
+        resolution_summary: 'Issue confirmed and resolved in smoke test.',
+      },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    if (res.data.status !== 'RESOLVED') throw new Error('Expected RESOLVED');
+    var audit = TursoClient.select(
+      "SELECT log_id FROM audit_log WHERE action='TICKET_RESOLVED' AND entity_id=? LIMIT 1",
+      [ticketId]
+    );
+    if (!audit.length) throw new Error('No TICKET_RESOLVED audit row');
+  });
+
+  // ── 7. Close ──────────────────────────────────────────────────────────────
+  check('7. Close ticket → status=CLOSED', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var res = processRequest({
+      service: 'tickets', action: 'close', sessionToken: saToken,
+      params: { ticketId: ticketId },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    if (res.data.status !== 'CLOSED') throw new Error('Expected CLOSED, got ' + res.data.status);
+  });
+
+  // ── 8. Reopen ─────────────────────────────────────────────────────────────
+  check('8. Reopen ticket → status=OPEN', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var res = processRequest({
+      service: 'tickets', action: 'reopen', sessionToken: saToken,
+      params: { ticketId: ticketId },
+    });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    if (res.data.status !== 'OPEN') throw new Error('Expected OPEN, got ' + res.data.status);
+  });
+
+  // ── 9. No sessionToken → NO_SESSION ──────────────────────────────────────
+  check('9. tickets.list without token returns NO_SESSION', function () {
+    var res = processRequest({ service: 'tickets', action: 'list', params: {} });
+    if (res.ok !== false) throw new Error('Expected ok=false');
+    if (!res.error || res.error.code !== 'NO_SESSION') {
+      throw new Error('Expected NO_SESSION, got: ' + JSON.stringify(res.error));
+    }
+  });
+
+  // ── 10. TZ-scoped session on KE ticket → NOT_FOUND ───────────────────────
+  check('10. TZ-scoped session cannot read KE ticket → NOT_FOUND', function () {
+    if (!ticketId) throw new Error('ticketId not set');
+    var tzCtx = {
+      token: '', actor: 'smoke-tz-stub',
+      session: {
+        sessionId: uuidv4(), userId: 'smoke-tz-stub', userType: 'STAFF',
+        role: 'CS_AGENT', countryCode: 'TZ', ip: '127.0.0.1', ua: 'smoke-tickets',
+      },
+    };
+    var threw = false; var code = '';
+    try { Tickets._getHandler_(tzCtx, { ticketId: ticketId }); }
+    catch (e) { threw = true; code = e.code || ''; }
+    if (!threw)               throw new Error('Expected throw');
+    if (code !== 'NOT_FOUND') throw new Error('Expected NOT_FOUND, got: ' + code);
+  });
+
+  // ── Cleanup ────────────────────────────────────────────────────────────────
+  try { Session.invalidate(saToken); } catch (_) {}
+
+  // ── Summary ───────────────────────────────────────────────────────────────
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeTickets: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary);
+  results.push(summary);
+  return results;
+}
