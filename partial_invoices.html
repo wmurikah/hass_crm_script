@@ -1,0 +1,57 @@
+<script>
+Router.register('invoices', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="invStatus"><option value="">All statuses</option><option>ISSUED</option><option>CANCELLED</option></select>' +
+      '<select class="form-control" id="invPayStatus"><option value="">Payment status</option><option>UNPAID</option><option>PAID</option></select>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Invoice #</th><th>Customer</th><th>Total</th><th>Due Date</th><th>Status</th><th>Payment</th><th></th></tr></thead>' +
+      '<tbody id="invBody"></tbody></table></div></div>';
+
+  function load() {
+    var params = { limit: 50 };
+    var s = document.getElementById('invStatus').value;
+    var p = document.getElementById('invPayStatus').value;
+    if (s) params.status = s;
+    if (p) params.payment_status = p;
+    API.call('invoices', 'list', params).then(function (rows) {
+      var tbody = document.getElementById('invBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No invoices.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.invoice_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
+               '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td><td>' + fmtDate(r.due_date) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td><td>' + statusBadge(r.payment_status) + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="viewInvoice(\'' + esc(r.invoice_id) + '\')">View</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('invBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('invStatus').onchange = load;
+  document.getElementById('invPayStatus').onchange = load;
+  load();
+});
+
+function viewInvoice(id) {
+  var l = Loader.show();
+  API.call('invoices', 'get', { invoiceId: id }).then(function (inv) {
+    Loader.hide(l);
+    var payments = (inv.payments || []).map(function (p) {
+      return '<tr><td>' + fmtDate(p.uploaded_at) + '</td><td>' + fmtMoney(p.amount) + '</td>' +
+             '<td>' + esc(p.payment_method) + '</td><td>' + esc(p.reference) + '</td><td>' + statusBadge(p.status) + '</td></tr>';
+    }).join('');
+    Modal.open({
+      title: inv.invoice_number,
+      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:12px">' +
+            '<dt style="color:#6b7280">Total</dt><dd>' + fmtMoney(inv.total_amount, inv.currency_code) + '</dd>' +
+            '<dt style="color:#6b7280">Due</dt><dd>' + fmtDate(inv.due_date) + '</dd>' +
+            '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(inv.status) + '</dd>' +
+            '<dt style="color:#6b7280">Payment</dt><dd>' + statusBadge(inv.payment_status) + '</dd>' +
+            '</dl>' +
+            '<h4 style="font-size:13px;font-weight:600;margin-bottom:6px">Payment history</h4>' +
+            '<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead>' +
+            '<tbody>' + (payments || '<tr><td colspan="5" style="color:#9ca3af">No payments.</td></tr>') + '</tbody></table>',
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+</script>

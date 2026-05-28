@@ -1,0 +1,49 @@
+<script>
+Router.register('dashboard', function (el) {
+  el.innerHTML =
+    '<div class="stat-grid" id="dashStats"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
+      '<div class="card"><div class="card-header"><span class="card-title">Recent Activity</span></div>' +
+        '<div class="card-body" id="dashFeed" style="max-height:320px;overflow-y:auto"></div></div>' +
+      '<div class="card"><div class="card-header"><span class="card-title">Orders (30 days)</span></div>' +
+        '<div class="card-body" id="dashOrders"></div></div>' +
+    '</div>';
+
+  API.call('dashboard', 'summary', {}).then(function (d) {
+    document.getElementById('dashStats').innerHTML =
+      stat('Open Tickets',      d.open_tickets,      'warning') +
+      stat('Pending Orders',    d.pending_orders,    'primary') +
+      stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
+      stat('Pending Approvals', d.pending_approvals, 'warning') +
+      stat('Active Customers',  d.active_customers,  'success') +
+      stat('Receivables (KES)', fmtMoney(d.unpaid_amount).replace('KES ',''), 'danger');
+  }).catch(function (e) { document.getElementById('dashStats').innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+
+  API.call('dashboard', 'activityFeed', { limit: 20 }).then(function (rows) {
+    var feed = document.getElementById('dashFeed');
+    if (!rows.length) { feed.innerHTML = '<p style="color:#9ca3af;font-size:13px">No recent activity.</p>'; return; }
+    feed.innerHTML = rows.map(function (r) {
+      return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+             '<span style="color:#6b7280">' + fmtDateTime(r.created_at) + '</span> ' +
+             '<strong>' + esc(r.action) + '</strong> on ' + esc(r.entity_type) +
+             ' by ' + esc(r.actor_id) + '</div>';
+    }).join('');
+  }).catch(function () {});
+
+  API.call('dashboard', 'ordersPulse', { days: 30 }).then(function (rows) {
+    var el2 = document.getElementById('dashOrders');
+    if (!rows.length) { el2.innerHTML = '<p style="color:#9ca3af;font-size:13px">No data.</p>'; return; }
+    var max = rows.reduce(function (m, r) { return Math.max(m, r.total_orders); }, 1);
+    el2.innerHTML = '<div style="display:flex;align-items:flex-end;gap:2px;height:80px">' +
+      rows.map(function (r) {
+        var h = Math.max(4, Math.round((r.total_orders / max) * 76));
+        return '<div title="' + r.day + ': ' + r.total_orders + ' orders" style="flex:1;background:#1a56db;height:' + h + 'px;border-radius:2px 2px 0 0;min-width:4px"></div>';
+      }).join('') + '</div>' +
+      '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + rows[0].day + ' → ' + rows[rows.length-1].day + '</div>';
+  }).catch(function () {});
+
+  function stat(label, val, cls) {
+    return '<div class="stat-card ' + cls + '"><div class="stat-label">' + label + '</div><div class="stat-value">' + (val || 0) + '</div></div>';
+  }
+});
+</script>

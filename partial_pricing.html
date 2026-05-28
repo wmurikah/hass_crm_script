@@ -1,0 +1,70 @@
+<script>
+Router.register('pricing', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<button class="btn btn-primary btn-sm" id="plNewBtn">+ New Price List</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Price List</th><th>Country</th><th>Currency</th><th>Effective From</th><th>Status</th><th></th></tr></thead>' +
+      '<tbody id="plBody"></tbody></table></div></div>' +
+    '<div id="plItems" style="margin-top:14px"></div>';
+
+  function load() {
+    API.call('pricing', 'listLists', { limit: 30 }).then(function (rows) {
+      var tbody = document.getElementById('plBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No price lists.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.list_name) + '</td><td>' + esc(r.country_code) + '</td>' +
+               '<td>' + esc(r.currency_code) + '</td><td>' + fmtDate(r.effective_from) + '</td>' +
+               '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="loadPriceItems(\'' + esc(r.list_id) + '\',\'' + esc(r.list_name) + '\')">Items</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('plBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('plNewBtn').onclick = function () { newPriceListModal(load); };
+  load();
+});
+
+function loadPriceItems(listId, listName) {
+  var c = document.getElementById('plItems');
+  c.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Items — ' + esc(listName) + '</span></div>' +
+                '<div class="card-body" id="plItemBody"><span class="spinner dark"></span></div></div>';
+  API.call('pricing', 'getPriceListItems', { listId: listId }).then(function (rows) {
+    document.getElementById('plItemBody').innerHTML =
+      '<table class="data-table"><thead><tr><th>Product</th><th>Unit Price</th><th>Min Qty</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (r) {
+        return '<tr><td>' + esc(r.product_id) + '</td><td>' + fmtMoney(r.unit_price) + '</td><td>' + (r.min_quantity || 1) + '</td></tr>';
+      }).join('') : '<tr><td colspan="3"><div class="empty-state">No items.</div></td></tr>') +
+      '</tbody></table>';
+  }).catch(function (e) { document.getElementById('plItemBody').innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+}
+
+function newPriceListModal(onSuccess) {
+  Modal.open({
+    title: 'New Price List',
+    body: '<div class="form-group"><label class="form-label">List Name</label><input class="form-control" id="plnName"></div>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">Country</label>' +
+            '<select class="form-control" id="plnCC"><option>KE</option><option>UG</option><option>TZ</option><option>RW</option><option>DRC</option><option>ZM</option><option>SS</option><option>MW</option></select></div>' +
+          '<div class="form-group"><label class="form-label">Currency</label>' +
+            '<select class="form-control" id="plnCur"><option>KES</option><option>UGX</option><option>TZS</option><option>RWF</option><option>USD</option></select></div></div>' +
+          '<div class="form-group"><label class="form-label">Effective From</label><input class="form-control" type="date" id="plnEff"></div>' +
+          '<div id="plnErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="plnSave">Create</button>',
+    onOpen: function () {
+      document.getElementById('plnSave').onclick = function () {
+        var name = document.getElementById('plnName').value.trim();
+        if (!name) { document.getElementById('plnErr').textContent = 'Name required.'; return; }
+        API.call('pricing', 'createList', {
+          list_name: name, country_code: document.getElementById('plnCC').value,
+          currency_code: document.getElementById('plnCur').value,
+          effective_from: document.getElementById('plnEff').value || new Date().toISOString().substring(0,10),
+        }).then(function () { Modal.close(); Toast.success('Price list created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('plnErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

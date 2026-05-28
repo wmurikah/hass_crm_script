@@ -1,0 +1,86 @@
+<script>
+Router.register('customers', function (el) {
+  var page = 1, perPage = 20, searchQ = '';
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<div class="search-input"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+        '<input type="text" id="custSearch" placeholder="Search customers…"></div>' +
+      '<select class="form-control" id="custStatus"><option value="">All statuses</option><option>ACTIVE</option><option>INACTIVE</option></select>' +
+      '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Account</th><th>Company</th><th>Country</th><th>Type</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
+      '<tbody id="custBody"></tbody></table></div>' +
+    '<div id="custPager" style="padding:8px 16px"></div></div>';
+
+  function load() {
+    var params = { limit: perPage };
+    if (searchQ) params.search = searchQ;
+    var s = document.getElementById('custStatus').value;
+    if (s) params.status = s;
+    API.call('customers', 'list', params).then(function (rows) {
+      var tbody = document.getElementById('custBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No customers found.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
+               '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
+               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="viewCustomer(\'' + esc(r.customer_id) + '\')">View</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('custBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('custSearch').oninput = function () { searchQ = this.value; load(); };
+  document.getElementById('custStatus').onchange = load;
+  document.getElementById('custNewBtn').onclick = function () { newCustomerModal(load); };
+  load();
+});
+
+function viewCustomer(id) {
+  var loader = Loader.show();
+  API.call('customers', 'get', { customerId: id }).then(function (c) {
+    Loader.hide(loader);
+    Modal.open({
+      title: c.company_name,
+      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+            '<dt style="color:#6b7280">Account#</dt><dd>' + esc(c.account_number) + '</dd>' +
+            '<dt style="color:#6b7280">Country</dt><dd>' + esc(c.country_code) + '</dd>' +
+            '<dt style="color:#6b7280">Type</dt><dd>' + esc(c.customer_type) + '</dd>' +
+            '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(c.status) + '</dd>' +
+            '<dt style="color:#6b7280">Credit Limit</dt><dd>' + fmtMoney(c.credit_limit, c.currency_code) + '</dd>' +
+            '<dt style="color:#6b7280">Created</dt><dd>' + fmtDate(c.created_at) + '</dd>' +
+            '</dl>',
+    });
+  }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
+}
+
+function newCustomerModal(onSuccess) {
+  Modal.open({
+    title: 'New Customer',
+    body: '<div class="form-row"><div class="form-group"><label class="form-label">Account Number</label>' +
+          '<input class="form-control" id="ncAcct"></div>' +
+          '<div class="form-group"><label class="form-label">Company Name</label>' +
+          '<input class="form-control" id="ncName"></div></div>' +
+          '<div class="form-row"><div class="form-group"><label class="form-label">Country</label>' +
+          '<select class="form-control" id="ncCC"><option>KE</option><option>UG</option><option>TZ</option><option>RW</option><option>DRC</option><option>ZM</option><option>SS</option><option>MW</option></select></div>' +
+          '<div class="form-group"><label class="form-label">Type</label>' +
+          '<select class="form-control" id="ncType"><option>DIRECT</option><option>DEALER</option><option>CORPORATE</option></select></div></div>' +
+          '<div id="ncError" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="ncSave">Create</button>',
+    onOpen: function () {
+      document.getElementById('ncSave').onclick = function () {
+        var acct = document.getElementById('ncAcct').value.trim();
+        var name = document.getElementById('ncName').value.trim();
+        if (!acct || !name) { document.getElementById('ncError').textContent = 'Account number and company name required.'; return; }
+        API.call('customers', 'create', {
+          account_number: acct, company_name: name,
+          country_code: document.getElementById('ncCC').value,
+          customer_type: document.getElementById('ncType').value,
+        }).then(function () { Modal.close(); Toast.success('Customer created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('ncError').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>
