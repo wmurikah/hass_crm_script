@@ -1,0 +1,89 @@
+<script>
+Router.register('orders', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="ordStatus"><option value="">All statuses</option>' +
+        ['DRAFT','SUBMITTED','APPROVED','DISPATCHED','DELIVERED','REJECTED','CANCELLED'].map(function(s){return '<option>'+s+'</option>';}).join('') +
+      '</select>' +
+      '<input class="form-control" id="ordCust" placeholder="Customer ID…" style="width:200px">' +
+      '<button class="btn btn-primary btn-sm" id="ordNewBtn">+ New Order</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Order #</th><th>Customer</th><th>Country</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>' +
+      '<tbody id="ordBody"></tbody></table></div></div>';
+
+  function load() {
+    var params = { limit: 50 };
+    var s = document.getElementById('ordStatus').value;
+    var c = document.getElementById('ordCust').value.trim();
+    if (s) params.status = s;
+    if (c) params.customer_id = c;
+    API.call('orders', 'list', params).then(function (rows) {
+      var tbody = document.getElementById('ordBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No orders.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.order_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
+               '<td>' + esc(r.country_code) + '</td><td>' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
+               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="viewOrder(\'' + esc(r.order_id) + '\')">View</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('ordBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('ordStatus').onchange = load;
+  document.getElementById('ordNewBtn').onclick = newOrderModal.bind(null, load);
+  load();
+});
+
+function viewOrder(id) {
+  var l = Loader.show();
+  API.call('orders', 'get', { orderId: id }).then(function (o) {
+    Loader.hide(l);
+    var lines = (o.lines || []).map(function (ln) {
+      return '<tr><td>' + esc(ln.product_name) + '</td><td>' + ln.quantity + '</td>' +
+             '<td>' + fmtMoney(ln.unit_price) + '</td><td>' + fmtMoney(ln.line_subtotal) + '</td></tr>';
+    }).join('');
+    Modal.open({
+      title: 'Order ' + o.order_number,
+      body: '<p style="margin-bottom:8px">' + statusBadge(o.status) + ' &nbsp; ' + fmtDate(o.created_at) + '</p>' +
+            '<table class="data-table" style="margin-bottom:14px"><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead><tbody>' + (lines || '<tr><td colspan="4" style="color:#9ca3af">No lines</td></tr>') + '</tbody></table>' +
+            '<div style="text-align:right;font-weight:600">Total: ' + fmtMoney(o.total_amount, o.currency_code) + '</div>' +
+            (o.status === 'SUBMITTED'
+              ? '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">' +
+                '<button class="btn btn-danger btn-sm" onclick="orderAction(\'' + id + '\',\'reject\',\'Reason?\')">Reject</button>' +
+                '<button class="btn btn-primary btn-sm" onclick="orderAction(\'' + id + '\',\'approve\',\'\')">Approve</button></div>'
+              : ''),
+    });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function orderAction(id, action, prompt) {
+  var params = { orderId: id };
+  if (prompt) { params.reason = window.prompt(prompt) || ''; }
+  API.call('orders', action, params)
+    .then(function (r) { Modal.close(); Toast.success('Order ' + r.status + '.'); Router.navigate('orders', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function newOrderModal(onSuccess) {
+  Modal.open({
+    title: 'New Order',
+    body: '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">Customer ID</label><input class="form-control" id="noCustomer"></div>' +
+          '<div class="form-group"><label class="form-label">Country</label>' +
+            '<select class="form-control" id="noCC"><option>KE</option><option>UG</option><option>TZ</option><option>RW</option><option>DRC</option><option>ZM</option><option>SS</option><option>MW</option></select></div></div>' +
+          '<div id="noErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="noSave">Create Draft</button>',
+    onOpen: function () {
+      document.getElementById('noSave').onclick = function () {
+        var cid = document.getElementById('noCustomer').value.trim();
+        if (!cid) { document.getElementById('noErr').textContent = 'Customer ID required.'; return; }
+        API.call('orders', 'create', { customer_id: cid, country_code: document.getElementById('noCC').value })
+          .then(function () { Modal.close(); Toast.success('Draft order created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('noErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

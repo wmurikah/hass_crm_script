@@ -1,0 +1,80 @@
+<script>
+Router.register('users', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="usrRole"><option value="">All roles</option>' +
+        ['SUPER_ADMIN','CS_MANAGER','CS_AGENT','FINANCE_MANAGER','FINANCE_OFFICER','COUNTRY_MANAGER','BD_REP','VIEWER'].map(function(r){return '<option>'+r+'</option>';}).join('') +
+      '</select>' +
+      '<button class="btn btn-primary btn-sm" id="usrNewBtn">+ New User</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Country</th><th>Status</th><th>Last Login</th><th></th></tr></thead>' +
+      '<tbody id="usrBody"></tbody></table></div></div>';
+
+  function load() {
+    var params = { limit: 50 };
+    var r = document.getElementById('usrRole').value;
+    if (r) params.role = r;
+    API.call('users', 'list', params).then(function (res) {
+      var rows  = Array.isArray(res) ? res : (res.items || []);
+      var tbody = document.getElementById('usrBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No users.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (u) {
+        return '<tr><td>' + esc(u.first_name + ' ' + u.last_name) + '</td>' +
+               '<td>' + esc(u.email) + '</td><td>' + esc(u.role || u.primary_role || '—') + '</td>' +
+               '<td>' + esc(u.country_code || '—') + '</td><td>' + statusBadge(u.status) + '</td>' +
+               '<td>' + fmtDate(u.last_login_at) + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + esc(u.user_id) + '\')">Reset PW</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('usrBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('usrRole').onchange = load;
+  document.getElementById('usrNewBtn').onclick = function () { newUserModal(load); };
+  load();
+});
+
+function resetUserPw(userId) {
+  var pw = window.prompt('New password for user ' + userId + ':');
+  if (!pw) return;
+  API.call('users', 'resetPassword', { userId: userId, newPassword: pw })
+    .then(function () { Toast.success('Password reset.'); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function newUserModal(onSuccess) {
+  Modal.open({
+    title: 'New User',
+    body: '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">First Name</label><input class="form-control" id="nuFn"></div>' +
+          '<div class="form-group"><label class="form-label">Last Name</label><input class="form-control" id="nuLn"></div></div>' +
+          '<div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="nuEmail"></div>' +
+          '<div class="form-group"><label class="form-label">Password</label><input class="form-control" type="password" id="nuPw"></div>' +
+          '<div class="form-row">' +
+          '<div class="form-group"><label class="form-label">Role</label>' +
+            '<select class="form-control" id="nuRole">' +
+              ['CS_AGENT','CS_MANAGER','FINANCE_OFFICER','FINANCE_MANAGER','COUNTRY_MANAGER','BD_REP','VIEWER','SUPER_ADMIN'].map(function(r){return '<option>'+r+'</option>';}).join('') +
+            '</select></div>' +
+          '<div class="form-group"><label class="form-label">Country</label>' +
+            '<select class="form-control" id="nuCC"><option>KE</option><option>UG</option><option>TZ</option><option>RW</option><option>DRC</option><option>ZM</option><option>SS</option><option>MW</option></select></div></div>' +
+          '<div id="nuErr" style="color:#dc2626;font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="nuSave">Create</button>',
+    onOpen: function () {
+      document.getElementById('nuSave').onclick = function () {
+        var email = document.getElementById('nuEmail').value.trim();
+        var pw    = document.getElementById('nuPw').value;
+        if (!email || !pw) { document.getElementById('nuErr').textContent = 'Email and password required.'; return; }
+        API.call('users', 'create', {
+          first_name: document.getElementById('nuFn').value.trim(),
+          last_name:  document.getElementById('nuLn').value.trim(),
+          email: email, password: pw,
+          role: document.getElementById('nuRole').value,
+          country_code: document.getElementById('nuCC').value,
+        }).then(function () { Modal.close(); Toast.success('User created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { document.getElementById('nuErr').textContent = e.message; });
+      };
+    },
+  });
+}
+</script>

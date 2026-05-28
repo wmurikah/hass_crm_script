@@ -1,0 +1,38 @@
+<script>
+Router.register('contacts', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<input class="form-control" id="contCust" placeholder="Customer ID…" style="width:220px">' +
+      '<button class="btn btn-primary btn-sm" id="contSearch">Search</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr></thead>' +
+      '<tbody id="contBody"></tbody></table></div></div>';
+
+  function load(customerId) {
+    if (!customerId) return;
+    API.call('contacts', 'list', { customer_id: customerId }).then(function (rows) {
+      var tbody = document.getElementById('contBody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No contacts.</div></td></tr>'; return; }
+      tbody.innerHTML = rows.map(function (r) {
+        return '<tr><td>' + esc(r.first_name + ' ' + r.last_name) + '</td>' +
+               '<td>' + esc(r.email) + '</td><td>' + esc(r.phone || '—') + '</td>' +
+               '<td>' + esc(r.portal_role) + '</td><td>' + statusBadge(r.status) + '</td>' +
+               '<td><button class="btn btn-secondary btn-sm" onclick="deactivateContact(\'' + esc(r.contact_id) + '\')">Deactivate</button></td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('contBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+  }
+
+  document.getElementById('contSearch').onclick = function () {
+    load(document.getElementById('contCust').value.trim());
+  };
+});
+
+function deactivateContact(id) {
+  Modal.confirm('Deactivate this contact?', function () {
+    API.call('contacts', 'deactivate', { contactId: id })
+      .then(function () { Toast.success('Contact deactivated.'); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+</script>
