@@ -42,6 +42,7 @@ function _bumpLoginFails_(table, idCol, id) {
   var rows = TursoClient.select('SELECT failed_login_attempts FROM ' + table + ' WHERE ' + idCol + ' = ? LIMIT 1', [id]);
   var fails = rows.length ? (parseInt(rows[0].failed_login_attempts, 10) || 0) + 1 : 1;
   var patch = { failed_login_attempts: fails, updated_at: nowIso() };
+  if (table === 'users') { patch.last_activity_at = nowIso(); }
   if (fails >= _LOGIN_FAIL_THRESHOLD_) {
     patch.locked_until = addMinutes(new Date(), _LOCK_MINUTES_).toISOString();
   }
@@ -52,10 +53,18 @@ function _bumpLoginFails_(table, idCol, id) {
 }
 
 function _clearLoginFails_(table, idCol, id) {
-  TursoClient.write(
-    'UPDATE ' + table + ' SET failed_login_attempts = 0, locked_until = NULL, last_login_at = ?, updated_at = ? WHERE ' + idCol + ' = ?',
-    [nowIso(), nowIso(), id]
-  );
+  if (table === 'users') {
+    TursoClient.write(
+      'UPDATE users SET last_login_at = ?, failed_login_attempts = 0, ' +
+      'locked_until = NULL, last_activity_at = ?, updated_at = ? WHERE user_id = ?',
+      [nowIso(), nowIso(), nowIso(), id]
+    );
+  } else {
+    TursoClient.write(
+      'UPDATE ' + table + ' SET failed_login_attempts = 0, locked_until = NULL, last_login_at = ?, updated_at = ? WHERE ' + idCol + ' = ?',
+      [nowIso(), nowIso(), id]
+    );
+  }
 }
 
 // ── processRequest (public convenience wrapper) ───────────────────────────────
@@ -69,18 +78,25 @@ var _PUBLIC_ACTIONS_ = [
  * Convenience entry point usable from tests and IDE scripts.
  * Session gating is handled entirely by dispatch().
  */
-function processRequest(call) {
+function processRequest(requestBody) {
   try {
-    var service = String(call.service || '');
-    var action  = String(call.action  || '');
-    var token   = String(call.sessionToken || call.token || '');
-    var params  = call.params || {};
-    var ctx = { token: token, sessionToken: token, actor: null, session: null };
+    var body = (typeof requestBody === 'string')
+      ? JSON.parse(requestBody) : requestBody;
+    var service = body.service || '';
+    var action  = body.action  || '';
+    var params  = body.params  || {};
+    var ctx = { sessionToken: body.sessionToken || params.sessionToken };
     return dispatch(ctx, { service: service, action: action, params: params });
   } catch (e) {
-    Logger.log('[processRequest] Unhandled error: ' + e.message + '\n' + e.stack);
-    return { ok: false, error: { code: e.code || 'INTERNAL_ERROR',
-             message: e.message || 'An unexpected error occurred.' } };
+    Logger.log('[processRequest] Unhandled error: ' + e.message +
+               '\n' + (e.stack || ''));
+    return {
+      ok: false,
+      error: {
+        code: (e.code) || 'INTERNAL_ERROR',
+        message: e.message || 'An unexpected error occurred.'
+      }
+    };
   }
 }
 
@@ -136,7 +152,8 @@ function _authLogin_(ctx, params) {
       }
     }
     // ── Issue session ─────────────────────────────────────────────────────────
-    var roleCode = user.role || 'CS_AGENT';
+    var roleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [user.user_id]);
+    var roleCode = roleRows.length ? roleRows[0].role_code : 'CS_AGENT';
     var token = Session.create(user.user_id, 'STAFF', roleCode, ip, ua, user.country_code || '');
     _clearLoginFails_('users', 'user_id', user.user_id);
     Audit.log({ actor: user.user_id, action: 'LOGIN', entity: 'users',
@@ -248,8 +265,8 @@ function _authRequestPasswordReset_(ctx, params) {
     'DELETE FROM password_resets WHERE email = ?', [email]
   );
   TursoClient.write(
-    'INSERT INTO password_resets (email, otp_hash, expires_at, used, created_at) VALUES (?,?,?,0,?)',
-    [email, otpHash, expires, nowIso()]
+    'INSERT INTO password_resets (reset_id, email, otp_hash, expires_at, consumed_at, created_at) VALUES (?,?,?,?,NULL,?)',
+    [uuidv4(), email, otpHash, expires, nowIso()]
   );
   Audit.log({ actor: '', action: 'PASSWORD_RESET_REQUESTED', entity: 'auth',
               entityId: email, metadata: { email: email } });
@@ -264,11 +281,11 @@ function _authVerifyOtp_(ctx, params) {
   var raw     = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, otp, Utilities.Charset.UTF_8);
   var otpHash = raw.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
   var rows = TursoClient.select(
-    'SELECT * FROM password_resets WHERE email = ? AND otp_hash = ? AND used = 0 AND expires_at > ? LIMIT 1',
+    'SELECT * FROM password_resets WHERE email = ? AND otp_hash = ? AND consumed_at IS NULL AND expires_at > ? LIMIT 1',
     [email, otpHash, nowIso()]
   );
   if (!rows.length) throw new Errors.Validation('Invalid or expired code.');
-  TursoClient.write('UPDATE password_resets SET used = 1 WHERE email = ?', [email]);
+  TursoClient.write("UPDATE password_resets SET consumed_at = datetime('now') WHERE email = ?", [email]);
   return { success: true, email: email };
 }
 
@@ -343,7 +360,8 @@ function _authMfaVerify_(ctx, params) {
     var uRows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
     if (!uRows.length) throw new Errors.NotFound('User not found.');
     var u = uRows[0];
-    var role  = u.role || 'CS_AGENT';
+    var rRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
+    var role  = rRows.length ? rRows[0].role_code : 'CS_AGENT';
     var token = Session.create(userId, 'STAFF', role, ip, ua, u.country_code || '');
     _clearLoginFails_('users', 'user_id', userId);
     Audit.log({ actor: userId, action: 'MFA_LOGIN', entity: 'users',
@@ -359,11 +377,12 @@ function _authGetStaffInfo_(ctx, params) {
   var rows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
   if (!rows.length) throw new Errors.NotFound('User not found.');
   var u = rows[0];
+  var staffRoleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
   return {
     userId:    u.user_id,
     name:      (u.first_name || '') + ' ' + (u.last_name || ''),
     email:     u.email,
-    role:      u.role,
+    role:      staffRoleRows.length ? staffRoleRows[0].role_code : null,
     country:   u.country_code,
     team:      u.team_id,
   };

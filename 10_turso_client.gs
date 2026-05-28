@@ -114,8 +114,8 @@ var TursoClient = {
       throw new Errors.Integration('Turso select error: ' + (r.error && r.error.message));
     }
     var rows = _tursoRows_(r.response && r.response.result);
-    Log.debug({ service: 'turso', action: 'select', durationMs: Date.now() - t0,
-                data: { sql: sql.substring(0, 80), rows: rows.length } });
+    Logger.log(JSON.stringify({ service: 'turso', action: 'select', durationMs: Date.now() - t0,
+                data: { sql: sql.substring(0, 80), rows: rows.length } }));
     return rows;
   },
 
@@ -134,8 +134,8 @@ var TursoClient = {
       throw new Errors.Integration('Turso write error: ' + (r.error && r.error.message));
     }
     var result = r.response && r.response.result;
-    Log.debug({ service: 'turso', action: 'write', durationMs: Date.now() - t0,
-                data: { sql: sql.substring(0, 80) } });
+    Logger.log(JSON.stringify({ service: 'turso', action: 'write', durationMs: Date.now() - t0,
+                data: { sql: sql.substring(0, 80) } }));
     return {
       lastInsertId: result ? result.last_insert_rowid  : null,
       rowsAffected: result ? result.affected_row_count : 0,
@@ -170,8 +170,8 @@ var TursoClient = {
         rowsAffected: result ? result.affected_row_count : 0,
       });
     }
-    Log.debug({ service: 'turso', action: 'batch', durationMs: Date.now() - t0,
-                data: { statements: statements.length } });
+    Logger.log(JSON.stringify({ service: 'turso', action: 'batch', durationMs: Date.now() - t0,
+                data: { statements: statements.length } }));
     return out;
   },
 };

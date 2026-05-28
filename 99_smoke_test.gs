@@ -205,9 +205,8 @@ function smokeCustomers() {
       [contactId1]
     );
     if (!rows.length) throw new Error('No CONTACT_UPDATED row in audit_log');
-    var changes = jsonParse(rows[0].changes, {});
-    if (!changes.before) throw new Error('Audit row missing "before": ' + JSON.stringify(changes));
-    if (!changes.after)  throw new Error('Audit row missing "after": '  + JSON.stringify(changes));
+    if (!rows[0].before_json) throw new Error('Audit row missing before_json: ' + JSON.stringify(rows[0]));
+    if (!rows[0].after_json)  throw new Error('Audit row missing after_json: '  + JSON.stringify(rows[0]));
   });
 
   // ── 5. Soft-delete customer ────────────────────────────────────────────────
