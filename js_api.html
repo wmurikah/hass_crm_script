@@ -1,0 +1,92 @@
+<script>
+// ─────────────────────────────────────────────────────────────────
+//  js_api.html  — Hass CMS API client (Stage 6)
+//  Wraps google.script.run into a Promise-based API.call() helper.
+// ─────────────────────────────────────────────────────────────────
+
+var API = (function () {
+  'use strict';
+
+  var _token = null;
+
+  function _setToken(t) { _token = t; }
+  function _getToken()  { return _token; }
+
+  function _clearToken() {
+    _token = null;
+    try { sessionStorage.removeItem('hass_token'); } catch (_) {}
+    try { localStorage.removeItem('hass_token'); } catch (_) {}
+  }
+
+  function _persistToken(t) {
+    _token = t;
+    try { sessionStorage.setItem('hass_token', t); } catch (_) {}
+  }
+
+  function _loadPersistedToken() {
+    try {
+      var t = sessionStorage.getItem('hass_token');
+      if (t) { _token = t; return t; }
+    } catch (_) {}
+    return null;
+  }
+
+  /**
+   * call(service, action, params) → Promise<data>
+   * Rejects with { code, message } on API-level errors.
+   */
+  function call(service, action, params) {
+    var payload = Object.assign({}, params || {});
+    if (_token) payload.sessionToken = _token;
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(function (result) {
+          if (result && result.ok === false) {
+            var err = result.error || {};
+            if (err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED') {
+              _clearToken();
+              window.dispatchEvent(new CustomEvent('hass:logout', { detail: err }));
+            }
+            reject(err);
+          } else {
+            resolve(result && result.data !== undefined ? result.data : result);
+          }
+        })
+        .withFailureHandler(function (e) {
+          reject({ code: 'CLIENT_ERROR', message: String(e && e.message ? e.message : e) });
+        })
+        .processRequest({ service: service, action: action, params: payload });
+    });
+  }
+
+  /** auth.login — persists token on success */
+  function login(email, password) {
+    return call('auth', 'login', { email: email, password: password })
+      .then(function (data) {
+        _persistToken(data.token);
+        return data;
+      });
+  }
+
+  /** auth.logout */
+  function logout() {
+    var p = call('auth', 'logout', {});
+    _clearToken();
+    return p;
+  }
+
+  /** Returns true if a token is currently held */
+  function isLoggedIn() { return !!_token; }
+
+  return {
+    call: call,
+    login: login,
+    logout: logout,
+    isLoggedIn: isLoggedIn,
+    setToken: _setToken,
+    getToken: _getToken,
+    clearToken: _clearToken,
+    loadPersistedToken: _loadPersistedToken,
+  };
+})();
+</script>

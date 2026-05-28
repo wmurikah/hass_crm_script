@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hass CMS — Login</title>
+  <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="https://hasspetroleum.com/wp-content/uploads/2021/02/hass-logo.png"
+           alt="Hass Petroleum" height="48" style="object-fit:contain"
+           onerror="this.style.display='none'">
+    </div>
+    <h2 class="login-title">Hass CMS</h2>
+
+    <form id="loginForm" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="email">Email address</label>
+        <input class="form-control" type="email" id="email" name="email" required autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-control" type="password" id="password" name="password" required>
+      </div>
+      <div id="loginError" style="display:none;color:#dc2626;font-size:13px;margin-bottom:10px"></div>
+      <button class="btn btn-primary" type="submit" id="loginBtn" style="width:100%;justify-content:center">
+        Sign in
+      </button>
+    </form>
+    <div class="login-footer">
+      &copy; <?= new Date().getFullYear() ?> Hass Petroleum Group
+    </div>
+  </div>
+</div>
+
+<?!= HtmlService.createHtmlOutputFromFile('js_api').getContent(); ?>
+<script>
+(function () {
+  var form    = document.getElementById('loginForm');
+  var errDiv  = document.getElementById('loginError');
+  var btn     = document.getElementById('loginBtn');
+
+  // If already logged in, go straight to staff dashboard.
+  if (API.loadPersistedToken()) {
+    window.location.href = '?page=staff';
+    return;
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errDiv.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Signing in…';
+
+    var email    = document.getElementById('email').value.trim();
+    var password = document.getElementById('password').value;
+
+    API.login(email, password)
+      .then(function (data) {
+        // Check MFA requirement.
+        if (data && data.mfa_required) {
+          window.location.href = '?page=mfa-verify';
+        } else {
+          window.location.href = '?page=staff';
+        }
+      })
+      .catch(function (err) {
+        errDiv.textContent  = err.message || 'Login failed. Check your credentials.';
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      });
+  });
+})();
+</script>
+</body>
+</html>
