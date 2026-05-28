@@ -153,14 +153,22 @@ function _authLogin_(ctx, params) {
     }
     // ── Issue session ─────────────────────────────────────────────────────────
     var roleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [user.user_id]);
-    var roleCode = roleRows.length ? roleRows[0].role_code : 'CS_AGENT';
-    var token = Session.create(user.user_id, 'STAFF', roleCode, ip, ua, user.country_code || '');
+    var primaryRole = roleRows.length ? roleRows[0].role_code : 'CS_AGENT';
+    var sessionResult = Session.create(user.user_id, 'STAFF', primaryRole, ip, ua, user.country_code || null);
     _clearLoginFails_('users', 'user_id', user.user_id);
-    Audit.log({ actor: user.user_id, action: 'LOGIN', entity: 'users',
-                entityId: user.user_id, ip: ip, ua: ua,
-                metadata: { email: email, role: roleCode } });
-    return { token: token, role: roleCode, userId: user.user_id,
-             redirectUrl: '?page=staff&token=' + token };
+    Audit.log({ actor: user.user_id, action: 'LOGIN', entity: 'sessions',
+                entityId: sessionResult.session_id, after: { email: user.email } });
+    return {
+      token:               sessionResult.token,
+      userId:              user.user_id,
+      role:                primaryRole,
+      email:               user.email,
+      firstName:           user.first_name,
+      lastName:            user.last_name,
+      countryCode:         user.country_code,
+      mustChangePassword:  user.must_change_password === 1,
+      mfaRequired:         false
+    };
   }
 
   // ── Try contact/portal ────────────────────────────────────────────────────
@@ -186,13 +194,12 @@ function _authLogin_(ctx, params) {
                   metadata: { email: email, reason: 'wrong_password' } });
       throw new Errors.PermissionDenied('Incorrect email or password.');
     }
-    var cToken = Session.create(contact.contact_id, 'CUSTOMER', 'CUSTOMER', ip, ua, '');
+    var cSessionResult = Session.create(contact.contact_id, 'CUSTOMER', 'CUSTOMER', ip, ua, '');
     _clearLoginFails_('contacts', 'contact_id', contact.contact_id);
-    Audit.log({ actor: contact.contact_id, action: 'LOGIN', entity: 'contacts',
-                entityId: contact.contact_id, ip: ip, ua: ua,
-                metadata: { email: email, role: 'CUSTOMER' } });
-    return { token: cToken, role: 'CUSTOMER', userId: contact.contact_id,
-             redirectUrl: '?page=portal&token=' + cToken };
+    Audit.log({ actor: contact.contact_id, action: 'LOGIN', entity: 'sessions',
+                entityId: cSessionResult.session_id, after: { email: contact.email } });
+    return { token: cSessionResult.token, role: 'CUSTOMER', userId: contact.contact_id,
+             redirectUrl: '?page=portal&token=' + cSessionResult.token };
   }
 
   Audit.log({ actor: '', action: 'LOGIN_FAILED', entity: 'auth', entityId: email,
@@ -362,11 +369,11 @@ function _authMfaVerify_(ctx, params) {
     var u = uRows[0];
     var rRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
     var role  = rRows.length ? rRows[0].role_code : 'CS_AGENT';
-    var token = Session.create(userId, 'STAFF', role, ip, ua, u.country_code || '');
+    var sessionResult = Session.create(userId, 'STAFF', role, ip, ua, u.country_code || '');
     _clearLoginFails_('users', 'user_id', userId);
-    Audit.log({ actor: userId, action: 'MFA_LOGIN', entity: 'users',
-                entityId: userId, ip: ip, ua: ua, metadata: { role: role } });
-    return { token: token, role: role, userId: userId, redirectUrl: '?page=staff&token=' + token };
+    Audit.log({ actor: userId, action: 'MFA_LOGIN', entity: 'sessions',
+                entityId: sessionResult.session_id, ip: ip, ua: ua, metadata: { role: role } });
+    return { token: sessionResult.token, role: role, userId: userId, redirectUrl: '?page=staff&token=' + sessionResult.token };
   }
   throw new Errors.AppError('MFA verify for non-staff not yet implemented.');
 }
