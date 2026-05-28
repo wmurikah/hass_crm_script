@@ -26,24 +26,28 @@ var Audit = (function () {
     return out;
   }
 
+  function _actorType_(actor) {
+    if (/^(USR-|CTX-)/.test(actor)) return 'STAFF';
+    return 'SYSTEM';
+  }
+
   function log(entry) {
     try {
       entry = entry || {};
-      var changes = {};
-      if (entry.before != null) changes.before = _mask_(entry.before);
-      if (entry.after  != null) changes.after  = _mask_(entry.after);
+      var actor = String(entry.actor || '');
 
       Repo.create('audit_log', {
         log_id:           uuidv4(),
         entity_type:      String(entry.entity   || ''),
         entity_id:        String(entry.entityId || ''),
         action:           String(entry.action   || ''),
-        actor_type:       '',
-        actor_id:         String(entry.actor    || ''),
+        actor_type:       _actorType_(actor),
+        actor_id:         actor,
         actor_email:      '',
         actor_ip:         String(entry.ip       || ''),
         actor_user_agent: String(entry.ua       || ''),
-        changes:          jsonStringify(changes),
+        before_json:      entry.before != null ? jsonStringify(_mask_(entry.before)) : null,
+        after_json:       entry.after  != null ? jsonStringify(_mask_(entry.after))  : null,
         metadata:         jsonStringify(_mask_(entry.metadata || {})),
         country_code:     String(entry.countryCode || ''),
         created_at:       nowIso(),
