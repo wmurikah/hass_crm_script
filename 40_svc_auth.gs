@@ -42,7 +42,6 @@ function _bumpLoginFails_(table, idCol, id) {
   var rows = TursoClient.select('SELECT failed_login_attempts FROM ' + table + ' WHERE ' + idCol + ' = ? LIMIT 1', [id]);
   var fails = rows.length ? (parseInt(rows[0].failed_login_attempts, 10) || 0) + 1 : 1;
   var patch = { failed_login_attempts: fails, updated_at: nowIso() };
-  if (table === 'users') { patch.last_activity_at = nowIso(); }
   if (fails >= _LOGIN_FAIL_THRESHOLD_) {
     patch.locked_until = addMinutes(new Date(), _LOCK_MINUTES_).toISOString();
   }
@@ -56,8 +55,8 @@ function _clearLoginFails_(table, idCol, id) {
   if (table === 'users') {
     TursoClient.write(
       'UPDATE users SET last_login_at = ?, failed_login_attempts = 0, ' +
-      'locked_until = NULL, last_activity_at = ?, updated_at = ? WHERE user_id = ?',
-      [nowIso(), nowIso(), nowIso(), id]
+      'locked_until = NULL, updated_at = ? WHERE user_id = ?',
+      [nowIso(), nowIso(), id]
     );
   } else {
     TursoClient.write(
