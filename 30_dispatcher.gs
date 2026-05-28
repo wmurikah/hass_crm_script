@@ -73,6 +73,23 @@ function dispatch(ctx, call) {
     };
   }
 
+  var isPublic = ['auth.login', 'auth.signup', 'auth.requestPasswordReset',
+                  'auth.verifyOtp', 'auth.setNewPassword', 'auth.verifyAccount',
+                  'system.health'].indexOf(key) >= 0;
+  if (!isPublic) {
+    var rawToken = (call.params && call.params.sessionToken) || ctx.token || '';
+    if (!rawToken && !ctx.session) {
+      return { ok: false, error: { code: 'NO_SESSION', message: 'Authentication required' } };
+    }
+    if (!ctx.session) {
+      var resolvedSess = Session.validate(rawToken);
+      if (!resolvedSess) {
+        return { ok: false, error: { code: 'SESSION_INVALID', message: 'Session expired or invalid' } };
+      }
+      ctx.session = resolvedSess;
+    }
+  }
+
   if (!_dispatchPermit_(ctx, spec)) {
     var permMsg = 'Missing permission: ' + spec.permission;
     try {

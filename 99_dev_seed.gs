@@ -18,8 +18,8 @@ function seedAll() {
     "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
   );
   if (existing.length) {
-    Logger.log('SUPER_ADMIN already seeded - skipping');
-    return;
+    Logger.log('[Seed] SUPER_ADMIN already seeded - skipping');
+    return { userId: existing[0].user_id };
   }
 
   // ── 2. Credentials ────────────────────────────────────────────────────────
@@ -68,6 +68,7 @@ function seedAll() {
   Logger.log('║ Email:    ' + email);
   Logger.log('║ Password: ' + password);
   Logger.log('╚════════════════════════════════════════╝');
+  return { userId: userId };
 }
 
 // ── Internal helper ───────────────────────────────────────────────────────────
