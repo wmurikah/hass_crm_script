@@ -133,10 +133,13 @@ function smokeCustomers() {
     var res = processRequest({
       service: 'customers', action: 'create', sessionToken: saToken,
       params: {
-        account_number: 'KE-SMOKE-001',
-        company_name:   'Smoke Test Ltd',
-        country_code:   'KE',
-        customer_type:  'B2B',
+        company_name:          'Smoke Test Ltd',
+        account_number:        'SMKT-' + Date.now(),
+        customer_type:         'B2B',
+        country_code:          'KE',
+        segment_id:            'SEG-STANDARD',
+        relationship_owner_id: null,
+        parent_customer_id:    null,
       },
     });
     if (!res.ok)                  throw new Error('ok=false: ' + JSON.stringify(res.error));
@@ -517,10 +520,13 @@ function smokeOrders() {
   var custRes = processRequest({
     service: 'customers', action: 'create', sessionToken: saToken,
     params: {
-      account_number: 'KE-ORD-SMOKE-' + Date.now(),
-      company_name:   'Order Smoke Ltd',
-      country_code:   'KE',
-      customer_type:  'B2B',
+      company_name:          'Smoke Test Ltd',
+      account_number:        'SMKT-' + Date.now(),
+      customer_type:         'B2B',
+      country_code:          'KE',
+      segment_id:            'SEG-STANDARD',
+      relationship_owner_id: null,
+      parent_customer_id:    null,
     },
   });
   if (!custRes.ok) throw new Error('Prereq customer create failed: ' + JSON.stringify(custRes.error));
@@ -740,10 +746,13 @@ function smokeTickets() {
   var custRes = processRequest({
     service: 'customers', action: 'create', sessionToken: saToken,
     params: {
-      account_number: 'KE-TKT-SMOKE-' + Date.now(),
-      company_name:   'Ticket Smoke Ltd',
-      country_code:   'KE',
-      customer_type:  'B2B',
+      company_name:          'Smoke Test Ltd',
+      account_number:        'SMKT-' + Date.now(),
+      customer_type:         'B2B',
+      country_code:          'KE',
+      segment_id:            'SEG-STANDARD',
+      relationship_owner_id: null,
+      parent_customer_id:    null,
     },
   });
   if (!custRes.ok) throw new Error('Prereq customer failed: ' + JSON.stringify(custRes.error));
