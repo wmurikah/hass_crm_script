@@ -64,7 +64,7 @@ var Session = (function () {
 
     TursoClient.write(
       'INSERT INTO sessions ' +
-      '(session_id, user_type, user_id, token_hash, ip, ua, ' +
+      '(session_id, user_type, user_id, token_hash, ip_address, user_agent, ' +
       'country_code, role, is_active, expires_at, ' +
       "last_active_at, created_at, updated_at) " +
       "VALUES (?,?,?,?,?,?,?,?,1,?,datetime('now'),datetime('now'),datetime('now'))",
@@ -112,8 +112,8 @@ var Session = (function () {
       userType:    sess.user_type,
       role:        sess.role,
       countryCode: sess.country_code || '',
-      ip:          sess.ip           || '',
-      ua:          sess.ua           || '',
+      ip:          sess.ip_address    || '',
+      ua:          sess.user_agent   || '',
     };
   }
 
