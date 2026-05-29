@@ -552,8 +552,8 @@ function smokeOrders() {
     if (!orderId) throw new Error('orderId not set');
     var res = processRequest({
       service: 'orders', action: 'addLine', sessionToken: saToken,
-      params: { orderId: orderId, product_id: 'PROD001', product_name: 'Diesel',
-                quantity: 100, unit_price: 150 },
+      params: { orderId: orderId, product_id: 'PROD-AGO', product_name: 'Diesel',
+                quantity: 1000, unit_price: 150 },
     });
     if (!res.ok) throw new Error('addLine failed: ' + JSON.stringify(res.error));
     var gRes = processRequest({
@@ -632,7 +632,7 @@ function smokeOrders() {
     cancelOrderId = c1.data.order_id;
     processRequest({
       service: 'orders', action: 'addLine', sessionToken: saToken,
-      params: { orderId: cancelOrderId, product_id: 'P1', product_name: 'X', quantity: 1, unit_price: 100 },
+      params: { orderId: cancelOrderId, product_id: 'PROD-AGO', product_name: 'X', quantity: 1000, unit_price: 100 },
     });
     var sub = processRequest({
       service: 'orders', action: 'submit', sessionToken: saToken,
