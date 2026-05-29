@@ -24,7 +24,7 @@
     <div id="mfaError" style="display:none;color:#dc2626;font-size:13px;margin-bottom:10px"></div>
     <button class="btn btn-primary" id="verifyBtn" style="width:100%;justify-content:center">Verify</button>
     <p style="text-align:center;margin-top:12px;font-size:12px">
-      <a href="?page=login">Back to login</a>
+      <a href="#" id="backToLogin">Back to login</a>
     </p>
   </div>
 </div>
@@ -34,6 +34,25 @@
   var errDiv = document.getElementById('mfaError');
   var btn    = document.getElementById('verifyBtn');
   var inputs = document.querySelectorAll('#otpInputs input');
+
+  // GAS-safe page swap (window.location is blocked inside the sandbox iframe).
+  function swapTo(serverFn, arg) {
+    google.script.run
+      .withSuccessHandler(function (html) {
+        document.open(); document.write(html); document.close();
+      })
+      .withFailureHandler(function (e) {
+        errDiv.textContent = 'Failed to load page: ' + (e && e.message ? e.message : e);
+        errDiv.style.display = 'block';
+      })
+      [serverFn](arg);
+  }
+
+  var back = document.getElementById('backToLogin');
+  if (back) back.addEventListener('click', function (e) {
+    e.preventDefault();
+    swapTo('getLoginPage');
+  });
 
   inputs.forEach(function (inp, i) {
     inp.addEventListener('input', function () {
@@ -54,8 +73,12 @@
     btn.disabled = true;
     API.call('auth', 'mfaVerify', { code: code })
       .then(function (d) {
-        if (d && d.token) API.setToken(d.token);
-        window.location.href = '?page=staff';
+        var token = (d && d.token) || API.getToken();
+        if (d && d.token) {
+          API.setToken(d.token);
+          try { sessionStorage.setItem('hass_token', d.token); } catch (e) {}
+        }
+        swapTo('getStaffDashboardPage', token);
       })
       .catch(function (e) {
         errDiv.textContent = e.message || 'Invalid code.';

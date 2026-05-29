@@ -60,13 +60,39 @@
 <?!= HtmlService.createHtmlOutputFromFile('partial_audit').getContent(); ?>
 <?!= HtmlService.createHtmlOutputFromFile('partial_knowledge').getContent(); ?>
 
+<? var _stoken = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : ''; ?>
 <script>
 (function () {
   'use strict';
 
+  // Token injected server-side when this page is rendered via
+  // getStaffDashboardPage(). Falls back to a persisted token if present.
+  var SESSION_TOKEN = '<?= _stoken ?>';
+
+  // GAS-safe page swap: window.location is blocked inside the sandbox iframe,
+  // so fetch the login HTML and replace the document instead.
+  function loadLoginPage() {
+    google.script.run
+      .withSuccessHandler(function (html) {
+        document.open(); document.write(html); document.close();
+      })
+      .withFailureHandler(function () {
+        document.open();
+        document.write('<!DOCTYPE html><html><body style="font-family:sans-serif;'
+          + 'padding:40px"><p>Session ended. Please reload.</p></body></html>');
+        document.close();
+      })
+      .getLoginPage();
+  }
+  window._hassLoadLoginPage = loadLoginPage;
+
   // ── Auth guard ─────────────────────────────────────────────────
-  if (!API.loadPersistedToken()) {
-    window.location.href = '?page=login';
+  if (SESSION_TOKEN) {
+    API.setToken(SESSION_TOKEN);
+    try { sessionStorage.setItem('hass_token', SESSION_TOKEN); } catch (e) {}
+  }
+  if (!API.getToken() && !API.loadPersistedToken()) {
+    loadLoginPage();
     return;
   }
 
@@ -79,7 +105,7 @@
       initApp(me);
     })
     .catch(function () {
-      window.location.href = '?page=login';
+      loadLoginPage();
     });
 
   // ── App init ───────────────────────────────────────────────────
@@ -95,7 +121,7 @@
     // Logout.
     document.getElementById('logoutBtn').onclick = function () {
       API.logout().catch(function () {}).finally(function () {
-        window.location.href = '?page=login';
+        loadLoginPage();
       });
     };
 

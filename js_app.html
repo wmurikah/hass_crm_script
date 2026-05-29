@@ -176,7 +176,20 @@ var Router = (function () {
 /* ── Global logout handler ──────────────────────────────────────── */
 window.addEventListener('hass:logout', function () {
   Toast.error('Session expired. Please log in again.');
-  setTimeout(function () { window.location.href = '?page=login'; }, 1500);
+  // window.location is blocked in the GAS sandbox iframe; swap the document
+  // with the freshly-rendered login page instead. _hassLoadLoginPage is
+  // defined by the host page (e.g. Staffdashboard).
+  setTimeout(function () {
+    if (typeof window._hassLoadLoginPage === 'function') {
+      window._hassLoadLoginPage();
+    } else {
+      google.script.run
+        .withSuccessHandler(function (html) {
+          document.open(); document.write(html); document.close();
+        })
+        .getLoginPage();
+    }
+  }, 1500);
 });
 
 /* ── Escape HTML ────────────────────────────────────────────────── */
