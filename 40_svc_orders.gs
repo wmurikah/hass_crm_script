@@ -180,10 +180,10 @@ var Orders = (function () {
       [
         orderId, orderNumber, '',
         customerId,
-        String(params.contact_id           || ''),
-        String(params.delivery_location_id  || ''),
-        String(params.source_depot_id       || ''),
-        String(params.price_list_id         || ''),
+        params.contact_id           || null,
+        params.delivery_location_id || null,
+        params.source_depot_id      || null,
+        params.price_list_id        || null,
         params.requested_date || null,
         null, // confirmed_date
         'DRAFT', 'PENDING',
@@ -192,7 +192,7 @@ var Orders = (function () {
         String(params.special_instructions || ''),
         String(params.po_number            || ''),
         params.is_recurring ? 1 : 0,
-        String(params.recurring_schedule_id || ''),
+        params.recurring_schedule_id || null,
         ctx.session.userType,
         ctx.session.userId,
         customer.country_code,

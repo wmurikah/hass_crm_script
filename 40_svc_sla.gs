@@ -86,7 +86,7 @@ function _slaCreatePolicy_(ctx, params) {
   var priority          = String(params.priority           || 'ALL').toUpperCase();
   var responseMinutes   = parseInt(params.response_minutes,   10);
   var resolutionMinutes = parseInt(params.resolution_minutes, 10);
-  var countryCode       = String(params.country_code || '').trim();
+  var countryCode       = (params.country_code && String(params.country_code).trim()) || null;
 
   if (!entityType) throw new Errors.Validation('entity_type required.');
   if (isNaN(responseMinutes)   || responseMinutes < 0)   throw new Errors.Validation('response_minutes must be >= 0.');
@@ -207,7 +207,7 @@ function _slaCheckEntity_(ctx, params) {
       'INSERT INTO sla_breaches (breach_id, entity_type, entity_id, policy_id, breach_type, ' +
       'due_at, breached_at, country_code, created_at) VALUES (?,?,?,?,?,?,?,?,?)',
       [breachId, entityType, entityId, policy.policy_id, breachType,
-       dueAt.toISOString(), ts, row.country_code || '', ts]
+       dueAt.toISOString(), ts, row.country_code || null, ts]
     );
     Audit.log({
       actor: ctx.session.userId, action: 'SLA_BREACH_RECORDED',
