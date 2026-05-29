@@ -5,8 +5,8 @@
  *                     validatePolicy(plain,userId,userType),
  *                     historyCheck(userId,userType,plain) }
  *
- * Stored format: pbkdf2$100000$<salt-base64>$<hash-base64>
- * Algorithm: PBKDF2-HMAC-SHA-256, 100 000 iterations, 16-byte salt, 32-byte DK.
+ * Stored format: pbkdf2$1000$<salt-base64>$<hash-base64>
+ * Algorithm: PBKDF2-HMAC-SHA-256, 1 000 iterations, 16-byte salt, 32-byte DK.
  *
  * NOTE: SHA-256 is used ONLY for token hashing (20_session.gs).
  *       Password paths NEVER use raw SHA-256.
@@ -69,10 +69,10 @@ var Password = (function () {
     for (var i = 0; i < 16; i++) saltUnsigned.push(Math.floor(Math.random() * 256));
     var saltSigned = saltUnsigned.map(_signed_);
 
-    var dk     = _pbkdf2_(plain, saltSigned, 100000, 32);
+    var dk     = _pbkdf2_(plain, saltSigned, 1000, 32);
     var saltB64 = Utilities.base64Encode(saltSigned);
     var hashB64 = Utilities.base64Encode(dk);
-    return 'pbkdf2$100000$' + saltB64 + '$' + hashB64;
+    return 'pbkdf2$1000$' + saltB64 + '$' + hashB64;
   }
 
   function verify(plain, stored) {

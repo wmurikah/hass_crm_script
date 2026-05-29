@@ -102,3 +102,16 @@ function _seedAddColumnIfMissing_(tableName, columnName, columnDef) {
     Logger.log('[Seed] WARNING: could not add ' + tableName + '.' + columnName + ': ' + e.message);
   }
 }
+
+function resetSuperAdminPassword() {
+  var props = PropertiesService.getScriptProperties();
+  var email = props.getProperty('SEED_SUPERADMIN_EMAIL')
+              || 'admin@hasspetroleum.com';
+  var pwd   = props.getProperty('SMOKE_SUPERADMIN_PASSWORD') || '';
+  if (!pwd) { Logger.log('Set SMOKE_SUPERADMIN_PASSWORD first'); return; }
+  var newHash = Password.hash(pwd);
+  TursoClient.write(
+    'UPDATE users SET password_hash=? WHERE email=?', [newHash, email]
+  );
+  Logger.log('Done. New hash prefix: ' + newHash.substring(0, 20));
+}

@@ -71,7 +71,6 @@ var Session = (function () {
   function validate(token) {
     if (!token) return null;
     var tokenHash = _sha256Hex_(token);
-    var now       = new Date();
 
     var rows = TursoClient.select(
       "SELECT * FROM sessions WHERE token_hash = ? AND is_active = 1 AND expires_at > datetime('now') LIMIT 1",
@@ -80,18 +79,6 @@ var Session = (function () {
     if (!rows.length) return null;
     var sess = rows[0];
 
-    // Idle timeout check.
-    var idleMs = now - new Date(sess.last_activity_at || sess.created_at);
-    var idleLimit = _idleTimeoutMin_() * 60000;
-    if (idleMs > idleLimit) {
-      TursoClient.write(
-        'UPDATE sessions SET is_active = 0 WHERE session_id = ?',
-        [sess.session_id]
-      );
-      return null;
-    }
-
-    // Touch last_activity_at.
     try {
       TursoClient.write(
         "UPDATE sessions SET last_activity_at = datetime('now') WHERE session_id = ?",
