@@ -269,12 +269,13 @@ var Tickets = (function () {
 
     var commentId = genId('TCM');
     var now       = nowIso();
+    var actorId   = ctx.session.user_id || ctx.session.userId || '';
     TursoClient.write(
       'INSERT INTO ticket_comments ' +
       '(comment_id, ticket_id, content, is_internal, is_resolution, ' +
-      'created_by, created_by_type, created_at, updated_at) VALUES (?,?,?,?,0,?,?,?,?)',
+      'author_type, author_id, author_name, created_at) VALUES (?,?,?,?,0,?,?,?,?)',
       [commentId, ticketId, content, isInternal,
-       ctx.session.userId, ctx.session.userType, now, now]
+       'STAFF', actorId, null, now]
     );
 
     // Re-open if PENDING and customer is commenting.

@@ -227,14 +227,14 @@ var Orders = (function () {
     TursoClient.write(
       'INSERT INTO order_lines ' +
       '(line_id, order_id, product_id, product_name, quantity, unit_price, ' +
-      'discount_percent, line_subtotal, delivered_quantity, created_at, updated_at) ' +
-      'VALUES (?,?,?,?,?,?,?,?,0,?,?)',
+      'discount_percent, line_subtotal, delivered_quantity, created_at) ' +
+      'VALUES (?,?,?,?,?,?,?,?,0,?)',
       [
         lineId, orderId,
         String(line.product_id   || ''),
         String(line.product_name || ''),
         quantity, unitPrice, discount, subtotal,
-        now, now,
+        now,
       ]
     );
     return lineId;
