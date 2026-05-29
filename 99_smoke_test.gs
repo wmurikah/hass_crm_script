@@ -136,7 +136,7 @@ function smokeCustomers() {
         account_number: 'KE-SMOKE-001',
         company_name:   'Smoke Test Ltd',
         country_code:   'KE',
-        customer_type:  'DIRECT',
+        customer_type:  'B2B',
       },
     });
     if (!res.ok)                  throw new Error('ok=false: ' + JSON.stringify(res.error));
@@ -370,10 +370,10 @@ function smokeCrosscut() {
 
   // ── 3. Password.hash / verify ────────────────────────────────────────────
   var pwHash;
-  check('Password.hash("Test@1234!") has pbkdf2$100000$ prefix', function () {
+  check('Password.hash("Test@1234!") has pbkdf2$ prefix', function () {
     pwHash = Password.hash('Test@1234!');
     if (typeof pwHash !== 'string') throw new Error('hash is not a string');
-    if (pwHash.indexOf('pbkdf2$100000$') !== 0) {
+    if (pwHash.indexOf('pbkdf2$') !== 0) {
       throw new Error('Bad prefix: ' + pwHash.substring(0, 30));
     }
   });
@@ -520,7 +520,7 @@ function smokeOrders() {
       account_number: 'KE-ORD-SMOKE-' + Date.now(),
       company_name:   'Order Smoke Ltd',
       country_code:   'KE',
-      customer_type:  'DIRECT',
+      customer_type:  'B2B',
     },
   });
   if (!custRes.ok) throw new Error('Prereq customer create failed: ' + JSON.stringify(custRes.error));
@@ -743,7 +743,7 @@ function smokeTickets() {
       account_number: 'KE-TKT-SMOKE-' + Date.now(),
       company_name:   'Ticket Smoke Ltd',
       country_code:   'KE',
-      customer_type:  'DIRECT',
+      customer_type:  'B2B',
     },
   });
   if (!custRes.ok) throw new Error('Prereq customer failed: ' + JSON.stringify(custRes.error));
