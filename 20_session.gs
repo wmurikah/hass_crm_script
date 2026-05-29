@@ -32,31 +32,25 @@ var Session = (function () {
   }
 
   function create(userId, userType, role, ip, ua, countryCode) {
-    var rawToken  = uuidv4() + Date.now().toString(36);
-    var tokenHash = _sha256Hex_(rawToken);
-    var sessionId = uuidv4();
-    var now       = nowIso();
-    var idleMin   = _idleTimeoutMin_();
-    var expiresAt = addMinutes(new Date(), idleMin * 2).toISOString(); // hard expiry = 2× idle
+    var rawToken          = uuidv4() + Date.now().toString(36);
+    var tokenHash         = _sha256Hex_(rawToken);
+    var sessionId         = uuidv4();
+    var idleTimeoutMinutes = _idleTimeoutMin_();
+    var expiresAt         = addMinutes(new Date(), idleTimeoutMinutes * 2).toISOString(); // hard expiry = 2× idle
 
-    // Enforce concurrent session cap: invalidate oldest sessions over limit.
+    // Enforce concurrent session cap: invalidate all sessions for user if over limit.
     try {
       var max = _maxConcurrent_();
-      var active = TursoClient.select(
-        'SELECT session_id FROM sessions WHERE user_id = ? AND user_type = ? AND is_active = 1 ' +
-        'AND expires_at > ? ORDER BY created_at ASC',
-        [userId, userType, now]
+      var countRows = TursoClient.select(
+        'SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND user_type = ? AND is_active = 1',
+        [userId, userType]
       );
-      if (active.length >= max) {
-        var toKill = active.slice(0, active.length - max + 1);
-        toKill.forEach(function (s) {
-          try {
-            TursoClient.write(
-              'UPDATE sessions SET is_active = 0 WHERE session_id = ?',
-              [s.session_id]
-            );
-          } catch (_) {}
-        });
+      var n = countRows.length ? (countRows[0].n || 0) : 0;
+      if (n >= max) {
+        TursoClient.write(
+          'UPDATE sessions SET is_active = 0 WHERE user_id = ? AND user_type = ?',
+          [userId, userType]
+        );
       }
     } catch (e) {
       Log.warn({ service: 'Session', action: 'create', msg: 'cap check: ' + e.message });
@@ -65,11 +59,11 @@ var Session = (function () {
     TursoClient.write(
       'INSERT INTO sessions ' +
       '(session_id, user_type, user_id, token_hash, ip_address, user_agent, ' +
-      'country_code, role, is_active, expires_at, ' +
-      "last_active_at, created_at, updated_at) " +
-      "VALUES (?,?,?,?,?,?,?,?,1,?,datetime('now'),datetime('now'),datetime('now'))",
-      [sessionId, userType, userId, tokenHash, ip || '', ua || '',
-       countryCode || '', role, expiresAt]
+      'country_code, role, expires_at, idle_timeout_minutes) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [sessionId, userType, userId, tokenHash,
+       ip || null, ua || null, countryCode || null, role || null,
+       expiresAt, idleTimeoutMinutes]
     );
     return { token: rawToken, session_id: sessionId };
   }
@@ -78,17 +72,16 @@ var Session = (function () {
     if (!token) return null;
     var tokenHash = _sha256Hex_(token);
     var now       = new Date();
-    var nowStr    = now.toISOString();
 
     var rows = TursoClient.select(
-      'SELECT * FROM sessions WHERE token_hash = ? AND is_active = 1 AND expires_at > ? LIMIT 1',
-      [tokenHash, nowStr]
+      "SELECT * FROM sessions WHERE token_hash = ? AND is_active = 1 AND expires_at > datetime('now') LIMIT 1",
+      [tokenHash]
     );
     if (!rows.length) return null;
     var sess = rows[0];
 
     // Idle timeout check.
-    var idleMs = now - new Date(sess.last_active_at || sess.created_at);
+    var idleMs = now - new Date(sess.last_activity_at || sess.created_at);
     var idleLimit = _idleTimeoutMin_() * 60000;
     if (idleMs > idleLimit) {
       TursoClient.write(
@@ -98,10 +91,10 @@ var Session = (function () {
       return null;
     }
 
-    // Touch last_active_at.
+    // Touch last_activity_at.
     try {
       TursoClient.write(
-        "UPDATE sessions SET last_active_at = datetime('now'), updated_at = datetime('now') WHERE session_id = ?",
+        "UPDATE sessions SET last_activity_at = datetime('now') WHERE session_id = ?",
         [sess.session_id]
       );
     } catch (_) {}
@@ -128,10 +121,10 @@ var Session = (function () {
 
   function invalidateAllForUser(userId, userType) {
     if (!userId) return;
-    var sql  = 'UPDATE sessions SET is_active = 0 WHERE user_id = ?';
-    var args = [userId];
-    if (userType) { sql += ' AND user_type = ?'; args.push(userType); }
-    TursoClient.write(sql, args);
+    TursoClient.write(
+      'UPDATE sessions SET is_active = 0 WHERE user_id = ? AND user_type = ?',
+      [userId, userType]
+    );
   }
 
   return {
