@@ -674,17 +674,16 @@ function smokeOrders() {
   // ── 10. TZ-scoped session on KE order → NOT_FOUND ─────────────────────────
   check('10. TZ-scoped session cannot read KE order → NOT_FOUND', function () {
     if (!orderId) throw new Error('orderId not set');
-    var tzCtx = {
-      token: '', actor: 'smoke-tz-stub',
-      session: {
-        sessionId: uuidv4(), userId: 'smoke-tz-stub', userType: 'STAFF',
-        role: 'CS_AGENT', countryCode: 'TZ', ip: '127.0.0.1', ua: 'smoke-orders',
-      },
-    };
-    var threw = false; var code = '';
-    try { Orders._getHandler_(tzCtx, { orderId: orderId }); }
-    catch (e) { threw = true; code = e.code || ''; }
-    if (!threw)                    throw new Error('Expected throw');
+    // Create a COUNTRY-scoped (TZ / CS_AGENT) session for the SUPER_ADMIN user.
+    // RBAC passes via the user's wildcard permissions, but the handler's scope
+    // filter rejects the KE order, so NOT_FOUND is returned.
+    var tzToken = Session.create(saId, 'STAFF', 'CS_AGENT', '127.0.0.1', 'smoke-orders', 'TZ').token;
+    var res = processRequest({
+      service: 'orders', action: 'get', sessionToken: tzToken,
+      params: { orderId: orderId },
+    });
+    if (res.ok !== false)          throw new Error('Expected ok=false');
+    var code = res.error && res.error.code;
     if (code !== 'NOT_FOUND')      throw new Error('Expected NOT_FOUND, got: ' + code);
   });
 
@@ -895,17 +894,16 @@ function smokeTickets() {
   // ── 10. TZ-scoped session on KE ticket → NOT_FOUND ───────────────────────
   check('10. TZ-scoped session cannot read KE ticket → NOT_FOUND', function () {
     if (!ticketId) throw new Error('ticketId not set');
-    var tzCtx = {
-      token: '', actor: 'smoke-tz-stub',
-      session: {
-        sessionId: uuidv4(), userId: 'smoke-tz-stub', userType: 'STAFF',
-        role: 'CS_AGENT', countryCode: 'TZ', ip: '127.0.0.1', ua: 'smoke-tickets',
-      },
-    };
-    var threw = false; var code = '';
-    try { Tickets._getHandler_(tzCtx, { ticketId: ticketId }); }
-    catch (e) { threw = true; code = e.code || ''; }
-    if (!threw)               throw new Error('Expected throw');
+    // Create a COUNTRY-scoped (TZ / CS_AGENT) session for the SUPER_ADMIN user.
+    // RBAC passes via the user's wildcard permissions, but the handler's scope
+    // filter rejects the KE ticket, so NOT_FOUND is returned.
+    var tzToken = Session.create(saId, 'STAFF', 'CS_AGENT', '127.0.0.1', 'smoke-tickets', 'TZ').token;
+    var res = processRequest({
+      service: 'tickets', action: 'get', sessionToken: tzToken,
+      params: { ticketId: ticketId },
+    });
+    if (res.ok !== false)     throw new Error('Expected ok=false');
+    var code = res.error && res.error.code;
     if (code !== 'NOT_FOUND') throw new Error('Expected NOT_FOUND, got: ' + code);
   });
 
