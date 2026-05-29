@@ -59,7 +59,7 @@ function _usersCreate_(ctx, params) {
       String(params.lastName  || params.last_name  || ''),
       'ACTIVE',
       passwordHash,
-      String(params.countryCode || params.country_code || ''),
+      params.countryCode || params.country_code || null,
       now, now,
     ]
   );
@@ -86,6 +86,10 @@ function _usersUpdate_(ctx, params) {
                  'country_code', 'countries_access', 'reports_to'];
   var patch = { updated_at: nowIso() };
   allowed.forEach(function (k) { if (params[k] !== undefined) patch[k] = params[k]; });
+  // Optional FK columns: coerce empty/falsy values to NULL so the FK constraint passes.
+  ['team_id', 'country_code', 'reports_to'].forEach(function (k) {
+    if (patch[k] !== undefined && !patch[k]) patch[k] = null;
+  });
   if (Object.keys(patch).length <= 1) throw new Errors.Validation('No updatable fields provided.');
   Repo.update('users', userId, patch);
   Audit.log({ actor: ctx.actor || '', action: 'USER_UPDATED', entity: 'users',
