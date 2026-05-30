@@ -43,9 +43,33 @@
   var errDiv  = document.getElementById('loginError');
   var btn     = document.getElementById('loginBtn');
 
-  // If already logged in, go straight to staff dashboard.
-  if (API.loadPersistedToken()) {
-    window.location.href = '?page=staff';
+  function showError(msg) {
+    errDiv.textContent   = msg || 'Login failed. Check your credentials.';
+    errDiv.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
+  }
+
+  // GAS-safe page swap: fetch rendered HTML via google.script.run and replace
+  // the document. window.location is blocked inside the GAS sandbox iframe.
+  function swapTo(serverFn, arg) {
+    google.script.run
+      .withSuccessHandler(function (html) {
+        if (!html) { showError('Page returned empty content.'); return; }
+        document.open();
+        document.write(html);
+        document.close();
+      })
+      .withFailureHandler(function (e) {
+        showError('Failed to load page: ' + (e && e.message ? e.message : e));
+      })
+      [serverFn](arg);
+  }
+
+  // If already logged in, go straight to the staff dashboard.
+  var existing = API.loadPersistedToken();
+  if (existing) {
+    swapTo('getStaffDashboardPage', existing);
     return;
   }
 
@@ -60,18 +84,20 @@
 
     API.login(email, password)
       .then(function (data) {
-        // Check MFA requirement.
-        if (data && data.mfa_required) {
-          window.location.href = '?page=mfa-verify';
+        // Server returns mfaRequired (camelCase). Route accordingly:
+        // mode 'enroll' = first-time setup, otherwise verify an existing factor.
+        if (data && data.mfaRequired) {
+          if (data.mode === 'enroll') {
+            swapTo('getMfaEnrollPage', data.challengeId || '');
+          } else {
+            swapTo('getMfaVerifyPage', data.challengeId || '');
+          }
         } else {
-          window.location.href = '?page=staff';
+          swapTo('getStaffDashboardPage', API.getToken());
         }
       })
       .catch(function (err) {
-        errDiv.textContent  = err.message || 'Login failed. Check your credentials.';
-        errDiv.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Sign in';
+        showError(err && err.message);
       });
   });
 })();

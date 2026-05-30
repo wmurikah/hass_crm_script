@@ -65,7 +65,18 @@
     errDiv.style.display = 'none';
     btn.disabled = true;
     API.call('auth', 'mfaVerifyEnroll', { code: code })
-      .then(function () { window.location.href = '?page=staff'; })
+      .then(function (d) {
+        var token = (d && d.token) || API.getToken();
+        if (d && d.token) {
+          API.setToken(d.token);
+          try { sessionStorage.setItem('hass_token', d.token); } catch (e) {}
+        }
+        // GAS-safe page swap (window.location is blocked in the sandbox iframe).
+        google.script.run
+          .withSuccessHandler(function (html) { document.open(); document.write(html); document.close(); })
+          .withFailureHandler(function (e) { errDiv.textContent = 'Failed to load dashboard: ' + (e && e.message ? e.message : e); errDiv.style.display = 'block'; btn.disabled = false; })
+          .getStaffDashboardPage(token);
+      })
       .catch(function (e) { errDiv.textContent = e.message || 'Invalid code.'; errDiv.style.display = 'block'; btn.disabled = false; });
   });
 })();
