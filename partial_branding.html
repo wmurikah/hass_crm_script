@@ -1,0 +1,42 @@
+<script>
+Router.register('branding', function (el) {
+  // Render into the route's own container (always present); guard against the
+  // user navigating away before the async branding.get resolves.
+  el.innerHTML = '<div style="display:flex;justify-content:center;padding:40px"><span class="spinner dark"></span></div>';
+
+  API.call('branding', 'get', { scope_code: 'GLOBAL' }).then(function (b) {
+    if (Router.current() !== 'branding' || !el) return;
+    b = b || {};
+    el.innerHTML = '<div class="card card-body" style="max-width:560px">' +
+      '<div class="form-group"><label class="form-label">App Name</label>' +
+        '<input class="form-control" id="brAppName" value="' + esc(b.app_name || '') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Logo URL</label>' +
+        '<input class="form-control" id="brLogoUrl" value="' + esc(b.logo_url || '') + '"></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Primary Color</label>' +
+          '<input class="form-control" id="brPrimary" value="' + esc(b.primary_color || '#1F2A44') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Secondary Color</label>' +
+          '<input class="form-control" id="brSecondary" value="' + esc(b.secondary_color || '#B08D2A') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Accent Color</label>' +
+          '<input class="form-control" id="brAccent" value="' + esc(b.accent_color || '#FF6F00') + '"></div>' +
+      '</div>' +
+      '<div><button class="btn btn-primary" id="brSaveBtn">Save</button></div>' +
+      '</div>';
+
+    document.getElementById('brSaveBtn').onclick = function () {
+      API.call('branding', 'update', {
+        scope_code:      'GLOBAL',
+        app_name:        document.getElementById('brAppName').value.trim(),
+        logo_url:        document.getElementById('brLogoUrl').value.trim(),
+        primary_color:   document.getElementById('brPrimary').value.trim(),
+        secondary_color: document.getElementById('brSecondary').value.trim(),
+        accent_color:    document.getElementById('brAccent').value.trim(),
+      }).then(function () { Toast.success('Branding saved.'); })
+        .catch(function (e) { Toast.error(e.message); });
+    };
+  }).catch(function (e) {
+    if (!el) return;
+    el.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>';
+  });
+});
+</script>

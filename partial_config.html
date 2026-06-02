@@ -1,0 +1,63 @@
+<script>
+Router.register('config', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<button class="btn btn-primary btn-sm" id="cfgAddBtn">+ Add Key</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Key</th><th>Value</th><th>Country</th><th>Updated</th><th></th></tr></thead>' +
+      '<tbody id="cfgBody"></tbody></table></div></div>';
+
+  function load() {
+    API.call('configAdmin', 'list', {}).then(function (rows) {
+      var tbody = document.getElementById('cfgBody');
+      if (!tbody) return;
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No config keys.</div></td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (r) {
+        var cc = r.country_code || '';
+        return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
+               '<td>' + esc(cc || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
+               '<td class="actions">' +
+                 '<button class="btn btn-secondary btn-sm" onclick="cfgEditKey(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(cc) + '\')">Edit</button> ' +
+                 '<button class="btn btn-danger btn-sm" onclick="cfgDeleteKey(\'' + esc(r.config_key) + '\',\'' + esc(cc) + '\')">Delete</button>' +
+               '</td></tr>';
+      }).join('');
+    }).catch(function (e) {
+      var tbody = document.getElementById('cfgBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
+    });
+  }
+
+  document.getElementById('cfgAddBtn').onclick = function () { cfgNewKey(); };
+  load();
+});
+
+function cfgEditKey(key, value, cc) {
+  var newVal = window.prompt('New value for ' + key + ':', value);
+  if (newVal === null) return;
+  API.call('configAdmin', 'set', { config_key: key, config_value: newVal, country_code: cc })
+    .then(function () { Toast.success('Config updated.'); Router.navigate('config', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function cfgNewKey() {
+  var key = window.prompt('Config key (e.g. SESSION.IDLE_TIMEOUT_MIN):');
+  if (!key) return;
+  var val = window.prompt('Value:');
+  if (val === null) return;
+  API.call('configAdmin', 'set', { config_key: key.trim(), config_value: val })
+    .then(function () { Toast.success('Config key added.'); Router.navigate('config', {}); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function cfgDeleteKey(key, cc) {
+  Modal.confirm('Delete config key "' + key + '"?', function () {
+    API.call('configAdmin', 'delete', { config_key: key, country_code: cc })
+      .then(function () { Toast.success('Config key deleted.'); Router.navigate('config', {}); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+</script>

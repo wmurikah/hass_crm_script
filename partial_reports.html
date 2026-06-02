@@ -1,0 +1,35 @@
+<script>
+// Reports renders from the existing dashboard.summary endpoint (no new backend
+// action) — the simpler of the two options noted in the task. dashboard.summary
+// supplies customers, open tickets, pending approvals and unpaid invoices.
+// A pending payment_uploads count is not exposed by dashboard.summary; surfacing
+// it would require a dedicated reports.summary action (deferred to a backend PR).
+Router.register('reports', function (el) {
+  el.innerHTML =
+    '<div class="stat-grid" id="repStats">' +
+      '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1"><span class="spinner dark"></span></div>' +
+    '</div>' +
+    '<p style="font-size:12px;color:#9ca3af;margin-top:10px">Pending payment uploads are not included — a dedicated reports endpoint is required.</p>';
+
+  API.call('dashboard', 'summary', {}).then(function (d) {
+    var box = document.getElementById('repStats');
+    if (!box) return;
+    d = d || {};
+    box.innerHTML =
+      stat('Active Customers',  d.active_customers,  'success') +
+      stat('Open Tickets',      d.open_tickets,      'warning') +
+      stat('Pending Approvals', d.pending_approvals, 'warning') +
+      stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
+      stat('Pending Orders',    d.pending_orders,    'primary') +
+      stat('Receivables (KES)', fmtMoney(d.unpaid_amount).replace('KES ', ''), 'danger');
+  }).catch(function (e) {
+    var box = document.getElementById('repStats');
+    if (box) box.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>';
+  });
+
+  function stat(label, val, cls) {
+    return '<div class="stat-card ' + cls + '"><div class="stat-label">' + label + '</div>' +
+           '<div class="stat-value">' + (val || 0) + '</div></div>';
+  }
+});
+</script>
