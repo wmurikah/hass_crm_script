@@ -50,22 +50,32 @@ function _catalogListDepots_(ctx, params) {
 
 function _catalogListPriceLists_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var sql  = 'SELECT * FROM price_list WHERE 1=1';
+  // price_list's label/status columns differ from the legacy assumptions; discover them.
+  var nameCol   = SchemaIntrospect.pick('price_list', ['name', 'price_list_name', 'list_name', 'title']) || 'name';
+  var statusCol = SchemaIntrospect.pick('price_list', ['is_active', 'active', 'status', 'is_enabled']);
+  var sql  = 'SELECT pl.*, pl.price_id AS list_id, pl.' + nameCol + ' AS list_name';
+  if (statusCol && statusCol.toLowerCase() !== 'is_active') {
+    sql += ', pl.' + statusCol + ' AS is_active';
+  }
+  sql += ' FROM price_list pl WHERE 1=1';
   var args = [];
-  if (params.country_code) { sql += ' AND country_code = ?'; args.push(params.country_code); }
-  sql += ' AND is_active = 1 ORDER BY price_list_name';
+  if (params.country_code) { sql += ' AND pl.country_code = ?'; args.push(params.country_code); }
+  if (statusCol) {
+    sql += ' AND (pl.' + statusCol + ' = 1 OR pl.' + statusCol + " = 'ACTIVE')";
+  }
+  sql += ' ORDER BY pl.' + nameCol;
   return TursoClient.select(sql, args);
 }
 
 function _catalogGetPriceListItems_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var priceId = String(params.priceId || params.price_list_id || '');
+  var priceId = String(params.priceId || params.price_list_id || params.listId || '');
   if (!priceId) throw new Errors.Validation('priceId required.');
   var sql  = 'SELECT pli.*, p.name AS product_name, d.depot_name ' +
              'FROM price_list_items pli ' +
              'JOIN products p ON p.product_id = pli.product_id ' +
              'LEFT JOIN depots d ON d.depot_id = pli.depot_id ' +
-             'WHERE pli.price_id = ? AND pli.is_active = 1 ' +
+             'WHERE pli.price_list_id = ? ' +
              'ORDER BY p.name';
   return TursoClient.select(sql, [priceId]);
 }

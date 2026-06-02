@@ -9,16 +9,31 @@
 
 function _usersList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.view');
-  var sql  = 'SELECT user_id, email, first_name, last_name, status, country_code, team_id, last_login_at, created_at FROM users WHERE 1=1';
+  // ROLE comes from user_roles; COUNTRY from users.country_code. A user may hold
+  // several roles — surface the GLOBAL-scope role if present, else the first
+  // assigned role_code. A correlated subquery keeps one row per user.
+  var sql  = 'SELECT u.user_id, u.email, u.first_name, u.last_name, u.status, ' +
+             'u.country_code, u.country_code AS country, u.last_login_at, ' +
+             '(SELECT ur.role_code FROM user_roles ur ' +
+             '   LEFT JOIN roles r ON r.role_code = ur.role_code ' +
+             '   WHERE ur.user_id = u.user_id ' +
+             "   ORDER BY CASE WHEN UPPER(COALESCE(r.scope,'')) = 'GLOBAL' THEN 0 ELSE 1 END, " +
+             '            ur.assigned_at ' +
+             '   LIMIT 1) AS role ' +
+             'FROM users u WHERE 1=1';
   var args = [];
-  if (params.status)       { sql += ' AND status = ?';                         args.push(params.status); }
-  if (params.country_code) { sql += ' AND country_code = ?';                   args.push(params.country_code); }
+  if (params.status)       { sql += ' AND u.status = ?';       args.push(params.status); }
+  if (params.country_code) { sql += ' AND u.country_code = ?'; args.push(params.country_code); }
+  if (params.role) {
+    sql += ' AND EXISTS (SELECT 1 FROM user_roles ur2 WHERE ur2.user_id = u.user_id AND ur2.role_code = ?)';
+    args.push(params.role);
+  }
   if (params.search) {
-    sql += ' AND (LOWER(email) LIKE ? OR LOWER(first_name) LIKE ? OR LOWER(last_name) LIKE ?)';
+    sql += ' AND (LOWER(u.email) LIKE ? OR LOWER(u.first_name) LIKE ? OR LOWER(u.last_name) LIKE ?)';
     var q = '%' + String(params.search).toLowerCase() + '%';
     args.push(q, q, q);
   }
-  sql += ' ORDER BY last_name, first_name LIMIT ' + (parseInt(params.limit, 10) || 200);
+  sql += ' ORDER BY u.last_name, u.first_name LIMIT ' + (parseInt(params.limit, 10) || 200);
   if (params.offset) sql += ' OFFSET ' + parseInt(params.offset, 10);
   return TursoClient.select(sql, args);
 }

@@ -115,6 +115,67 @@ function reproLoginThenValidate() {
   return { validate: session, login: loginResp };
 }
 
+/**
+ * reproAllPages()  —  Manual verification harness (run from the Apps Script IDE).
+ *
+ * Mints a real SUPER_ADMIN session, then drives processRequest() for every
+ * staff-dashboard list/summary action that this fix repointed at the real Turso
+ * tables. Logs one line per action: ok:true with a row count, or ok:false with
+ * the error. NEVER auto-invoked — safe to leave in the project.
+ */
+function reproAllPages() {
+  var sa = TursoClient.select(
+    "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
+  );
+  if (!sa.length) { Logger.log('reproAllPages: no SUPER_ADMIN seeded — run seedAll() first'); return; }
+  var userId = sa[0].user_id;
+  var sess   = Session.create(userId, 'STAFF', 'SUPER_ADMIN', null, 'reproAllPages', null);
+  var token  = sess.token;
+
+  var calls = [
+    { service: 'invoices',  action: 'list',           params: {} },
+    { service: 'approvals', action: 'list',           params: {} },
+    { service: 'pricing',   action: 'listLists',      params: {} },
+    { service: 'catalog',   action: 'listPriceLists', params: {} },
+    { service: 'rbac',      action: 'listRoles',      params: {} },
+    { service: 'users',     action: 'list',           params: {} },
+    { service: 'documents', action: 'list',           params: {} },   // no customerId
+    { service: 'payments',  action: 'list',           params: {} },
+    { service: 'sla',       action: 'listPolicies',   params: {} },
+    { service: 'sla',       action: 'listBreaches',   params: {} },
+    { service: 'knowledge', action: 'list',           params: {} },
+    { service: 'knowledge', action: 'listCategories', params: {} },
+    { service: 'reports',   action: 'summary',        params: {} },
+  ];
+
+  var allOk = true;
+  calls.forEach(function (c) {
+    var key = c.service + '.' + c.action;
+    var resp;
+    try {
+      var p = c.params || {};
+      p.sessionToken = token;
+      resp = processRequest({ service: c.service, action: c.action, params: p });
+    } catch (e) {
+      resp = { ok: false, error: { message: 'threw: ' + e.message } };
+    }
+    if (resp && resp.ok) {
+      var d = resp.data;
+      var n = Array.isArray(d) ? d.length
+            : (d && typeof d === 'object') ? Object.keys(d).length : 0;
+      Logger.log(key + ' -> ok:true rows/keys=' + n);
+    } else {
+      allOk = false;
+      Logger.log(key + ' -> ok:false error=' +
+                 JSON.stringify(resp && resp.error ? resp.error : resp));
+    }
+  });
+
+  try { Session.invalidate(token); } catch (_) {}
+  Logger.log('reproAllPages: ' + (allOk ? 'ALL ok:true ✅' : 'SOME FAILED ❌'));
+  return { allOk: allOk };
+}
+
 // ── One-off migrations ────────────────────────────────────────────────────────
 
 /**

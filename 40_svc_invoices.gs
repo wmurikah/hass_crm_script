@@ -54,7 +54,7 @@ function _invoiceList_(ctx, params) {
   if (params.status)      { sql += ' AND i.status = ?';      args.push(params.status); }
   if (params.customer_id) { sql += ' AND i.customer_id = ?'; args.push(params.customer_id); }
   if (params.order_id)    { sql += ' AND i.order_id = ?';    args.push(params.order_id); }
-  sql += ' ORDER BY i.issued_at DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
+  sql += ' ORDER BY i.issue_date DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
   return TursoClient.select(sql, args);
 }
 
@@ -114,7 +114,7 @@ function _invoiceGenerate_(ctx, params) {
     'INSERT INTO invoices ' +
     '(invoice_id, invoice_number, order_id, customer_id, country_code, ' +
     'subtotal, tax_amount, total_amount, currency_code, ' +
-    'status, payment_status, due_date, issued_at, generated_by, created_at, updated_at) ' +
+    'status, payment_status, due_date, issue_date, generated_by, created_at, updated_at) ' +
     'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
     [
       invoiceId, invoiceNumber, orderId, order.customer_id, order.country_code,
