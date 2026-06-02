@@ -72,8 +72,14 @@ var Session = (function () {
     if (!token) return null;
     var tokenHash = _sha256Hex_(token);
 
+    // expires_at is stored as a JS ISO-8601 string ("…THH:MM:SS.sssZ"), whereas
+    // datetime('now') yields SQLite's "YYYY-MM-DD HH:MM:SS" form. Comparing the
+    // two as raw TEXT is unsafe (the 'T'/'Z' bytes make the ordering accidental),
+    // so normalise both sides through datetime() before comparing. This keeps a
+    // freshly-issued session valid and lets genuinely expired ones fall away.
     var rows = TursoClient.select(
-      "SELECT * FROM sessions WHERE token_hash = ? AND is_active = 1 AND expires_at > datetime('now') LIMIT 1",
+      "SELECT * FROM sessions WHERE token_hash = ? AND is_active = 1 " +
+      "AND datetime(expires_at) > datetime('now') LIMIT 1",
       [tokenHash]
     );
     if (!rows.length) return null;

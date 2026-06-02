@@ -377,6 +377,51 @@ function _authMfaVerify_(ctx, params) {
   throw new Errors.AppError('MFA verify for non-staff not yet implemented.');
 }
 
+/**
+ * auth.me — return the profile of the currently-authenticated user.
+ *
+ * The session has already been validated by dispatch() (this is a non-public
+ * action), so we simply read ctx.session and hydrate it from the backing table.
+ * This is a READ-ONLY identity lookup: it never creates or invalidates a
+ * session. The staff dashboard's auth guard calls this immediately after login;
+ * if it is missing the dashboard bounces straight back to the login page, which
+ * looks to the user like the brand-new session was rejected on first use.
+ */
+function _authMe_(ctx, params) {
+  var sess = ctx.session;
+  if (!sess) throw new Errors.PermissionDenied('Authentication required.');
+  var userId   = sess.userId   || sess.user_id   || '';
+  var userType = sess.userType  || sess.user_type || 'STAFF';
+
+  if (userType === 'CUSTOMER') {
+    var cRows = TursoClient.select('SELECT * FROM contacts WHERE contact_id = ? LIMIT 1', [userId]);
+    var c = cRows.length ? cRows[0] : {};
+    return {
+      userId:     userId,
+      userType:   'CUSTOMER',
+      email:      c.email      || '',
+      first_name: c.first_name || '',
+      last_name:  c.last_name  || '',
+      role:       sess.role    || 'CUSTOMER',
+      country:    c.country_code || sess.countryCode || '',
+    };
+  }
+
+  var uRows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
+  var u = uRows.length ? uRows[0] : {};
+  var roleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
+  return {
+    userId:     userId,
+    userType:   'STAFF',
+    email:      u.email      || '',
+    first_name: u.first_name || '',
+    last_name:  u.last_name  || '',
+    role:       sess.role || (roleRows.length ? roleRows[0].role_code : null),
+    country:    u.country_code || sess.countryCode || '',
+    team:       u.team_id || '',
+  };
+}
+
 function _authGetStaffInfo_(ctx, params) {
   var userId = String(params.userId || (ctx.session && ctx.session.userId) || '');
   if (!userId) throw new Errors.Validation('userId required.');
@@ -407,5 +452,6 @@ function _authGetStaffInfo_(ctx, params) {
   register({ service: 'auth', action: 'mfaEnrollStart',       permission: null,          handler: _authMfaEnrollStart_ });
   register({ service: 'auth', action: 'mfaEnrollVerify',      permission: null,          handler: _authMfaEnrollVerify_ });
   register({ service: 'auth', action: 'mfaVerify',            permission: null,          handler: _authMfaVerify_ });
+  register({ service: 'auth', action: 'me',                   permission: null,          handler: _authMe_ });
   register({ service: 'auth', action: 'getStaffInfo',         permission: 'user.view',   handler: _authGetStaffInfo_ });
 })();
