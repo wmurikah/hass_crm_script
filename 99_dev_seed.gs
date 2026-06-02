@@ -71,6 +71,50 @@ function seedAll() {
   return { userId: userId };
 }
 
+// ── Diagnostics ───────────────────────────────────────────────────────────────
+
+/**
+ * Server-side reproduction of the browser login → dashboard round-trip.
+ *
+ * Run manually from the Apps Script IDE (never auto-invoked). It performs a real
+ * login, extracts the token exactly as the client does, then validates it the
+ * same way getStaffDashboardPage() does. A NON-NULL "VALIDATE RESULT" means the
+ * session is issued and immediately usable; the recent-session dump confirms a
+ * single active row whose token_hash matches the returned token.
+ */
+function reproLoginThenValidate() {
+  // 1. Perform a real login exactly as the browser does.
+  var loginResp = processRequest({
+    service: 'auth', action: 'login',
+    params: {
+      email: 'wilberforce.murikah@hasspetroleum.com',
+      password: 'Aa1!aM$K!5EuXxSv'
+    }
+  });
+  Logger.log('LOGIN RESP: ' + JSON.stringify(loginResp));
+
+  // 2. Extract the token the SAME way the client does.
+  var token = loginResp && loginResp.data &&
+              (loginResp.data.token || loginResp.data.sessionToken);
+  Logger.log('EXTRACTED TOKEN: ' + token);
+
+  // 3. Immediately validate it the way getStaffDashboardPage does.
+  var session = Session.validate(token);
+  Logger.log('VALIDATE RESULT: ' + JSON.stringify(session));
+
+  // 4. Check active session rows for this user.
+  var rows = TursoClient.select(
+    "SELECT session_id, is_active, expires_at, last_activity_at, " +
+    "idle_timeout_minutes, token_hash FROM sessions " +
+    "WHERE user_id = (SELECT user_id FROM user_roles " +
+    "WHERE role_code='SUPER_ADMIN' LIMIT 1) ORDER BY created_at DESC LIMIT 5",
+    []
+  );
+  Logger.log('RECENT SESSIONS: ' + JSON.stringify(rows));
+
+  return { validate: session, login: loginResp };
+}
+
 // ── One-off migrations ────────────────────────────────────────────────────────
 
 /**
