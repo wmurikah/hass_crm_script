@@ -52,7 +52,8 @@ function _slugify_(text) {
 
 function _knListCategories_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var sql  = 'SELECT * FROM knowledge_categories ORDER BY name';
+  var nameCol = SchemaIntrospect.pick('knowledge_categories', ['name', 'category_name', 'title', 'label']);
+  var sql = 'SELECT * FROM knowledge_categories' + (nameCol ? (' ORDER BY ' + nameCol) : '');
   return TursoClient.select(sql, []);
 }
 
@@ -111,25 +112,41 @@ function _knUpdateCategory_(ctx, params) {
 
 function _knList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var scope  = _knowledgeScopeData_(ctx.session);
-  var sql    = 'SELECT ka.*, kc.name AS category_name FROM knowledge_articles ka ' +
-               'LEFT JOIN knowledge_categories kc ON kc.category_id = ka.category_id ' +
-               'WHERE 1=1';
-  var args   = [];
+  var scope   = _knowledgeScopeData_(ctx.session);
 
-  if (!scope.isGlobal && scope.countries.length) {
+  // Adapt to the real knowledge_articles / knowledge_categories columns.
+  var hasCat   = SchemaIntrospect.has('knowledge_articles', 'category_id');
+  var catName  = hasCat ? SchemaIntrospect.pick('knowledge_categories', ['name', 'category_name', 'title', 'label']) : null;
+  var hasCC    = SchemaIntrospect.has('knowledge_articles', 'country_code');
+  var hasStat  = SchemaIntrospect.has('knowledge_articles', 'status');
+  var titleCol = SchemaIntrospect.pick('knowledge_articles', ['title', 'name', 'subject']);
+  var sumCol   = SchemaIntrospect.pick('knowledge_articles', ['summary', 'excerpt', 'description']);
+  var orderCol = SchemaIntrospect.pick('knowledge_articles', ['created_at', 'published_at', 'updated_at', 'article_id']);
+
+  var sql  = 'SELECT ka.*' + (catName ? (', kc.' + catName + ' AS category_name') : '') +
+             ' FROM knowledge_articles ka';
+  if (catName) {
+    sql += ' LEFT JOIN knowledge_categories kc ON kc.category_id = ka.category_id';
+  }
+  sql += ' WHERE 1=1';
+  var args = [];
+
+  if (hasCC && !scope.isGlobal && scope.countries.length) {
     var ph = scope.countries.map(function () { return '?'; }).join(',');
     sql += " AND (ka.country_code IN (" + ph + ") OR ka.country_code = '' OR ka.country_code IS NULL)";
     args = args.concat(scope.countries);
   }
-  if (params.status)      { sql += ' AND ka.status = ?';      args.push(params.status); }
-  if (params.category_id) { sql += ' AND ka.category_id = ?'; args.push(params.category_id); }
-  if (params.search)      {
-    sql += ' AND (ka.title LIKE ? OR ka.summary LIKE ?)';
+  if (params.status && hasStat)      { sql += ' AND ka.status = ?';      args.push(params.status); }
+  if (params.category_id && hasCat)  { sql += ' AND ka.category_id = ?'; args.push(params.category_id); }
+  if (params.search && (titleCol || sumCol)) {
+    var clauses = [];
     var q = '%' + params.search + '%';
-    args.push(q, q);
+    if (titleCol) { clauses.push('ka.' + titleCol + ' LIKE ?'); args.push(q); }
+    if (sumCol)   { clauses.push('ka.' + sumCol   + ' LIKE ?'); args.push(q); }
+    sql += ' AND (' + clauses.join(' OR ') + ')';
   }
-  sql += ' ORDER BY ka.created_at DESC LIMIT ' + (parseInt(params.limit, 10) || 50);
+  if (orderCol) sql += ' ORDER BY ka.' + orderCol + ' DESC';
+  sql += ' LIMIT ' + (parseInt(params.limit, 10) || 50);
   return TursoClient.select(sql, args);
 }
 
