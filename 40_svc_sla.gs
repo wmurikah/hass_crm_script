@@ -62,19 +62,21 @@ function _matchSlaPolicy_(entityType, priority, countryCode) {
 
 function _slaListPolicies_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
+  // The physical table is sla_config (there is no sla_policies). The SLA
+  // Thresholds table maps priority → response_minutes / resolve_minutes.
   var scope = _slaScopeData_(ctx.session);
-  var sql   = 'SELECT * FROM sla_policies WHERE 1=1';
+  var sql   = 'SELECT sla_id, name, priority, response_minutes, resolve_minutes, ' +
+              'is_active, country_code FROM sla_config WHERE 1=1';
   var args  = [];
   if (!scope.isGlobal && scope.countries.length) {
     var ph = scope.countries.map(function () { return '?'; }).join(',');
     sql += " AND (country_code IN (" + ph + ") OR country_code = '' OR country_code IS NULL)";
     args = args.concat(scope.countries);
   }
-  if (params.entity_type) { sql += ' AND entity_type = ?'; args.push(params.entity_type); }
   if (params.is_active !== undefined) {
     sql += ' AND is_active = ?'; args.push(params.is_active ? 1 : 0);
   }
-  sql += ' ORDER BY entity_type, priority';
+  sql += ' ORDER BY priority';
   return TursoClient.select(sql, args);
 }
 
@@ -142,17 +144,19 @@ function _slaUpdatePolicy_(ctx, params) {
 
 function _slaListBreaches_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
+  // Breaches are flagged directly on tickets (sla_response_breached /
+  // sla_resolve_breached); there is no sla_breaches table.
   var scope = _slaScopeData_(ctx.session);
-  var sql   = 'SELECT * FROM sla_breaches WHERE 1=1';
+  var sql   = 'SELECT ticket_id, ticket_number, subject, priority, status, country_code, ' +
+              'sla_response_breached, sla_resolve_breached, created_at ' +
+              'FROM tickets WHERE (sla_response_breached = 1 OR sla_resolve_breached = 1)';
   var args  = [];
   if (!scope.isGlobal && scope.countries.length) {
     var ph = scope.countries.map(function () { return '?'; }).join(',');
     sql += ' AND country_code IN (' + ph + ')';
     args = args.concat(scope.countries);
   }
-  if (params.entity_type) { sql += ' AND entity_type = ?'; args.push(params.entity_type); }
-  if (params.entity_id)   { sql += ' AND entity_id = ?';   args.push(params.entity_id); }
-  if (params.breach_type) { sql += ' AND breach_type = ?'; args.push(params.breach_type); }
+  if (params.priority) { sql += ' AND priority = ?'; args.push(params.priority); }
   sql += ' ORDER BY created_at DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
   return TursoClient.select(sql, args);
 }

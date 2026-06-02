@@ -42,10 +42,11 @@ function _approvalScopeData_(session) {
 function _approvalsInbox_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.approve_low');
   var scope = _approvalScopeData_(ctx.session);
-  var sql   = "SELECT ar.*, aw.workflow_name, aw.entity_type FROM approval_requests ar " +
+  var sql   = "SELECT ar.*, aw.name AS workflow_name, aw.entity_type AS workflow_entity_type " +
+              "FROM approval_requests ar " +
               "LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id " +
               "WHERE ar.status = 'PENDING' " +
-              "AND (ar.required_approver_role = ? OR ar.required_approver_user_id = ?)";
+              "AND (ar.required_role_codes = ? OR ar.assigned_to = ?)";
   var args  = [ctx.session.role || '', ctx.session.userId];
 
   if (!scope.isGlobal && scope.countries.length) {
@@ -62,7 +63,7 @@ function _approvalsInbox_(ctx, params) {
 function _approvalsList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _approvalScopeData_(ctx.session);
-  var sql   = 'SELECT ar.*, aw.workflow_name FROM approval_requests ar ' +
+  var sql   = 'SELECT ar.*, aw.name AS workflow_name FROM approval_requests ar ' +
               'LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id WHERE 1=1';
   var args  = [];
   if (!scope.isGlobal && scope.countries.length) {
@@ -84,7 +85,7 @@ function _approvalsGet_(ctx, params) {
   var requestId = String(params.requestId || '');
   if (!requestId) throw new Errors.Validation('requestId required.');
   var rows = TursoClient.select(
-    'SELECT ar.*, aw.workflow_name FROM approval_requests ar ' +
+    'SELECT ar.*, aw.name AS workflow_name FROM approval_requests ar ' +
     'LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id ' +
     'WHERE ar.request_id = ? LIMIT 1',
     [requestId]
@@ -116,19 +117,19 @@ function _approvalsApprove_(ctx, params) {
   if (ar.status !== 'PENDING') throw new Errors.Validation('Approval request is not PENDING.');
 
   // Check caller is an eligible approver.
-  var eligible = (ar.required_approver_user_id === ctx.session.userId) ||
-                 Rbac.userHasPermission(ctx.session.userId, ar.required_approver_role);
+  var eligible = (ar.assigned_to === ctx.session.userId) ||
+                 Rbac.userHasPermission(ctx.session.userId, ar.required_role_codes);
   if (!eligible) throw new Errors.PermissionDenied('Not an eligible approver for this request.');
 
   // SoD: approver must not be the creator.
-  if (ar.created_by && ar.created_by === ctx.session.userId) {
+  if (ar.submitted_by && ar.submitted_by === ctx.session.userId) {
     throw new Errors.PermissionDenied('Approval creator cannot approve their own request.');
   }
 
   var now = nowIso();
   TursoClient.write(
-    'UPDATE approval_requests SET status = ?, approver_user_id = ?, approved_at = ?, ' +
-    'comment = ?, updated_at = ? WHERE request_id = ?',
+    'UPDATE approval_requests SET status = ?, approved_by = ?, approved_at = ?, ' +
+    'comments = ?, updated_at = ? WHERE request_id = ?',
     ['APPROVED', ctx.session.userId, now, comment, now, requestId]
   );
   Audit.log({
@@ -157,17 +158,17 @@ function _approvalsReject_(ctx, params) {
   }
   if (ar.status !== 'PENDING') throw new Errors.Validation('Approval request is not PENDING.');
 
-  var eligible = (ar.required_approver_user_id === ctx.session.userId) ||
-                 Rbac.userHasPermission(ctx.session.userId, ar.required_approver_role);
+  var eligible = (ar.assigned_to === ctx.session.userId) ||
+                 Rbac.userHasPermission(ctx.session.userId, ar.required_role_codes);
   if (!eligible) throw new Errors.PermissionDenied('Not an eligible approver for this request.');
-  if (ar.created_by && ar.created_by === ctx.session.userId) {
+  if (ar.submitted_by && ar.submitted_by === ctx.session.userId) {
     throw new Errors.PermissionDenied('Approval creator cannot reject their own request.');
   }
 
   var now = nowIso();
   TursoClient.write(
-    'UPDATE approval_requests SET status = ?, approver_user_id = ?, approved_at = ?, ' +
-    'reason = ?, comment = ?, updated_at = ? WHERE request_id = ?',
+    'UPDATE approval_requests SET status = ?, rejected_by = ?, rejected_at = ?, ' +
+    'rejection_reason = ?, comments = ?, updated_at = ? WHERE request_id = ?',
     ['REJECTED', ctx.session.userId, now, reason, String(params.comment || ''), now, requestId]
   );
   Audit.log({

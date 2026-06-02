@@ -41,20 +41,68 @@ var Documents = (function () {
     return cc;
   }
 
-  // ── list ─────────────────────────────────────────────────────────────────────
+  // ── country scope (for unfiltered listing) ────────────────────────────────────
 
+  function _scopeData_(session) {
+    if (!session) return { isGlobal: false, countries: [] };
+    var isGlobal = false;
+    try {
+      var r = TursoClient.select(
+        'SELECT scope FROM roles WHERE role_code = ? LIMIT 1', [session.role || '']
+      );
+      isGlobal = r.length && String(r[0].scope || '').toUpperCase() === 'GLOBAL';
+    } catch (_) {}
+    if (isGlobal) return { isGlobal: true, countries: [] };
+    var countries = [String(session.countryCode || '').trim()].filter(Boolean);
+    try {
+      var u = TursoClient.select(
+        'SELECT countries_access FROM users WHERE user_id = ? LIMIT 1', [session.userId]
+      );
+      if (u.length && u[0].countries_access) {
+        String(u[0].countries_access).split(',').forEach(function (c) {
+          var t = c.trim();
+          if (t && countries.indexOf(t) === -1) countries.push(t);
+        });
+      }
+    } catch (_) {}
+    return { isGlobal: false, countries: countries };
+  }
+
+  // ── list ─────────────────────────────────────────────────────────────────────
+  //
+  // KYC Documents page calls documents.list with no customerId → return all
+  // documents within the caller's country scope. A specific customerId narrows
+  // to that customer (after the existing per-customer scope check).
   function _list_(ctx, params) {
     Rbac.requirePermission(ctx.session, 'customer.view');
-    var customerId = String(params.customerId || '');
-    if (!customerId) throw new Errors.Validation('customerId required.');
-    _scopeCustomer_(ctx.session, customerId);
+    var customerId = String(params.customerId || params.customer_id || '');
 
-    var sql  = 'SELECT * FROM documents WHERE customer_id = ?';
-    var args = [customerId];
-    if (params.document_type) { sql += ' AND document_type = ?'; args.push(params.document_type); }
-    if (params.status)         { sql += ' AND status = ?';        args.push(params.status); }
-    sql += ' ORDER BY created_at DESC';
-    return TursoClient.select(sql, args);
+    if (customerId) {
+      _scopeCustomer_(ctx.session, customerId);
+      var sql  = 'SELECT d.*, c.country_code FROM documents d ' +
+                 'LEFT JOIN customers c ON c.customer_id = d.customer_id ' +
+                 'WHERE d.customer_id = ?';
+      var args = [customerId];
+      if (params.document_type) { sql += ' AND d.document_type = ?'; args.push(params.document_type); }
+      if (params.status)        { sql += ' AND d.status = ?';        args.push(params.status); }
+      sql += ' ORDER BY d.issue_date DESC';
+      return TursoClient.select(sql, args);
+    }
+
+    var scope = _scopeData_(ctx.session);
+    var sql2  = 'SELECT d.*, c.country_code FROM documents d ' +
+                'LEFT JOIN customers c ON c.customer_id = d.customer_id WHERE 1=1';
+    var args2 = [];
+    if (!scope.isGlobal) {
+      if (!scope.countries.length) return [];
+      var ph = scope.countries.map(function () { return '?'; }).join(',');
+      sql2 += ' AND c.country_code IN (' + ph + ')';
+      args2 = args2.concat(scope.countries);
+    }
+    if (params.document_type) { sql2 += ' AND d.document_type = ?'; args2.push(params.document_type); }
+    if (params.status)        { sql2 += ' AND d.status = ?';        args2.push(params.status); }
+    sql2 += ' ORDER BY d.issue_date DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
+    return TursoClient.select(sql2, args2);
   }
 
   // ── get ──────────────────────────────────────────────────────────────────────
