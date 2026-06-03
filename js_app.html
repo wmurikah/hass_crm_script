@@ -198,4 +198,18 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+/* ── Branding ───────────────────────────────────────────────────── */
+function applyBranding(b) {
+  if (!b) return;
+  var r = document.documentElement.style;
+  if (b.primary_color)   r.setProperty('--clr-primary', b.primary_color);
+  if (b.secondary_color) r.setProperty('--clr-gold',    b.secondary_color);
+  if (b.accent_color)    r.setProperty('--clr-accent',  b.accent_color);
+  if (b.app_name) {
+    document.querySelectorAll('.sidebar-logo, .login-title')
+      .forEach(function(el){ el.textContent = b.app_name; });
+  }
+}
+window.applyBranding = applyBranding;
 </script>
