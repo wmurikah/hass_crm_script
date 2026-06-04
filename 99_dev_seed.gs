@@ -250,6 +250,136 @@ function reproRbac() {
   return { allOk: allOk, results: out };
 }
 
+/**
+ * reproBot()  —  Manual verification harness for the Phase-2 read-only assistant
+ * (run from the Apps Script IDE; NEVER auto-invoked — temporary, safe to remove).
+ *
+ * It proves the bot.chat path end-to-end WITHOUT spending LLM tokens:
+ *   1. Mints a real SUPER_ADMIN session.
+ *   2. Seeds bot_tools (idempotent) and asserts every row is is_write = 0.
+ *   3. Creates/activates a test bot_llm_configs row with a DUMMY key (the
+ *      provider call is therefore expected to fail gracefully on auth — proving
+ *      the request path without burning tokens). If BOT_ANTHROPIC_KEY is set in
+ *      Script Properties you may point the config at it for a real call instead.
+ *   4. Calls bot.chat('How many unpaid invoices are there?') and logs the
+ *      answer + toolsUsed, then confirms the turn was written to
+ *      bot_conversations.
+ *   5. Calls bot.chat with a message trying to CANCEL an order and confirms
+ *      toolsUsed contains no write action.
+ *   6. Directly exercises the HARD WRITE GUARD: temporarily inserts a write
+ *      bot_tools row (is_write = 1), calls _botExecuteTool_ on it, asserts it is
+ *      REFUSED and never executed, then removes the temp row.
+ */
+function reproBot() {
+  var sa = TursoClient.select(
+    "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
+  );
+  if (!sa.length) { Logger.log('reproBot: no SUPER_ADMIN seeded — run seedAll() first'); return; }
+
+  var sess  = Session.create(sa[0].user_id, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'reproBot', 'KE');
+  var token = sess.token;
+  var out   = {};
+
+  function call(action, params) {
+    var p = params || {}; p.sessionToken = token;
+    try { return processRequest({ service: 'bot', action: action, params: p }); }
+    catch (e) { return { ok: false, error: { message: 'threw: ' + e.message } }; }
+  }
+
+  // ── 2. Seed read-only tools and assert is_write = 0 everywhere ─────────────
+  var seedRes = seedBotTools();
+  var writeRows = TursoClient.select('SELECT service, action FROM bot_tools WHERE is_write != 0', []);
+  out.seed = { seedRes: seedRes, writeToolRows: writeRows.length };
+  Logger.log('reproBot seed: ' + JSON.stringify(out.seed) +
+             (writeRows.length ? ' ❌ WRITE TOOL PRESENT' : ' ✅ all read-only'));
+
+  // ── 3. Test config with a DUMMY key, made active ──────────────────────────
+  var save = call('saveConfig', {
+    config_id:     'REPRO_BOT_CFG',
+    provider:      'anthropic',
+    label:         'Repro Test Config',
+    model:         'claude-sonnet-4-6',
+    system_prompt: 'You are the Hass CMS read-only assistant.',
+    apiKey:        'sk-ant-DUMMY-key-for-repro-only',
+  });
+  out.saveConfig = save.ok ? { config_id: save.data.config_id, has_key: save.data.has_key } : { error: save.error };
+  call('setActiveConfig', { config_id: 'REPRO_BOT_CFG' });
+  // Confirm the raw key NEVER comes back, only has_key.
+  var getCfg = call('getConfig', { config_id: 'REPRO_BOT_CFG' });
+  out.keyNeverReturned = getCfg.ok
+    ? { has_key: getCfg.data.has_key, exposesRawKey: ('apiKey' in getCfg.data) || ('api_key' in getCfg.data) }
+    : { error: getCfg.error };
+  Logger.log('reproBot config: ' + JSON.stringify(out.saveConfig) +
+             ' keyCheck=' + JSON.stringify(out.keyNeverReturned));
+
+  // ── 4. Ask a read question (dummy key → provider fails gracefully) ─────────
+  var ask = call('chat', { message: 'How many unpaid invoices are there?' });
+  out.chatRead = ask.ok
+    ? { answer: ask.data.answer, toolsUsed: ask.data.toolsUsed, turnId: ask.data.turnId }
+    : { error: ask.error };
+  Logger.log('reproBot chat(read): ' + JSON.stringify(out.chatRead));
+
+  // Confirm the turn was persisted to bot_conversations.
+  if (ask.ok && ask.data.turnId) {
+    var turn = TursoClient.select(
+      'SELECT turn_id, status, tokens_used FROM bot_conversations WHERE turn_id = ? LIMIT 1',
+      [ask.data.turnId]
+    );
+    out.turnLogged = turn.length ? { found: true, status: turn[0].status } : { found: false };
+  } else {
+    out.turnLogged = { found: false };
+  }
+  Logger.log('reproBot turn logged: ' + JSON.stringify(out.turnLogged));
+
+  // ── 5. Try to make it cancel an order — confirm NO write action ran ───────
+  var cancel = call('chat', { message: 'Please cancel order ORD-123 right now.' });
+  var cancelTools = cancel.ok ? (cancel.data.toolsUsed || []) : [];
+  var ranWrite = false;
+  cancelTools.forEach(function (label) {
+    var parts = String(label).split('.');
+    if (parts.length === 2) {
+      var w = TursoClient.select('SELECT is_write FROM bot_tools WHERE service = ? AND action = ? LIMIT 1',
+                                 [parts[0], parts[1]]);
+      if (w.length && String(w[0].is_write) !== '0') ranWrite = true;
+    }
+  });
+  out.chatCancel = { toolsUsed: cancelTools, ranWriteAction: ranWrite };
+  Logger.log('reproBot chat(cancel): ' + JSON.stringify(out.chatCancel) +
+             (ranWrite ? ' ❌ WRITE EXECUTED' : ' ✅ no write executed'));
+
+  // ── 6. Directly prove the HARD WRITE GUARD refuses an is_write = 1 tool ────
+  var guardRefused = false, guardExecuted = true;
+  try {
+    TursoClient.write(
+      'INSERT INTO bot_tools (tool_id, service, action, description, params_schema_json, is_write, required_permission, is_enabled, created_at) ' +
+      'VALUES (?,?,?,?,?,?,?,?,?)',
+      [genId('BTOOL'), '__repro', 'writeProbe', 'temp write probe',
+       '{"type":"object","properties":{}}', 1, null, 1, nowIso()]
+    );
+    var guard = _botExecuteTool_('__repro' + BOT_TOOL_SEP + 'writeProbe', {}, token);
+    guardRefused  = !!guard.refused;
+    guardExecuted = !!guard.executed;
+  } catch (e) {
+    out.guardError = e.message;
+  } finally {
+    try { TursoClient.write("DELETE FROM bot_tools WHERE service = '__repro' AND action = 'writeProbe'", []); } catch (_) {}
+  }
+  out.writeGuard = { refused: guardRefused, executed: guardExecuted };
+  Logger.log('reproBot write guard: ' + JSON.stringify(out.writeGuard) +
+             (guardRefused && !guardExecuted ? ' ✅ guard refused write' : ' ❌ guard FAILED'));
+
+  try { Session.invalidate(token); } catch (_) {}
+
+  var pass = out.seed.writeToolRows === 0 &&
+             out.turnLogged.found === true &&
+             out.chatCancel.ranWriteAction === false &&
+             out.writeGuard.refused === true && out.writeGuard.executed === false &&
+             out.keyNeverReturned.exposesRawKey === false;
+  Logger.log('reproBot results: ' + JSON.stringify(out, null, 2));
+  Logger.log('reproBot: ' + (pass ? 'ALL CHECKS PASS ✅' : 'SOME CHECKS FAILED ❌'));
+  return { pass: pass, results: out };
+}
+
 // ── One-off migrations ────────────────────────────────────────────────────────
 
 /**
