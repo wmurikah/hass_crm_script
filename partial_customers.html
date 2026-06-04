@@ -14,20 +14,21 @@ Router.register('customers', function (el) {
     '<div id="custPager" style="padding:8px 16px"></div></div>';
 
   function load() {
+    setHTML('custBody', loadingRow(7));
     var params = { limit: perPage };
     if (searchQ) params.search = searchQ;
     var s = document.getElementById('custStatus').value;
     if (s) params.status = s;
     API.call('customers', 'list', params).then(function (rows) {
-      var tbody = document.getElementById('custBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No customers found.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
-        return '<tr><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
+      if (!rows.length) { setHTML('custBody', emptyRow(7, 'No customers found.')); return; }
+      setHTML('custBody', rows.map(function (r) {
+        var cid = esc(r.customer_id);
+        return '<tr style="cursor:pointer" onclick="viewCustomer(\'' + cid + '\')"><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
                '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
-               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="viewCustomer(\'' + esc(r.customer_id) + '\')">View</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('custBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button></td></tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('custSearch').oninput = function () { searchQ = this.value; load(); };
@@ -50,6 +51,8 @@ function viewCustomer(id) {
             '<dt style="color:#6b7280">Credit Limit</dt><dd>' + fmtMoney(c.credit_limit, c.currency_code) + '</dd>' +
             '<dt style="color:#6b7280">Created</dt><dd>' + fmtDate(c.created_at) + '</dd>' +
             '</dl>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              '<button class="btn btn-primary btn-sm" onclick="Modal.close();goRoute(\'contacts\',{customerId:\'' + esc(c.customer_id) + '\'})">View Contacts</button>',
     });
   }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
 }

@@ -9,12 +9,12 @@ Router.register('payments', function (el) {
       '<tbody id="payBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('payBody', loadingRow(8));
     var s = document.getElementById('payStatus').value;
     // List from audit log events as proxy for payment upload listing.
     API.call('auditLog', 'list', { entity_type: 'payment_uploads', limit: 50 }).then(function (rows) {
-      var tbody = document.getElementById('payBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No payment records.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('payBody', emptyRow(8, 'No payment records.')); return; }
+      setHTML('payBody', rows.map(function (r) {
         var after = {};
         try { after = JSON.parse(r.after_json || '{}'); } catch (_) {}
         return '<tr><td style="font-size:11px">' + esc(r.entity_id) + '</td>' +
@@ -25,8 +25,8 @@ Router.register('payments', function (el) {
                '<td>' + statusBadge(after.status || r.action.replace('PAYMENT_','')) + '</td>' +
                '<td>' + fmtDate(r.created_at) + '</td>' +
                '<td><button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('payBody').innerHTML = '<tr><td colspan="8" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+      }).join(''));
+    }).catch(function (e) { setHTML('payBody', errorRow(8, e, load)); });
   }
 
   document.getElementById('payStatus').onchange = load;

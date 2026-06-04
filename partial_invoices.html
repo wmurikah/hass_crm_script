@@ -10,21 +10,22 @@ Router.register('invoices', function (el) {
       '<tbody id="invBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('invBody', loadingRow(7));
     var params = { limit: 50 };
     var s = document.getElementById('invStatus').value;
     var p = document.getElementById('invPayStatus').value;
     if (s) params.status = s;
     if (p) params.payment_status = p;
     API.call('invoices', 'list', params).then(function (rows) {
-      var tbody = document.getElementById('invBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No invoices.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
-        return '<tr><td>' + esc(r.invoice_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
+      if (!rows.length) { setHTML('invBody', emptyRow(7, 'No invoices.')); return; }
+      setHTML('invBody', rows.map(function (r) {
+        var iid = esc(r.invoice_id);
+        return '<tr style="cursor:pointer" onclick="viewInvoice(\'' + iid + '\')"><td>' + esc(r.invoice_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
                '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td><td>' + fmtDate(r.due_date) + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + statusBadge(r.payment_status) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="viewInvoice(\'' + esc(r.invoice_id) + '\')">View</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('invBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewInvoice(\'' + iid + '\')">View</button></td></tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('invBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('invStatus').onchange = load;

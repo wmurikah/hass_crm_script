@@ -1,49 +1,72 @@
 <script>
 Router.register('dashboard', function (el) {
   el.innerHTML =
-    '<div class="stat-grid" id="dashStats"></div>' +
+    '<div class="stat-grid" id="dashStats">' + spinnerHTML(30) + '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
       '<div class="card"><div class="card-header"><span class="card-title">Recent Activity</span></div>' +
-        '<div class="card-body" id="dashFeed" style="max-height:320px;overflow-y:auto"></div></div>' +
+        '<div class="card-body" id="dashFeed" style="max-height:320px;overflow-y:auto">' + spinnerHTML(20) + '</div></div>' +
       '<div class="card"><div class="card-header"><span class="card-title">Orders (30 days)</span></div>' +
-        '<div class="card-body" id="dashOrders"></div></div>' +
+        '<div class="card-body" id="dashOrders">' + spinnerHTML(20) + '</div></div>' +
     '</div>';
 
-  API.call('dashboard', 'summary', {}).then(function (d) {
-    document.getElementById('dashStats').innerHTML =
-      stat('Open Tickets',      d.open_tickets,      'warning') +
-      stat('Pending Orders',    d.pending_orders,    'primary') +
-      stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
-      stat('Pending Approvals', d.pending_approvals, 'warning') +
-      stat('Active Customers',  d.active_customers,  'success') +
-      stat('Receivables (KES)', fmtMoney(d.unpaid_amount).replace('KES ',''), 'danger');
-  }).catch(function (e) { document.getElementById('dashStats').innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
-
-  API.call('dashboard', 'activityFeed', { limit: 20 }).then(function (rows) {
-    var feed = document.getElementById('dashFeed');
-    if (!rows.length) { feed.innerHTML = '<p style="color:#9ca3af;font-size:13px">No recent activity.</p>'; return; }
-    feed.innerHTML = rows.map(function (r) {
-      return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
-             '<span style="color:#6b7280">' + fmtDateTime(r.created_at) + '</span> ' +
-             '<strong>' + esc(r.action) + '</strong> on ' + esc(r.entity_type) +
-             ' by ' + esc(r.actor_id) + '</div>';
-    }).join('');
-  }).catch(function () {});
-
-  API.call('dashboard', 'ordersPulse', { days: 30 }).then(function (rows) {
-    var el2 = document.getElementById('dashOrders');
-    if (!rows.length) { el2.innerHTML = '<p style="color:#9ca3af;font-size:13px">No data.</p>'; return; }
-    var max = rows.reduce(function (m, r) { return Math.max(m, r.total_orders); }, 1);
-    el2.innerHTML = '<div style="display:flex;align-items:flex-end;gap:2px;height:80px">' +
-      rows.map(function (r) {
-        var h = Math.max(4, Math.round((r.total_orders / max) * 76));
-        return '<div title="' + r.day + ': ' + r.total_orders + ' orders" style="flex:1;background:#1a56db;height:' + h + 'px;border-radius:2px 2px 0 0;min-width:4px"></div>';
-      }).join('') + '</div>' +
-      '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + rows[0].day + ' → ' + rows[rows.length-1].day + '</div>';
-  }).catch(function () {});
-
-  function stat(label, val, cls) {
-    return '<div class="stat-card ' + cls + '"><div class="stat-label">' + label + '</div><div class="stat-value">' + (val || 0) + '</div></div>';
+  // Each loader uses setHTML so a stale callback (user navigated away before
+  // the API resolved) no-ops instead of throwing "Cannot set properties of
+  // null". Router.current() keeps us from painting a previous page's data.
+  function loadStats() {
+    setHTML('dashStats', spinnerHTML(30));
+    API.call('dashboard', 'summary', {}).then(function (d) {
+      if (Router.current() !== 'dashboard') return;
+      setHTML('dashStats',
+        stat('Open Tickets',      d.open_tickets,      'warning', 'tickets')   +
+        stat('Pending Orders',    d.pending_orders,    'primary', 'orders')    +
+        stat('Unpaid Invoices',   d.unpaid_invoices,   'danger',  'invoices')  +
+        stat('Pending Approvals', d.pending_approvals, 'warning', 'approvals') +
+        stat('Active Customers',  d.active_customers,  'success', 'customers') +
+        stat('Receivables (KES)', fmtMoney(d.unpaid_amount).replace('KES ',''), 'danger', 'invoices'));
+    }).catch(function (e) {
+      setHTML('dashStats', '<div style="grid-column:1/-1">' + errorCard(e, loadStats) + '</div>');
+    });
   }
+
+  function loadFeed() {
+    setHTML('dashFeed', spinnerHTML(20));
+    API.call('dashboard', 'activityFeed', { limit: 20 }).then(function (rows) {
+      if (Router.current() !== 'dashboard') return;
+      if (!rows.length) { setHTML('dashFeed', '<div class="empty-state">No recent activity.</div>'); return; }
+      setHTML('dashFeed', rows.map(function (r) {
+        return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
+               '<span style="color:#6b7280">' + fmtDateTime(r.created_at) + '</span> ' +
+               '<strong>' + esc(r.action) + '</strong> on ' + esc(r.entity_type) +
+               ' by ' + esc(r.actor_id) + '</div>';
+      }).join(''));
+    }).catch(function (e) { setHTML('dashFeed', errorCard(e, loadFeed)); });
+  }
+
+  function loadOrders() {
+    setHTML('dashOrders', spinnerHTML(20));
+    API.call('dashboard', 'ordersPulse', { days: 30 }).then(function (rows) {
+      if (Router.current() !== 'dashboard') return;
+      if (!rows.length) { setHTML('dashOrders', '<div class="empty-state">No order data.</div>'); return; }
+      var max = rows.reduce(function (m, r) { return Math.max(m, r.total_orders); }, 1);
+      setHTML('dashOrders', '<div style="display:flex;align-items:flex-end;gap:2px;height:80px">' +
+        rows.map(function (r) {
+          var h = Math.max(4, Math.round((r.total_orders / max) * 76));
+          return '<div title="' + r.day + ': ' + r.total_orders + ' orders" style="flex:1;background:var(--clr-primary);height:' + h + 'px;border-radius:2px 2px 0 0;min-width:4px"></div>';
+        }).join('') + '</div>' +
+        '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + rows[0].day + ' → ' + rows[rows.length-1].day + '</div>');
+    }).catch(function (e) { setHTML('dashOrders', errorCard(e, loadOrders)); });
+  }
+
+  // Stat cards are drill-downs: clicking navigates to the relevant list.
+  function stat(label, val, cls, route) {
+    return '<div class="stat-card ' + cls + '" style="cursor:pointer" ' +
+           'onclick="goRoute(\'' + route + '\')" title="View ' + esc(label) + '">' +
+           '<div class="stat-label">' + label + '</div>' +
+           '<div class="stat-value">' + (val || 0) + '</div></div>';
+  }
+
+  loadStats();
+  loadFeed();
+  loadOrders();
 });
 </script>

@@ -31,32 +31,101 @@ var API = (function () {
     return null;
   }
 
+  // ── Retry policy ────────────────────────────────────────────────
+  // Codes that represent TRANSIENT failures and are safe to retry.
+  // (The withFailureHandler network/timeout/quota path surfaces as
+  //  CLIENT_ERROR, which is also retryable.)
+  var _RETRYABLE = { CLIENT_ERROR: 1, RATE_LIMITED: 1, INTEGRATION_ERROR: 1 };
+  // Codes that are deterministic / authoritative — NEVER retry these; they
+  // will not change on a second attempt and (for the session ones) must
+  // bounce the user immediately.
+  var _NON_RETRYABLE = {
+    NO_SESSION: 1, SESSION_EXPIRED: 1, PERMISSION_DENIED: 1, FORBIDDEN: 1,
+    VALIDATION: 1, NOT_FOUND: 1, CONFLICT: 1,
+  };
+  // Idempotency guard: any action whose name begins with one of these verbs
+  // is a WRITE. Auto-retrying a write risks a double-insert / double-mutation,
+  // so writes default to retries=0 — they only retry when the caller EXPLICITLY
+  // passes opts.retries. Read actions (list/get/search/summary/inbox/me/…)
+  // are safe to retry and do so by default.
+  var _WRITE_PREFIXES = [
+    'create', 'update', 'delete', 'submit', 'approve', 'reject', 'assign',
+    'cancel', 'dispatch', 'upload', 'setRoles', 'set', 'generate',
+  ];
+
+  function _isWriteAction(action) {
+    var a = String(action || '');
+    for (var i = 0; i < _WRITE_PREFIXES.length; i++) {
+      if (a.indexOf(_WRITE_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  function _isRetryable(err) {
+    if (!err) return false;
+    var code = err.code;
+    if (_NON_RETRYABLE[code]) return false;
+    return !!_RETRYABLE[code];
+  }
+
   /**
-   * call(service, action, params) → Promise<data>
+   * call(service, action, params, opts) → Promise<data>
    * Rejects with { code, message } on API-level errors.
+   *
+   * Retries TRANSIENT failures only (network/timeout/quota → CLIENT_ERROR,
+   * plus RATE_LIMITED / INTEGRATION_ERROR) with exponential backoff + jitter,
+   * and fails fast on authoritative errors (NO_SESSION, SESSION_EXPIRED,
+   * PERMISSION_DENIED, FORBIDDEN, VALIDATION, NOT_FOUND, CONFLICT).
+   *
+   * opts = { retries, baseDelay } — per-call override.
+   *   • Reads default to 2 retries (3 attempts total).
+   *   • Writes default to 0 retries (idempotency guard) UNLESS opts.retries
+   *     is explicitly supplied by the caller.
    */
-  function call(service, action, params) {
+  function call(service, action, params, opts) {
+    opts = opts || {};
+    var explicitRetries = (opts.retries !== undefined && opts.retries !== null);
+    var maxRetries = explicitRetries
+      ? opts.retries
+      : (_isWriteAction(action) ? 0 : 2);
+    var baseDelay = opts.baseDelay || 600;
+
     var payload = Object.assign({}, params || {});
     if (_token) payload.sessionToken = _token;
-    return new Promise(function (resolve, reject) {
-      google.script.run
-        .withSuccessHandler(function (result) {
-          if (result && result.ok === false) {
-            var err = result.error || {};
-            if (err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED') {
-              _clearToken();
-              window.dispatchEvent(new CustomEvent('hass:logout', { detail: err }));
+
+    function attempt(n) {
+      return new Promise(function (resolve, reject) {
+        google.script.run
+          .withSuccessHandler(function (result) {
+            if (result && result.ok === false) {
+              var err = result.error || {};
+              // Session loss: clear the token and trigger logout IMMEDIATELY
+              // (no retry, no backoff delay on the redirect path).
+              if (err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED') {
+                _clearToken();
+                window.dispatchEvent(new CustomEvent('hass:logout', { detail: err }));
+              }
+              reject(err);
+            } else {
+              resolve(result && result.data !== undefined ? result.data : result);
             }
-            reject(err);
-          } else {
-            resolve(result && result.data !== undefined ? result.data : result);
-          }
-        })
-        .withFailureHandler(function (e) {
-          reject({ code: 'CLIENT_ERROR', message: String(e && e.message ? e.message : e) });
-        })
-        .processRequest({ service: service, action: action, params: payload });
-    });
+          })
+          .withFailureHandler(function (e) {
+            // Network / timeout / quota — transient by nature.
+            reject({ code: 'CLIENT_ERROR', message: String(e && e.message ? e.message : e) });
+          })
+          .processRequest({ service: service, action: action, params: payload });
+      }).catch(function (err) {
+        if (n < maxRetries && _isRetryable(err)) {
+          var delay = baseDelay * Math.pow(2, n) + Math.floor(Math.random() * 250);
+          return new Promise(function (res) { setTimeout(res, delay); })
+            .then(function () { return attempt(n + 1); });
+        }
+        return Promise.reject(err);
+      });
+    }
+
+    return attempt(0);
   }
 
   /** auth.login — persists token on success */

@@ -9,14 +9,10 @@ Router.register('config', function (el) {
       '<tbody id="cfgBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('cfgBody', loadingRow(5));
     API.call('configAdmin', 'list', {}).then(function (rows) {
-      var tbody = document.getElementById('cfgBody');
-      if (!tbody) return;
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No config keys.</div></td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('cfgBody', emptyRow(5, 'No config keys.')); return; }
+      setHTML('cfgBody', rows.map(function (r) {
         var cc = r.country_code || '';
         return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
                '<td>' + esc(cc || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
@@ -24,11 +20,8 @@ Router.register('config', function (el) {
                  '<button class="btn btn-secondary btn-sm" onclick="cfgEditKey(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(cc) + '\')">Edit</button> ' +
                  '<button class="btn btn-danger btn-sm" onclick="cfgDeleteKey(\'' + esc(r.config_key) + '\',\'' + esc(cc) + '\')">Delete</button>' +
                '</td></tr>';
-      }).join('');
-    }).catch(function (e) {
-      var tbody = document.getElementById('cfgBody');
-      if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('cfgBody', errorRow(5, e, load)); });
   }
 
   document.getElementById('cfgAddBtn').onclick = function () { cfgNewKey(); };

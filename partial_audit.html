@@ -36,15 +36,11 @@ Router.register('audit', function (el) {
     if (from)   params.from       = from;
     if (to)     params.to         = to;
 
-    var tbody = document.getElementById('auditTbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center"><span class="spinner"></span></td></tr>';
+    setHTML('auditTbody', loadingRow(6));
 
     API.call('auditLog', 'list', params).then(function (rows) {
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No audit entries found.</div></td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('auditTbody', emptyRow(6, 'No audit entries found.')); return; }
+      setHTML('auditTbody', rows.map(function (r) {
         return '<tr>' +
           '<td style="white-space:nowrap;font-size:11px">' + fmtDateTime(r.created_at) + '</td>' +
           '<td style="font-size:11px">' + esc(r.actor_email || r.actor_id || r.actor_type || '') + '</td>' +
@@ -53,10 +49,8 @@ Router.register('audit', function (el) {
           '<td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis">' + esc(r.entity_id) + '</td>' +
           '<td><button class="btn btn-secondary btn-sm" onclick="auditViewDetail(\'' + esc(r.log_id) + '\')">Detail</button></td>' +
         '</tr>';
-      }).join('');
-    }).catch(function (e) {
-      tbody.innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('auditTbody', errorRow(6, e, load)); });
   }
 
   document.getElementById('auditSearch').onclick = load;

@@ -11,22 +11,23 @@ Router.register('tickets', function (el) {
       '<tbody id="tktBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('tktBody', loadingRow(7));
     var params = { limit: 50 };
     var s = document.getElementById('tktStatus').value;
     var p = document.getElementById('tktPriority').value;
     if (s) params.status = s;
     if (p) params.priority = p;
     API.call('tickets', 'list', params).then(function (rows) {
-      var tbody = document.getElementById('tktBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No tickets.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
-        return '<tr><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
+      if (!rows.length) { setHTML('tktBody', emptyRow(7, 'No tickets.')); return; }
+      setHTML('tktBody', rows.map(function (r) {
+        var tid = esc(r.ticket_id);
+        return '<tr style="cursor:pointer" onclick="viewTicket(\'' + tid + '\')"><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
                '<td>' + esc(r.company_name || r.customer_id) + '</td>' +
                '<td>' + statusBadge(r.priority) + '</td><td>' + statusBadge(r.status) + '</td>' +
                '<td>' + fmtDate(r.created_at) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="viewTicket(\'' + esc(r.ticket_id) + '\')">View</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('tktBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewTicket(\'' + tid + '\')">View</button></td></tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('tktBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('tktStatus').onchange = load;

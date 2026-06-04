@@ -28,26 +28,22 @@ Router.register('knowledge', function (el) {
   var _activeCat = null;
 
   function loadCategories() {
+    setHTML('kbCatList', spinnerHTML(16));
     API.call('knowledge', 'listCategories', {}).then(function (cats) {
-      var el = document.getElementById('kbCatList');
-      if (!cats.length) { el.innerHTML = '<p style="color:#9ca3af;font-size:12px">No categories yet.</p>'; return; }
-      el.innerHTML = cats.map(function (c) {
+      if (!cats.length) { setHTML('kbCatList', '<p style="color:#9ca3af;font-size:12px">No categories yet.</p>'); return; }
+      setHTML('kbCatList', cats.map(function (c) {
         return '<div class="nav-item" style="padding:6px 8px;font-size:13px;cursor:pointer" ' +
                'id="kbCat_' + esc(c.category_id) + '" onclick="kbSelectCat(\'' + esc(c.category_id) + '\')">' +
                esc(c.name) + '</div>';
-      }).join('');
-    }).catch(function () {});
+      }).join(''));
+    }).catch(function () { setHTML('kbCatList', '<p style="color:var(--clr-danger);font-size:12px">Failed to load.</p>'); });
   }
 
   function loadArticles(params) {
-    var tbody = document.getElementById('kbArticleTbody');
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center"><span class="spinner"></span></td></tr>';
+    setHTML('kbArticleTbody', loadingRow(5));
     API.call('knowledge', 'list', params || {}).then(function (rows) {
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No articles found.</div></td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('kbArticleTbody', emptyRow(5, 'No articles found.')); return; }
+      setHTML('kbArticleTbody', rows.map(function (r) {
         return '<tr>' +
           '<td>' + esc(r.title) + '</td>' +
           '<td style="font-size:12px">' + esc(r.category_name || '—') + '</td>' +
@@ -58,10 +54,8 @@ Router.register('knowledge', function (el) {
             '<button class="btn btn-secondary btn-sm" onclick="kbEditArticle(\'' + esc(r.article_id) + '\')">Edit</button>' +
           '</td>' +
         '</tr>';
-      }).join('');
-    }).catch(function (e) {
-      tbody.innerHTML = '<tr><td colspan="5" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('kbArticleTbody', errorRow(5, e, function () { loadArticles(params); })); });
   }
 
   window.kbSelectCat = function (catId) {

@@ -12,21 +12,21 @@ Router.register('users', function (el) {
       '<tbody id="usrBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('usrBody', loadingRow(7));
     var params = { limit: 50 };
     var r = document.getElementById('usrRole').value;
     if (r) params.role = r;
     API.call('users', 'list', params).then(function (res) {
-      var rows  = Array.isArray(res) ? res : (res.items || []);
-      var tbody = document.getElementById('usrBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No users.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (u) {
+      var rows = Array.isArray(res) ? res : (res.items || []);
+      if (!rows.length) { setHTML('usrBody', emptyRow(7, 'No users.')); return; }
+      setHTML('usrBody', rows.map(function (u) {
         return '<tr><td>' + esc(u.first_name + ' ' + u.last_name) + '</td>' +
                '<td>' + esc(u.email) + '</td><td>' + esc(u.role || u.primary_role || '—') + '</td>' +
                '<td>' + esc(u.country_code || '—') + '</td><td>' + statusBadge(u.status) + '</td>' +
                '<td>' + fmtDate(u.last_login_at) + '</td>' +
                '<td><button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + esc(u.user_id) + '\')">Reset PW</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('usrBody').innerHTML = '<tr><td colspan="7" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+      }).join(''));
+    }).catch(function (e) { setHTML('usrBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('usrRole').onchange = load;

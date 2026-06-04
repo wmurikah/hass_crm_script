@@ -35,8 +35,8 @@ Router.register('branding', function (el) {
         .catch(function (e) { Toast.error(e.message); });
     };
   }).catch(function (e) {
-    if (!el) return;
-    el.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>';
+    if (Router.current() !== 'branding' || !el) return;
+    el.innerHTML = errorCard(e, function () { Router.navigate('branding', {}); });
   });
 });
 </script>
