@@ -796,12 +796,15 @@ function _botSaveConfig_(ctx, params) {
   if (!id || !existing) {
     if (!id) id = genId('BOTCFG');
     if (!fields.provider) throw new Errors.Validation('provider required for a new config.');
+    // api_key_property is NOT NULL: always persist a deterministic property NAME,
+    // independent of whether a key VALUE is ever stored under it.
+    var propName = 'BOT_KEY_' + id;
     TursoClient.write(
       'INSERT INTO bot_llm_configs ' +
       '(config_id, provider, label, model, endpoint_url, api_key_property, max_tokens, temperature, ' +
       'system_prompt, is_active, is_default, allowed_roles, notes, created_by, created_at, updated_at) ' +
       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      [id, fields.provider, fields.label, fields.model, fields.endpoint_url, null,
+      [id, fields.provider, fields.label, fields.model, fields.endpoint_url, propName,
        fields.max_tokens, fields.temperature, fields.system_prompt,
        0, 0, fields.allowed_roles, fields.notes, ctx.session.userId, now, now]
     );
@@ -810,19 +813,19 @@ function _botSaveConfig_(ctx, params) {
     Object.keys(fields).forEach(function (k) {
       if (fields[k] !== null) { sets.push(k + ' = ?'); args.push(fields[k]); }
     });
+    // Keep api_key_property non-null and deterministic even for rows created
+    // before this invariant existed (idempotent; never overwrites the secret).
+    sets.push('api_key_property = ?'); args.push('BOT_KEY_' + id);
     sets.push('updated_at = ?'); args.push(now);
     args.push(id);
-    if (sets.length) {
-      TursoClient.write('UPDATE bot_llm_configs SET ' + sets.join(', ') + ' WHERE config_id = ?', args);
-    }
+    TursoClient.write('UPDATE bot_llm_configs SET ' + sets.join(', ') + ' WHERE config_id = ?', args);
   }
 
-  // Key handling — store the secret in Script Properties, persist only the name.
+  // Key handling — store the secret in Script Properties under the deterministic
+  // name. The COLUMN already holds the name; we only write the VALUE here, then
+  // discard the raw key. has_key (in list/getConfig) reflects property presence.
   if (params.apiKey !== undefined && params.apiKey !== null && String(params.apiKey).length) {
-    var propName = 'BOT_KEY_' + id;
-    PropertiesService.getScriptProperties().setProperty(propName, String(params.apiKey));
-    TursoClient.write('UPDATE bot_llm_configs SET api_key_property = ?, updated_at = ? WHERE config_id = ?',
-                      [propName, now, id]);
+    PropertiesService.getScriptProperties().setProperty('BOT_KEY_' + id, String(params.apiKey));
     params.apiKey = null; // discard from memory; never logged
     delete params.apiKey;
   }
@@ -842,11 +845,11 @@ function _botClearKey_(ctx, params) {
   var rows = TursoClient.select('SELECT * FROM bot_llm_configs WHERE config_id = ? LIMIT 1', [id]);
   if (!rows.length) throw new Errors.NotFound('Config not found.');
 
-  var propName = rows[0].api_key_property;
-  if (propName) {
-    try { PropertiesService.getScriptProperties().deleteProperty(propName); } catch (_) {}
-  }
-  TursoClient.write('UPDATE bot_llm_configs SET api_key_property = NULL, updated_at = ? WHERE config_id = ?',
+  // Delete the secret VALUE only. The COLUMN keeps the (non-null) property NAME;
+  // has_key flips to false because the Script Property no longer exists.
+  var propName = rows[0].api_key_property || ('BOT_KEY_' + id);
+  try { PropertiesService.getScriptProperties().deleteProperty(propName); } catch (_) {}
+  TursoClient.write('UPDATE bot_llm_configs SET updated_at = ? WHERE config_id = ?',
                     [nowIso(), id]);
   Audit.log({ actor: ctx.session.userId, action: 'BOT_KEY_CLEARED', entity: 'bot_llm_configs', entityId: id });
   return { success: true, config_id: id, has_key: false };

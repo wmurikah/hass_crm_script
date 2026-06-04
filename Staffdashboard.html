@@ -64,6 +64,11 @@
      load their partials so those sidebar items resolve (otherwise "Unknown route"). -->
 <?!= HtmlService.createHtmlOutputFromFile('partial_config').getContent(); ?>
 <?!= HtmlService.createHtmlOutputFromFile('partial_branding').getContent(); ?>
+<!-- bot assistant config (admin): route 'botconfig'. There is no menu_items row
+     for it (the menu is server-driven by 40_svc_menu.gs and out of scope here),
+     so the nav entry is injected client-side into the Admin group for admins;
+     the route also works when navigated to directly. -->
+<?!= HtmlService.createHtmlOutputFromFile('partial_bot_config').getContent(); ?>
 
 <? var _stoken = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : ''; ?>
 <script>
@@ -147,6 +152,9 @@
   verifySession();
 
   // ── App init ───────────────────────────────────────────────────
+  var _menuItems   = [];   // cached menu.list result
+  var _botAdmin    = false; // user may manage bot configs (probed server-side)
+
   function initApp(me) {
     // Pull live branding (non-blocking): failure falls back to CSS defaults.
     API.call('branding', 'get', { scope_code: 'GLOBAL' })
@@ -158,8 +166,15 @@
 
     // Build sidebar from menu API.
     API.call('menu', 'list', {})
-      .then(function (items) { renderNav(items); })
-      .catch(function () { renderNav([]); });
+      .then(function (items) { _menuItems = items || []; rebuildNav(); })
+      .catch(function () { _menuItems = []; rebuildNav(); });
+
+    // The Bot Assistant config page has no menu_items row (menu is server-driven
+    // and out of scope). Probe the real RBAC gate: if listConfigs is permitted
+    // (SUPER_ADMIN / config.edit), inject a nav entry into the Admin group.
+    API.call('bot', 'listConfigs', {})
+      .then(function () { _botAdmin = true; rebuildNav(); })
+      .catch(function () { /* non-admins simply never see the page */ });
 
     // Logout.
     document.getElementById('logoutBtn').onclick = function () {
@@ -168,8 +183,20 @@
       });
     };
 
+    // Floating assistant widget — only for logged-in staff (auth guard passed).
+    if (typeof ChatWidget !== 'undefined') ChatWidget.mount(me);
+
     // Navigate to default page.
     Router.navigate('dashboard', {});
+  }
+
+  // Merge the static menu with the admin-only botconfig entry, then render.
+  function rebuildNav() {
+    var items = _menuItems.slice();
+    if (_botAdmin && !items.some(function (i) { return i.id === 'botconfig'; })) {
+      items.push({ id: 'botconfig', label: 'Bot Assistant', route: 'botconfig', group: 'admin' });
+    }
+    renderNav(items);
   }
 
   // ── Sidebar render ──────────────────────────────────────────────

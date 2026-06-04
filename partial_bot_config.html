@@ -1,0 +1,151 @@
+<script>
+// ─────────────────────────────────────────────────────────────────
+//  partial_bot_config.html  — Bot Assistant configuration (admin)
+//  Route: 'botconfig'  (gated server-side by config.edit / SUPER_ADMIN)
+//  Lists bot_llm_configs; create/edit via Modal; activate / clear key.
+//  The API KEY value is NEVER shown — only the has_key state.
+// ─────────────────────────────────────────────────────────────────
+Router.register('botconfig', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<button class="btn btn-primary btn-sm" id="botCfgAddBtn">+ New Config</button>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr>' +
+        '<th>Label</th><th>Provider</th><th>Model</th>' +
+        '<th>Active</th><th>API Key</th><th></th>' +
+      '</tr></thead>' +
+      '<tbody id="botCfgBody"></tbody></table></div></div>';
+
+  function load() {
+    setHTML('botCfgBody', loadingRow(6));
+    API.call('bot', 'listConfigs', {}).then(function (rows) {
+      if (!rows.length) { setHTML('botCfgBody', emptyRow(6, 'No assistant configs yet. Create one to get started.')); return; }
+      setHTML('botCfgBody', rows.map(function (r) {
+        var active = String(r.is_active) === '1' || r.is_active === true;
+        var keyBadge = r.has_key
+          ? '<span class="badge badge-success">Key set</span>'
+          : '<span class="badge badge-neutral">No key</span>';
+        var activeBadge = active
+          ? '<span class="badge badge-primary">Active</span>'
+          : '<span class="badge badge-neutral">—</span>';
+        return '<tr>' +
+          '<td>' + esc(r.label || '—') + '</td>' +
+          '<td>' + esc(r.provider || '—') + '</td>' +
+          '<td>' + esc(r.model || '—') + '</td>' +
+          '<td>' + activeBadge + '</td>' +
+          '<td>' + keyBadge + '</td>' +
+          '<td class="actions">' +
+            '<button class="btn btn-secondary btn-sm" onclick="botCfgEdit(\'' + esc(r.config_id) + '\')">Edit</button> ' +
+            (active ? '' : '<button class="btn btn-secondary btn-sm" onclick="botCfgActivate(\'' + esc(r.config_id) + '\')">Set Active</button> ') +
+            (r.has_key ? '<button class="btn btn-danger btn-sm" onclick="botCfgClearKey(\'' + esc(r.config_id) + '\')">Clear Key</button>' : '') +
+          '</td>' +
+        '</tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('botCfgBody', errorRow(6, e, load)); });
+  }
+
+  document.getElementById('botCfgAddBtn').onclick = function () { botCfgForm(null); };
+  window._botCfgReload = load;
+  load();
+});
+
+/* Open the create/edit Modal. cfg=null → create; otherwise prefill from getConfig. */
+function botCfgForm(cfg) {
+  function rolesToCsv(v) {
+    if (!v) return '';
+    try { var a = JSON.parse(v); if (Array.isArray(a)) return a.join(', '); } catch (e) {}
+    return String(v);
+  }
+  var c = cfg || {};
+  var providerOpts = ['anthropic', 'openai'].map(function (p) {
+    return '<option value="' + p + '"' + (c.provider === p ? ' selected' : '') + '>' + p + '</option>';
+  }).join('');
+
+  var body =
+    '<div class="form-group"><label class="form-label">Label</label>' +
+      '<input class="form-control" id="bcLabel" value="' + esc(c.label || '') + '" placeholder="e.g. Production Assistant"></div>' +
+    '<div class="form-group"><label class="form-label">Provider</label>' +
+      '<select class="form-control" id="bcProvider">' + providerOpts + '</select></div>' +
+    '<div class="form-group"><label class="form-label">Model</label>' +
+      '<input class="form-control" id="bcModel" value="' + esc(c.model || '') + '" placeholder="e.g. claude-sonnet-4-6"></div>' +
+    '<div style="display:flex;gap:12px">' +
+      '<div class="form-group" style="flex:1"><label class="form-label">Max tokens</label>' +
+        '<input class="form-control" id="bcMaxTokens" type="number" min="1" value="' + esc(c.max_tokens != null ? c.max_tokens : '') + '" placeholder="1024"></div>' +
+      '<div class="form-group" style="flex:1"><label class="form-label">Temperature</label>' +
+        '<input class="form-control" id="bcTemp" type="number" step="0.1" min="0" max="2" value="' + esc(c.temperature != null ? c.temperature : '') + '" placeholder="0.2"></div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">System prompt</label>' +
+      '<textarea class="form-control" id="bcPrompt" rows="4" placeholder="You are a helpful read-only assistant for the Hass CMS.">' + esc(c.system_prompt || '') + '</textarea></div>' +
+    '<div class="form-group"><label class="form-label">Allowed roles (optional, CSV)</label>' +
+      '<input class="form-control" id="bcRoles" value="' + esc(rolesToCsv(c.allowed_roles)) + '" placeholder="leave blank for all roles"></div>' +
+    '<div class="form-group"><label class="form-label">API Key</label>' +
+      '<input class="form-control" id="bcKey" type="password" autocomplete="new-password" placeholder="' +
+        (c.has_key ? 'leave blank to keep existing' : 'paste provider API key') + '">' +
+      '<div class="form-error" style="color:var(--clr-text-light)">' +
+        (c.config_id ? (c.has_key ? 'A key is currently set. Leave blank to keep it.' : 'No key set for this config yet.') : 'Stored securely server-side; never displayed.') +
+      '</div></div>';
+
+  Modal.open({
+    title: cfg ? 'Edit Config' : 'New Config',
+    body: body,
+    footer: '<button class="btn btn-secondary" id="bcCancel">Cancel</button>' +
+            '<button class="btn btn-primary" id="bcSave">Save</button>',
+    onOpen: function (bd) {
+      bd.querySelector('#bcCancel').onclick = function () { Modal.close(); };
+      bd.querySelector('#bcSave').onclick = function () {
+        var provider = bd.querySelector('#bcProvider').value;
+        var label    = bd.querySelector('#bcLabel').value.trim();
+        if (!label) { Toast.error('Label is required.'); return; }
+        var params = {
+          provider:      provider,
+          label:         label,
+          model:         bd.querySelector('#bcModel').value.trim(),
+          system_prompt: bd.querySelector('#bcPrompt').value,
+          allowed_roles: bd.querySelector('#bcRoles').value.trim(),
+        };
+        if (c.config_id) params.config_id = c.config_id;
+        var mt = bd.querySelector('#bcMaxTokens').value;
+        var tp = bd.querySelector('#bcTemp').value;
+        if (mt !== '') params.max_tokens  = parseInt(mt, 10);
+        if (tp !== '') params.temperature = parseFloat(tp);
+        var key = bd.querySelector('#bcKey').value;
+        if (key) params.apiKey = key;
+
+        var saveBtn = bd.querySelector('#bcSave');
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+        API.call('bot', 'saveConfig', params, { retries: 0 })
+          .then(function () {
+            Modal.close();
+            Toast.success('Config saved.');
+            if (window._botCfgReload) window._botCfgReload();
+          })
+          .catch(function (e) {
+            saveBtn.disabled = false; saveBtn.textContent = 'Save';
+            Toast.error(e.message || 'Could not save config.');
+          });
+      };
+    },
+  });
+}
+
+function botCfgEdit(id) {
+  API.call('bot', 'getConfig', { config_id: id })
+    .then(function (cfg) { botCfgForm(cfg); })
+    .catch(function (e) { Toast.error(e.message || 'Could not load config.'); });
+}
+
+function botCfgActivate(id) {
+  API.call('bot', 'setActiveConfig', { config_id: id }, { retries: 0 })
+    .then(function () { Toast.success('Config activated.'); if (window._botCfgReload) window._botCfgReload(); })
+    .catch(function (e) { Toast.error(e.message || 'Could not activate config.'); });
+}
+
+function botCfgClearKey(id) {
+  Modal.confirm('Clear the API key for this config? The assistant will stop working until a new key is set.', function () {
+    API.call('bot', 'clearKey', { config_id: id }, { retries: 0 })
+      .then(function () { Toast.success('Key cleared.'); if (window._botCfgReload) window._botCfgReload(); })
+      .catch(function (e) { Toast.error(e.message || 'Could not clear key.'); });
+  });
+}
+</script>

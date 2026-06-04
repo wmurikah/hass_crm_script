@@ -288,4 +288,230 @@ function applyBranding(b) {
   }
 }
 window.applyBranding = applyBranding;
+
+/* ── Floating Assistant chat widget ──────────────────────────────────
+ * Fixed bottom-right launcher → toggles a chat panel. Talks to
+ * bot.chat with the user's session (RBAC + read-only guards stay
+ * server-side; no keys client-side). Keeps the last ~6 turns of history
+ * client-side for context. Renders navigate:{route,params} as an
+ * "Open <route>" button via Router.navigate. */
+var ChatWidget = (function () {
+  'use strict';
+  var HISTORY_TURNS = 6;          // turns (user+assistant) kept for context
+  var _mounted = false;
+  var _open    = false;
+  var _busy    = false;
+  var _history = [];              // [{role:'user'|'assistant', content}]
+  var _els     = {};
+
+  function _injectStyles() {
+    if (document.getElementById('hassChatStyles')) return;
+    var css =
+      '.hass-chat-launcher{position:fixed;right:24px;bottom:24px;width:56px;height:56px;' +
+        'border-radius:50%;background:var(--clr-primary);color:var(--clr-gold);border:none;cursor:pointer;' +
+        'box-shadow:var(--shadow-md);display:flex;align-items:center;justify-content:center;z-index:800;' +
+        'transition:transform .15s ease, background .15s ease;}' +
+      '.hass-chat-launcher:hover{background:var(--clr-primary-d);transform:translateY(-2px);}' +
+      '.hass-chat-launcher svg{width:26px;height:26px;}' +
+      '.hass-chat-panel{position:fixed;right:24px;bottom:92px;width:360px;height:520px;max-width:calc(100vw - 32px);' +
+        'max-height:calc(100vh - 120px);background:var(--clr-surface);border:1px solid var(--clr-border);' +
+        'border-radius:12px;box-shadow:var(--shadow-md);display:none;flex-direction:column;overflow:hidden;z-index:800;}' +
+      '.hass-chat-panel.open{display:flex;animation:hassChatIn .18s ease;}' +
+      '@keyframes hassChatIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}' +
+      '.hass-chat-head{background:var(--clr-primary);color:#fff;padding:12px 14px;display:flex;align-items:center;' +
+        'justify-content:space-between;flex-shrink:0;}' +
+      '.hass-chat-head .ttl{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;}' +
+      '.hass-chat-head .ttl .dot{width:8px;height:8px;border-radius:50%;background:var(--clr-gold);}' +
+      '.hass-chat-head button{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:20px;line-height:1;}' +
+      '.hass-chat-head button:hover{color:#fff;}' +
+      '.hass-chat-body{flex:1;overflow-y:auto;padding:14px;background:var(--clr-bg);display:flex;flex-direction:column;gap:10px;}' +
+      '.hass-msg{max-width:82%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;}' +
+      '.hass-msg.user{align-self:flex-end;background:var(--clr-primary);color:#fff;border-bottom-right-radius:3px;}' +
+      '.hass-msg.bot{align-self:flex-start;background:var(--clr-surface);border:1px solid var(--clr-border);color:var(--clr-text);border-bottom-left-radius:3px;}' +
+      '.hass-msg.err{align-self:flex-start;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;}' +
+      '.hass-msg .nav-btn{margin-top:8px;}' +
+      '.hass-msg .retry-btn{margin-top:8px;}' +
+      '.hass-typing{align-self:flex-start;display:flex;gap:4px;padding:10px 12px;background:var(--clr-surface);' +
+        'border:1px solid var(--clr-border);border-radius:12px;border-bottom-left-radius:3px;}' +
+      '.hass-typing span{width:6px;height:6px;border-radius:50%;background:var(--clr-muted);opacity:.5;' +
+        'animation:hassBlink 1.2s infinite;}' +
+      '.hass-typing span:nth-child(2){animation-delay:.2s;}.hass-typing span:nth-child(3){animation-delay:.4s;}' +
+      '@keyframes hassBlink{0%,80%,100%{opacity:.3;}40%{opacity:1;}}' +
+      '.hass-chat-foot{flex-shrink:0;border-top:1px solid var(--clr-border);padding:10px;display:flex;gap:8px;background:var(--clr-surface);}' +
+      '.hass-chat-foot textarea{flex:1;resize:none;border:1px solid var(--clr-border);border-radius:var(--radius);' +
+        'padding:8px 10px;font-family:var(--font);font-size:13px;max-height:90px;line-height:1.4;}' +
+      '.hass-chat-foot textarea:focus{outline:none;border-color:var(--clr-primary);box-shadow:0 0 0 3px rgba(31,42,68,.15);}' +
+      '.hass-chat-foot button{flex-shrink:0;}' +
+      '.hass-chat-empty{margin:auto;text-align:center;color:var(--clr-text-light);font-size:13px;padding:0 18px;}';
+    var s = document.createElement('style');
+    s.id = 'hassChatStyles';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function _build() {
+    _injectStyles();
+
+    var launcher = document.createElement('button');
+    launcher.className = 'hass-chat-launcher';
+    launcher.title = 'Hass Assistant';
+    launcher.setAttribute('aria-label', 'Open assistant');
+    launcher.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+
+    var panel = document.createElement('div');
+    panel.className = 'hass-chat-panel';
+    panel.innerHTML =
+      '<div class="hass-chat-head">' +
+        '<span class="ttl"><span class="dot"></span>Hass Assistant</span>' +
+        '<button type="button" title="Close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="hass-chat-body"></div>' +
+      '<div class="hass-chat-foot">' +
+        '<textarea rows="1" placeholder="Ask me anything…"></textarea>' +
+        '<button class="btn btn-primary btn-sm">Send</button>' +
+      '</div>';
+
+    document.body.appendChild(launcher);
+    document.body.appendChild(panel);
+
+    _els.launcher = launcher;
+    _els.panel    = panel;
+    _els.body     = panel.querySelector('.hass-chat-body');
+    _els.input    = panel.querySelector('textarea');
+    _els.send     = panel.querySelector('.hass-chat-foot button');
+    _els.close    = panel.querySelector('.hass-chat-head button');
+
+    launcher.onclick  = toggle;
+    _els.close.onclick = function () { setOpen(false); };
+    _els.send.onclick  = _onSend;
+    _els.input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _onSend(); }
+    });
+
+    _renderEmpty();
+  }
+
+  function _renderEmpty() {
+    _els.body.innerHTML =
+      '<div class="hass-chat-empty">Hi! I can look up customers, orders, invoices and more — ' +
+      'all read-only and scoped to your access. What do you need?</div>';
+  }
+
+  function _scroll() { _els.body.scrollTop = _els.body.scrollHeight; }
+
+  function _addBubble(cls, text) {
+    var d = document.createElement('div');
+    d.className = 'hass-msg ' + cls;
+    d.textContent = text;
+    _els.body.appendChild(d);
+    _scroll();
+    return d;
+  }
+
+  function _showTyping() {
+    var t = document.createElement('div');
+    t.className = 'hass-typing';
+    t.innerHTML = '<span></span><span></span><span></span>';
+    _els.body.appendChild(t);
+    _scroll();
+    return t;
+  }
+
+  function _onSend() {
+    if (_busy) return;
+    var msg = (_els.input.value || '').trim();
+    if (!msg) return;
+
+    // Clear the intro on first message.
+    if (_els.body.querySelector('.hass-chat-empty')) _els.body.innerHTML = '';
+
+    _els.input.value = '';
+    _addBubble('user', msg);
+    _send(msg);
+  }
+
+  function _send(msg) {
+    _busy = true;
+    _els.send.disabled = true;
+    var typing = _showTyping();
+    var historySnapshot = _history.slice(-HISTORY_TURNS * 2);
+
+    API.call('bot', 'chat', { message: msg, history: historySnapshot }, { retries: 1 })
+      .then(function (res) {
+        if (typing.parentNode) typing.remove();
+        _busy = false; _els.send.disabled = false;
+        _renderAnswer(msg, res);
+      })
+      .catch(function (err) {
+        if (typing.parentNode) typing.remove();
+        _busy = false; _els.send.disabled = false;
+        _renderError(msg, err);
+      });
+  }
+
+  function _renderAnswer(userMsg, res) {
+    var answer = (res && res.answer) ? res.answer : 'I could not produce an answer.';
+
+    // Graceful "not configured" state with a hint for admins.
+    if (res && res.turnId == null && /not configured/i.test(answer)) {
+      var b = _addBubble('bot', answer);
+      var hint = document.createElement('div');
+      hint.style.cssText = 'margin-top:6px;font-size:12px;color:var(--clr-text-light)';
+      hint.textContent = 'Admins can set this up under Admin → Bot Assistant.';
+      b.appendChild(hint);
+      return; // do not record an un-answered turn in history
+    }
+
+    var bubble = _addBubble('bot', answer);
+
+    // Navigation directive → "Open <route>" button.
+    var nav = res && res.navigate;
+    if (nav && nav.route) {
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-secondary btn-sm nav-btn';
+      btn.textContent = 'Open ' + nav.route;
+      btn.onclick = function () {
+        try {
+          if (typeof goRoute === 'function') goRoute(nav.route, nav.params || {});
+          else Router.navigate(nav.route, nav.params || {});
+        } catch (e) { Toast && Toast.error('Could not open ' + nav.route); }
+        setOpen(false);
+      };
+      bubble.appendChild(btn);
+    }
+
+    // Record the turn for follow-up context.
+    _history.push({ role: 'user', content: userMsg });
+    _history.push({ role: 'assistant', content: answer });
+    if (_history.length > HISTORY_TURNS * 2) _history = _history.slice(-HISTORY_TURNS * 2);
+  }
+
+  function _renderError(userMsg, err) {
+    var msg = (err && err.message) ? err.message : 'Something went wrong. Please try again.';
+    var bubble = _addBubble('err', msg);
+    var retry = document.createElement('button');
+    retry.className = 'btn btn-secondary btn-sm retry-btn';
+    retry.textContent = 'Retry';
+    retry.onclick = function () { bubble.remove(); _send(userMsg); };
+    bubble.appendChild(retry);
+  }
+
+  function setOpen(open) {
+    _open = open;
+    _els.panel.classList.toggle('open', open);
+    if (open) setTimeout(function () { _els.input.focus(); }, 50);
+  }
+  function toggle() { setOpen(!_open); }
+
+  function mount() {
+    if (_mounted) return;
+    _mounted = true;
+    _build();
+  }
+
+  return { mount: mount, open: function () { setOpen(true); }, close: function () { setOpen(false); } };
+})();
+window.ChatWidget = ChatWidget;
 </script>
