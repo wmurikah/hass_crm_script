@@ -176,6 +176,80 @@ function reproAllPages() {
   return { allOk: allOk };
 }
 
+/**
+ * reproRbac()  —  Manual verification harness for the Roles & Perms editor
+ * (run from the Apps Script IDE; NEVER auto-invoked — safe to leave in place).
+ *
+ * Mints a real SUPER_ADMIN session, then exercises the newly registered rbac.*
+ * actions exactly as partial_rbac.html does:
+ *   • getRole for an existing role (prefers 'CFO', falls back to the first
+ *     non-SUPER_ADMIN role if CFO is absent)
+ *   • listPermissions
+ *   • a NO-OP updateRole that re-saves that role's existing permissions verbatim
+ *     (idempotent — the delete-then-insert reconcile is safe to repeat)
+ * Logs ok:true + shape for each. All three must be ok:true.
+ */
+function reproRbac() {
+  var sa = TursoClient.select(
+    "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
+  );
+  if (!sa.length) { Logger.log('reproRbac: no SUPER_ADMIN seeded — run seedAll() first'); return; }
+
+  var sess  = Session.create(sa[0].user_id, 'STAFF', 'SUPER_ADMIN', null, 'reproRbac', null);
+  var token = sess.token;
+
+  function call(action, params) {
+    var p = params || {}; p.sessionToken = token;
+    try { return processRequest({ service: 'rbac', action: action, params: p }); }
+    catch (e) { return { ok: false, error: { message: 'threw: ' + e.message } }; }
+  }
+
+  var out = {};
+
+  // getRole — prefer CFO, else first non-SUPER_ADMIN role from listRoles.
+  var roleResp   = call('getRole', { roleId: 'CFO' });
+  if (!roleResp.ok) {
+    var roles = call('listRoles', {});
+    if (roles.ok && roles.data && roles.data.length) {
+      var pick = roles.data.filter(function (r) { return r.role_code !== 'SUPER_ADMIN'; })[0] || roles.data[0];
+      roleResp = call('getRole', { roleId: pick.role_code });
+    }
+  }
+  out.getRole = roleResp.ok
+    ? { ok: true, role_code: roleResp.data.role_code, label: roleResp.data.label,
+        scope: roleResp.data.scope, permCount: (roleResp.data.permissions || []).length }
+    : { ok: false, error: roleResp.error };
+
+  // listPermissions
+  var permsResp = call('listPermissions', {});
+  out.listPermissions = permsResp.ok
+    ? { ok: true, count: (permsResp.data || []).length, sample: (permsResp.data || [])[0] || null }
+    : { ok: false, error: permsResp.error };
+
+  // updateRole — no-op re-save of the role's EXISTING permission set.
+  if (roleResp.ok) {
+    var upResp = call('updateRole', {
+      roleCode:    roleResp.data.role_code,
+      roleId:      roleResp.data.role_id,
+      label:       roleResp.data.label,
+      scope:       roleResp.data.scope,
+      permissions: roleResp.data.permissions || [],
+    });
+    out.updateRole = upResp.ok
+      ? { ok: true, role_code: upResp.data.role_code, permCount: (upResp.data.permissions || []).length }
+      : { ok: false, error: upResp.error };
+  } else {
+    out.updateRole = { ok: false, error: 'skipped — getRole failed' };
+  }
+
+  try { Session.invalidate(token); } catch (_) {}
+
+  var allOk = out.getRole.ok && out.listPermissions.ok && out.updateRole.ok;
+  Logger.log('reproRbac results: ' + JSON.stringify(out, null, 2));
+  Logger.log('reproRbac: ' + (allOk ? 'ALL ok:true ✅' : 'SOME FAILED ❌'));
+  return { allOk: allOk, results: out };
+}
+
 // ── One-off migrations ────────────────────────────────────────────────────────
 
 /**
