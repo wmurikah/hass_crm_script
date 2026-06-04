@@ -29,11 +29,11 @@ Router.register('sla', function (el) {
                      LOW:      { res: 24, resolve: 72 } };
 
   function loadConfig() {
+    setHTML('slaTbody', loadingRow(3));
     API.call('config', 'list', { group: 'sla' }).then(function (rows) {
       var map = {};
       (rows || []).forEach(function (r) { map[r.config_key] = r.config_value; });
-      var tbody = document.getElementById('slaTbody');
-      tbody.innerHTML = priorities.map(function (p) {
+      setHTML('slaTbody', priorities.map(function (p) {
         var resKey  = 'sla_response_' + p.toLowerCase();
         var resVal  = map[resKey]  || defaults[p].res;
         var solKey  = 'sla_resolve_' + p.toLowerCase();
@@ -43,21 +43,15 @@ Router.register('sla', function (el) {
           '<td><input class="form-control" style="width:80px" id="slaR_' + p + '" type="number" min="1" value="' + esc(String(resVal)) + '"></td>' +
           '<td><input class="form-control" style="width:80px" id="slaS_' + p + '" type="number" min="1" value="' + esc(String(solVal)) + '"></td>' +
         '</tr>';
-      }).join('');
-    }).catch(function () {
-      document.getElementById('slaTbody').innerHTML =
-        '<tr><td colspan="3" style="color:#9ca3af;font-size:12px">Unable to load SLA config.</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('slaTbody', errorRow(3, e, loadConfig)); });
   }
 
   function loadBreaches() {
+    setHTML('slaBreachBody', loadingRow(5));
     API.call('tickets', 'list', { sla_breached: true, limit: 50 }).then(function (rows) {
-      var tbody = document.getElementById('slaBreachBody');
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No SLA breaches in the last 30 days.</div></td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('slaBreachBody', emptyRow(5, 'No SLA breaches in the last 30 days.')); return; }
+      setHTML('slaBreachBody', rows.map(function (r) {
         return '<tr>' +
           '<td>' + esc(r.ticket_number) + '</td>' +
           '<td>' + esc(r.subject) + '</td>' +
@@ -65,11 +59,8 @@ Router.register('sla', function (el) {
           '<td>' + fmtDateTime(r.sla_resolve_by) + '</td>' +
           '<td>' + statusBadge(r.status) + '</td>' +
         '</tr>';
-      }).join('');
-    }).catch(function () {
-      document.getElementById('slaBreachBody').innerHTML =
-        '<tr><td colspan="5" style="color:#dc2626">Unable to load breach data.</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('slaBreachBody', errorRow(5, e, loadBreaches)); });
   }
 
   document.getElementById('slaSaveBtn').onclick = function () {

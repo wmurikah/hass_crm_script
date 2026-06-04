@@ -19,37 +19,38 @@ Router.register('settings', function (el) {
   });
 
   function loadTab() {
-    var panel = document.getElementById('cfgPanel');
+    setHTML('cfgPanel', spinnerHTML(40));
     if (_tab === 'config') {
       API.call('configAdmin', 'list', {}).then(function (rows) {
-        panel.innerHTML = '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        setHTML('cfgPanel', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
           '<thead><tr><th>Key</th><th>Value</th><th>Country</th><th>Updated</th><th></th></tr></thead><tbody>' +
           (rows.length ? rows.map(function (r) {
             return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
                    '<td>' + esc(r.country_code || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
                    '<td><button class="btn btn-secondary btn-sm" onclick="editConfig(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(r.country_code||'') + '\')">Edit</button></td></tr>';
-          }).join('') : '<tr><td colspan="5"><div class="empty-state">No config keys.</div></td></tr>') +
+          }).join('') : emptyRow(5, 'No config keys.')) +
           '</tbody></table></div>' +
-          '<div style="padding:10px 16px"><button class="btn btn-primary btn-sm" onclick="newConfigKey()">+ Add Key</button></div></div>';
-      }).catch(function (e) { panel.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+          '<div style="padding:10px 16px"><button class="btn btn-primary btn-sm" onclick="newConfigKey()">+ Add Key</button></div></div>');
+      }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     } else if (_tab === 'branding') {
       API.call('branding', 'get', { scope_code: 'GLOBAL' }).then(function (b) {
-        panel.innerHTML = '<div class="card card-body">' +
+        b = b || {};
+        setHTML('cfgPanel', '<div class="card card-body">' +
           '<div class="form-group"><label class="form-label">App Name</label><input class="form-control" id="brAppName" value="' + esc(b.app_name || '') + '"></div>' +
           '<div class="form-group"><label class="form-label">Support Email</label><input class="form-control" id="brEmail" value="' + esc(b.support_email || '') + '"></div>' +
-          '<div class="form-group"><label class="form-label">Primary Color</label><input class="form-control" id="brColor" value="' + esc(b.primary_color || '#1a56db') + '"></div>' +
+          '<div class="form-group"><label class="form-label">Primary Color</label><input class="form-control" id="brColor" value="' + esc(b.primary_color || '#1F2A44') + '"></div>' +
           '<button class="btn btn-primary" onclick="saveBranding()">Save</button>' +
-          '</div>';
-      }).catch(function () { panel.innerHTML = '<p style="color:#9ca3af">Branding config not found.</p>'; });
+          '</div>');
+      }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     } else {
       API.call('system', 'health', {}).then(function (h) {
-        panel.innerHTML = '<div class="card card-body">' +
+        setHTML('cfgPanel', '<div class="card card-body">' +
           '<p style="font-size:14px;font-weight:600;margin-bottom:10px">Status: ' + statusBadge(h.status) + '</p>' +
           '<table class="data-table"><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>' +
-          Object.keys(h.checks).map(function (k) {
+          Object.keys(h.checks || {}).map(function (k) {
             return '<tr><td>' + esc(k) + '</td><td>' + statusBadge(h.checks[k]) + '</td></tr>';
-          }).join('') + '</tbody></table></div>';
-      }).catch(function (e) { panel.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+          }).join('') + '</tbody></table></div>');
+      }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     }
   }
   loadTab();

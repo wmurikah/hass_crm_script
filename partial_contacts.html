@@ -1,5 +1,5 @@
 <script>
-Router.register('contacts', function (el) {
+Router.register('contacts', function (el, params) {
   el.innerHTML =
     '<div class="filter-bar">' +
       '<input class="form-control" id="contCust" placeholder="Customer ID…" style="width:220px">' +
@@ -7,25 +7,31 @@ Router.register('contacts', function (el) {
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr></thead>' +
-      '<tbody id="contBody"></tbody></table></div></div>';
+      '<tbody id="contBody"><tr><td colspan="6"><div class="empty-state">Enter a Customer ID to list its contacts.</div></td></tr></tbody></table></div></div>';
 
   function load(customerId) {
     if (!customerId) return;
+    setHTML('contBody', loadingRow(6));
     API.call('contacts', 'list', { customer_id: customerId }).then(function (rows) {
-      var tbody = document.getElementById('contBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No contacts.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
+      if (!rows.length) { setHTML('contBody', emptyRow(6, 'No contacts for this customer.')); return; }
+      setHTML('contBody', rows.map(function (r) {
         return '<tr><td>' + esc(r.first_name + ' ' + r.last_name) + '</td>' +
                '<td>' + esc(r.email) + '</td><td>' + esc(r.phone || '—') + '</td>' +
                '<td>' + esc(r.portal_role) + '</td><td>' + statusBadge(r.status) + '</td>' +
                '<td><button class="btn btn-secondary btn-sm" onclick="deactivateContact(\'' + esc(r.contact_id) + '\')">Deactivate</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('contBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+      }).join(''));
+    }).catch(function (e) { setHTML('contBody', errorRow(6, e, function () { load(customerId); })); });
   }
 
   document.getElementById('contSearch').onclick = function () {
     load(document.getElementById('contCust').value.trim());
   };
+
+  // Drill-down: customer detail → "View Contacts" passes { customerId }.
+  if (params && params.customerId) {
+    document.getElementById('contCust').value = params.customerId;
+    load(params.customerId);
+  }
 });
 
 function deactivateContact(id) {

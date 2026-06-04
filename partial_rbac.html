@@ -29,13 +29,10 @@ Router.register('rbac', function (el) {
     '</div>';
 
   function loadRoles() {
+    setHTML('rbacRoleTbody', loadingRow(6));
     API.call('rbac', 'listRoles', {}).then(function (roles) {
-      var tbody = document.getElementById('rbacRoleTbody');
-      if (!roles.length) {
-        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No roles defined.</div></td></tr>';
-        return;
-      }
-      tbody.innerHTML = roles.map(function (r) {
+      if (!roles.length) { setHTML('rbacRoleTbody', emptyRow(6, 'No roles defined.')); return; }
+      setHTML('rbacRoleTbody', roles.map(function (r) {
         var perms = (r.permissions || []).join(', ') || '—';
         return '<tr>' +
           '<td><code>' + esc(r.role_code) + '</code></td>' +
@@ -45,11 +42,8 @@ Router.register('rbac', function (el) {
           '<td style="font-size:11px;max-width:260px;white-space:normal">' + esc(perms) + '</td>' +
           '<td><button class="btn btn-secondary btn-sm" onclick="rbacEditRole(\'' + esc(r.role_id) + '\')">Edit</button></td>' +
         '</tr>';
-      }).join('');
-    }).catch(function (e) {
-      document.getElementById('rbacRoleTbody').innerHTML =
-        '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>';
-    });
+      }).join(''));
+    }).catch(function (e) { setHTML('rbacRoleTbody', errorRow(6, e, loadRoles)); });
   }
 
   document.getElementById('rbacNewRole').onclick = function () { rbacRoleModal(null, loadRoles); };

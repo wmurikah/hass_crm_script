@@ -14,16 +14,20 @@ Router.register('reports', function (el) {
            '</div><div class="stat-value">' + (val || 0) + '</div></div>';
   }
 
-  API.call('reports', 'summary', {}).then(function (d) {
-    document.getElementById('repStats').innerHTML =
-      stat('Customers',         d.customers,         'success') +
-      stat('Open Tickets',      d.open_tickets,      'warning') +
-      stat('Pending Approvals', d.pending_approvals, 'warning') +
-      stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
-      stat('Pending Payments',  d.pending_payments,  'primary');
-  }).catch(function (e) {
-    document.getElementById('repStats').innerHTML =
-      '<p style="color:#dc2626;grid-column:1/-1">' + esc(e.message) + '</p>';
-  });
+  function load() {
+    setHTML('repStats', '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1">' +
+      '<span class="spinner dark"></span></div>');
+    API.call('reports', 'summary', {}).then(function (d) {
+      setHTML('repStats',
+        stat('Customers',         d.customers,         'success') +
+        stat('Open Tickets',      d.open_tickets,      'warning') +
+        stat('Pending Approvals', d.pending_approvals, 'warning') +
+        stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
+        stat('Pending Payments',  d.pending_payments,  'primary'));
+    }).catch(function (e) {
+      setHTML('repStats', '<div style="grid-column:1/-1">' + errorCard(e, load) + '</div>');
+    });
+  }
+  load();
 });
 </script>

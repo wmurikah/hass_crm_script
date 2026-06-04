@@ -166,7 +166,10 @@ var Router = (function () {
     try {
       _routes[id](_content, params || {});
     } catch (e) {
-      if (_content) _content.innerHTML = '<p style="color:red">Error loading ' + id + ': ' + e.message + '</p>';
+      console.error('Router: route "' + id + '" threw during render:', e);
+      if (_content) {
+        _content.innerHTML = errorCard(e, function () { navigate(id, params || {}); });
+      }
     }
   }
 
@@ -197,6 +200,79 @@ function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ── Safe DOM write ─────────────────────────────────────────────────
+ * setHTML(idOrEl, html) writes innerHTML to a target, but NO-OPS safely if
+ * the target is missing (and warns). This is the guard against the
+ * "Cannot set properties of null (setting 'innerHTML')" error, which happens
+ * when an async API callback resolves after the user has navigated away and
+ * the element it wanted to write into has been removed from the DOM. */
+function setHTML(idOrEl, html) {
+  var el = (typeof idOrEl === 'string') ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) { console.warn('setHTML: target not found (stale render?):', idOrEl); return null; }
+  el.innerHTML = html;
+  return el;
+}
+window.setHTML = setHTML;
+
+/* ── Navigate + sync header/active state ─────────────────────────────
+ * Used by drill-downs (dashboard cards, customer→contacts) so the page
+ * title and active sidebar item stay in sync, matching a sidebar click. */
+function goRoute(route, params) {
+  var item = document.querySelector('.nav-item[data-route="' + route + '"]');
+  if (item) {
+    var t = document.getElementById('pageTitle');
+    var span = item.querySelector('span');
+    if (t && span) t.textContent = span.textContent;
+  }
+  Router.navigate(route, params || {});
+}
+window.goRoute = goRoute;
+
+/* ── Loading / empty / error state helpers ───────────────────────────
+ * Consistent markup reused by every list/detail render. The *Row helpers
+ * return a single <tr> for use inside a <tbody>; spinnerHTML/errorCard
+ * return block markup for card/panel containers. Retry callbacks are wired
+ * after insertion via a unique id (works regardless of how the HTML is
+ * injected). */
+function spinnerHTML(pad) {
+  return '<div style="display:flex;justify-content:center;padding:' +
+    (pad || 40) + 'px"><span class="spinner dark"></span></div>';
+}
+function loadingRow(colspan) {
+  return '<tr><td colspan="' + colspan +
+    '" style="text-align:center;padding:28px"><span class="spinner dark"></span></td></tr>';
+}
+function emptyRow(colspan, msg) {
+  return '<tr><td colspan="' + colspan + '"><div class="empty-state">' +
+    esc(msg || 'Nothing here yet.') + '</div></td></tr>';
+}
+function _wireRetry(id, retryFn) {
+  if (!retryFn) return;
+  setTimeout(function () {
+    var b = document.getElementById(id);
+    if (b) b.onclick = function () { retryFn(); };
+  }, 0);
+}
+function errorRow(colspan, err, retryFn) {
+  var msg = (err && err.message) ? err.message : (typeof err === 'string' ? err : 'Something went wrong.');
+  var id  = '_er' + Math.random().toString(36).slice(2);
+  _wireRetry(id, retryFn);
+  return '<tr><td colspan="' + colspan + '"><div class="empty-state">' +
+    '<p style="margin:0 0 12px;color:var(--clr-danger)">' + esc(msg) + '</p>' +
+    (retryFn ? '<button class="btn btn-primary btn-sm" id="' + id + '">Retry</button>' : '') +
+    '</div></td></tr>';
+}
+function errorCard(err, retryFn) {
+  var msg = (err && err.message) ? err.message : (typeof err === 'string' ? err : 'Something went wrong.');
+  var id  = '_ec' + Math.random().toString(36).slice(2);
+  _wireRetry(id, retryFn);
+  return '<div class="card"><div class="card-body"><div class="empty-state">' +
+    '<div style="font-weight:600;margin-bottom:6px">Couldn’t load this view</div>' +
+    '<p style="margin:0 0 14px">' + esc(msg) + '</p>' +
+    (retryFn ? '<button class="btn btn-primary btn-sm" id="' + id + '">Retry</button>' : '') +
+    '</div></div></div>';
 }
 
 /* ── Branding ───────────────────────────────────────────────────── */

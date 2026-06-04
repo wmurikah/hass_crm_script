@@ -10,34 +10,36 @@ Router.register('pricing', function (el) {
     '<div id="plItems" style="margin-top:14px"></div>';
 
   function load() {
+    setHTML('plBody', loadingRow(6));
     API.call('pricing', 'listLists', { limit: 30 }).then(function (rows) {
-      var tbody = document.getElementById('plBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No price lists.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
-        return '<tr><td>' + esc(r.list_name) + '</td><td>' + esc(r.country_code) + '</td>' +
+      if (!rows.length) { setHTML('plBody', emptyRow(6, 'No price lists.')); return; }
+      setHTML('plBody', rows.map(function (r) {
+        var pid  = esc(r.list_id);
+        var name = esc(r.list_name);
+        return '<tr style="cursor:pointer" onclick="loadPriceItems(\'' + pid + '\',\'' + name + '\')"><td>' + esc(r.list_name) + '</td><td>' + esc(r.country_code) + '</td>' +
                '<td>' + esc(r.currency_code) + '</td><td>' + fmtDate(r.effective_from) + '</td>' +
                '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="loadPriceItems(\'' + esc(r.list_id) + '\',\'' + esc(r.list_name) + '\')">Items</button></td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('plBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();loadPriceItems(\'' + pid + '\',\'' + name + '\')">Items</button></td></tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('plBody', errorRow(6, e, load)); });
   }
 
   document.getElementById('plNewBtn').onclick = function () { newPriceListModal(load); };
   load();
 });
 
-function loadPriceItems(listId, listName) {
-  var c = document.getElementById('plItems');
-  c.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">Items — ' + esc(listName) + '</span></div>' +
-                '<div class="card-body" id="plItemBody"><span class="spinner dark"></span></div></div>';
-  API.call('pricing', 'getPriceListItems', { listId: listId }).then(function (rows) {
-    document.getElementById('plItemBody').innerHTML =
+function loadPriceItems(priceId, listName) {
+  setHTML('plItems', '<div class="card"><div class="card-header"><span class="card-title">Items — ' + esc(listName) + '</span></div>' +
+                '<div class="card-body" id="plItemBody">' + spinnerHTML(20) + '</div></div>');
+  // getPriceListItems requires the price_id — supply it from the clicked row.
+  API.call('pricing', 'getPriceListItems', { priceId: priceId }).then(function (rows) {
+    setHTML('plItemBody',
       '<table class="data-table"><thead><tr><th>Product</th><th>Unit Price</th><th>Min Qty</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (r) {
-        return '<tr><td>' + esc(r.product_id) + '</td><td>' + fmtMoney(r.unit_price) + '</td><td>' + (r.min_quantity || 1) + '</td></tr>';
-      }).join('') : '<tr><td colspan="3"><div class="empty-state">No items.</div></td></tr>') +
-      '</tbody></table>';
-  }).catch(function (e) { document.getElementById('plItemBody').innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+        return '<tr><td>' + esc(r.product_name || r.product_id) + '</td><td>' + fmtMoney(r.unit_price) + '</td><td>' + (r.min_quantity || 1) + '</td></tr>';
+      }).join('') : emptyRow(3, 'No items in this price list.')) +
+      '</tbody></table>');
+  }).catch(function (e) { setHTML('plItemBody', errorCard(e, function () { loadPriceItems(priceId, listName); })); });
 }
 
 function newPriceListModal(onSuccess) {

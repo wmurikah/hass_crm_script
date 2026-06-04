@@ -19,37 +19,36 @@ Router.register('catalog', function (el) {
   });
 
   function loadCat() {
-    var c = document.getElementById('catContent');
-    c.innerHTML = '<div style="display:flex;justify-content:center;padding:24px"><span class="spinner dark"></span></div>';
+    setHTML('catContent', spinnerHTML(24));
     if (_active === 'products') {
       API.call('catalog', 'listProducts', { limit: 50 }).then(function (rows) {
-        c.innerHTML = '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
           '<thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Unit</th><th>Status</th></tr></thead><tbody>' +
           (rows.length ? rows.map(function (r) {
             return '<tr><td>' + esc(r.sku || '—') + '</td><td>' + esc(r.name) + '</td>' +
                    '<td>' + esc(r.category || '—') + '</td><td>' + esc(r.unit_of_measure || '—') + '</td>' +
                    '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td></tr>';
-          }).join('') : '<tr><td colspan="5"><div class="empty-state">No products.</div></td></tr>') +
-          '</tbody></table></div></div>';
-      }).catch(function (e) { c.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+          }).join('') : emptyRow(5, 'No products.')) +
+          '</tbody></table></div></div>');
+      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
     } else if (_active === 'depots') {
       API.call('catalog', 'listDepots', {}).then(function (rows) {
-        c.innerHTML = '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
           '<thead><tr><th>Depot</th><th>Country</th><th>Status</th></tr></thead><tbody>' +
           (rows.length ? rows.map(function (r) {
             return '<tr><td>' + esc(r.depot_name || r.name) + '</td><td>' + esc(r.country_code) + '</td><td>' + statusBadge(r.status || 'ACTIVE') + '</td></tr>';
-          }).join('') : '<tr><td colspan="3"><div class="empty-state">No depots.</div></td></tr>') +
-          '</tbody></table></div></div>';
-      }).catch(function (e) { c.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+          }).join('') : emptyRow(3, 'No depots.')) +
+          '</tbody></table></div></div>');
+      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
     } else {
       API.call('catalog', 'listSegments', {}).then(function (rows) {
-        c.innerHTML = '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
           '<thead><tr><th>Segment</th><th>Description</th></tr></thead><tbody>' +
           (rows.length ? rows.map(function (r) {
             return '<tr><td>' + esc(r.segment_name || r.name) + '</td><td>' + esc(r.description || '—') + '</td></tr>';
-          }).join('') : '<tr><td colspan="2"><div class="empty-state">No segments.</div></td></tr>') +
-          '</tbody></table></div></div>';
-      }).catch(function (e) { c.innerHTML = '<p style="color:#dc2626">' + esc(e.message) + '</p>'; });
+          }).join('') : emptyRow(2, 'No segments.')) +
+          '</tbody></table></div></div>');
+      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
     }
   }
   loadCat();

@@ -60,6 +60,10 @@
 <?!= HtmlService.createHtmlOutputFromFile('partial_audit').getContent(); ?>
 <?!= HtmlService.createHtmlOutputFromFile('partial_knowledge').getContent(); ?>
 <?!= HtmlService.createHtmlOutputFromFile('partial_reports').getContent(); ?>
+<!-- config & branding: menu_items expose routes 'config' and 'branding';
+     load their partials so those sidebar items resolve (otherwise "Unknown route"). -->
+<?!= HtmlService.createHtmlOutputFromFile('partial_config').getContent(); ?>
+<?!= HtmlService.createHtmlOutputFromFile('partial_branding').getContent(); ?>
 
 <? var _stoken = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : ''; ?>
 <script>
@@ -98,16 +102,49 @@
   }
 
   // ── Verify session ─────────────────────────────────────────────
-  API.call('auth', 'me', {})
-    .then(function (me) {
-      document.getElementById('authGuard').style.display  = 'none';
-      document.getElementById('appShell').style.display   = 'flex';
-      document.getElementById('userLabel').textContent    = me.first_name + ' ' + me.last_name + ' (' + me.role + ')';
-      initApp(me);
-    })
-    .catch(function () {
-      loadLoginPage();
-    });
+  // A transient blip must NOT falsely log the user out. Give the guard call
+  // 3 retries (transient failures only) and only redirect to login on a real
+  // session loss (NO_SESSION / SESSION_EXPIRED). Any other failure after
+  // retries are exhausted shows a "Connection problem" retry state instead.
+  function verifySession() {
+    var guard = document.getElementById('authGuard');
+    if (guard) guard.innerHTML = '<span class="spinner dark"></span>';
+
+    API.call('auth', 'me', {}, { retries: 3 })
+      .then(function (me) {
+        document.getElementById('authGuard').style.display = 'none';
+        document.getElementById('appShell').style.display  = 'flex';
+        document.getElementById('userLabel').textContent   =
+          me.first_name + ' ' + me.last_name + ' (' + me.role + ')';
+        initApp(me);
+      })
+      .catch(function (err) {
+        if (err && (err.code === 'NO_SESSION' || err.code === 'SESSION_EXPIRED')) {
+          loadLoginPage();
+        } else {
+          showConnectionError(err);
+        }
+      });
+  }
+
+  function showConnectionError(err) {
+    var guard = document.getElementById('authGuard');
+    if (!guard) return;
+    var msg = (err && err.message) ? err.message : 'Could not reach the server.';
+    guard.innerHTML =
+      '<div class="card" style="max-width:420px;text-align:center">' +
+        '<div class="card-body">' +
+          '<div style="font-size:16px;font-weight:600;margin-bottom:8px">Connection problem</div>' +
+          '<p style="color:#6b7280;margin-bottom:16px">' +
+            String(msg).replace(/[<>&]/g, '') + '</p>' +
+          '<button class="btn btn-primary" id="connRetryBtn">Retry</button>' +
+        '</div>' +
+      '</div>';
+    var btn = document.getElementById('connRetryBtn');
+    if (btn) btn.onclick = verifySession;
+  }
+
+  verifySession();
 
   // ── App init ───────────────────────────────────────────────────
   function initApp(me) {

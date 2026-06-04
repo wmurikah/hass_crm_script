@@ -10,26 +10,27 @@ Router.register('documents', function (el) {
       '<tbody id="docBody"></tbody></table></div></div>';
 
   function load() {
+    setHTML('docBody', loadingRow(6));
     var params = { limit: 50 };
     var s = document.getElementById('docStatus').value;
     var c = document.getElementById('docCust').value.trim();
     if (s) params.status = s;
     if (c) params.customer_id = c;
     API.call('documents', 'list', params).then(function (rows) {
-      var tbody = document.getElementById('docBody');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No documents.</div></td></tr>'; return; }
-      tbody.innerHTML = rows.map(function (r) {
-        return '<tr><td>' + esc(r.document_type) + '</td><td>' + esc(r.customer_id) + '</td>' +
+      if (!rows.length) { setHTML('docBody', emptyRow(6, 'No documents.')); return; }
+      setHTML('docBody', rows.map(function (r) {
+        var did = esc(r.document_id);
+        return '<tr style="cursor:pointer" onclick="viewDoc(\'' + did + '\')"><td>' + esc(r.document_type) + '</td><td>' + esc(r.customer_id) + '</td>' +
                '<td>' + esc(r.country_code || '—') + '</td><td>' + statusBadge(r.status) + '</td>' +
                '<td>' + fmtDate(r.uploaded_at || r.created_at) + '</td>' +
                '<td class="actions">' +
                (r.status === 'PENDING'
-                 ? '<button class="btn btn-danger btn-sm" onclick="verifyDoc(\'' + esc(r.document_id) + '\',\'REJECT\')">Reject</button>' +
-                   '<button class="btn btn-primary btn-sm" onclick="verifyDoc(\'' + esc(r.document_id) + '\',\'APPROVE\')">Approve</button>'
-                 : '<button class="btn btn-secondary btn-sm" onclick="viewDoc(\'' + esc(r.document_id) + '\')">View</button>') +
+                 ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'REJECT\')">Reject</button>' +
+                   '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'APPROVE\')">Approve</button>'
+                 : '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewDoc(\'' + did + '\')">View</button>') +
                '</td></tr>';
-      }).join('');
-    }).catch(function (e) { document.getElementById('docBody').innerHTML = '<tr><td colspan="6" style="color:#dc2626">' + esc(e.message) + '</td></tr>'; });
+      }).join(''));
+    }).catch(function (e) { setHTML('docBody', errorRow(6, e, load)); });
   }
 
   document.getElementById('docStatus').onchange = load;
