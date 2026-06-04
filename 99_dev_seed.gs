@@ -257,10 +257,12 @@ function reproRbac() {
  * It proves the bot.chat path end-to-end WITHOUT spending LLM tokens:
  *   1. Mints a real SUPER_ADMIN session.
  *   2. Seeds bot_tools (idempotent) and asserts every row is is_write = 0.
- *   3. Creates/activates a test bot_llm_configs row with a DUMMY key (the
- *      provider call is therefore expected to fail gracefully on auth — proving
- *      the request path without burning tokens). If BOT_ANTHROPIC_KEY is set in
- *      Script Properties you may point the config at it for a real call instead.
+ *   3. Saves a test bot_llm_configs row with NO key (must succeed — regression
+ *      guard for the api_key_property NOT NULL bug; has_key=false), activates it,
+ *      then saves a DUMMY key and confirms has_key flips to true. The dummy-key
+ *      provider call is expected to fail gracefully on auth — proving the request
+ *      path without burning tokens. If BOT_ANTHROPIC_KEY is set in Script
+ *      Properties you may point the config at it for a real call instead.
  *   4. Calls bot.chat('How many unpaid invoices are there?') and logs the
  *      answer + toolsUsed, then confirms the turn was written to
  *      bot_conversations.
@@ -293,24 +295,46 @@ function reproBot() {
   Logger.log('reproBot seed: ' + JSON.stringify(out.seed) +
              (writeRows.length ? ' ❌ WRITE TOOL PRESENT' : ' ✅ all read-only'));
 
-  // ── 3. Test config with a DUMMY key, made active ──────────────────────────
-  var save = call('saveConfig', {
+  // ── 3a. Save a config with NO key — must SUCCEED (regression: the NOT NULL
+  //        constraint on api_key_property used to make this fail). has_key=false.
+  var saveNoKey = call('saveConfig', {
     config_id:     'REPRO_BOT_CFG',
     provider:      'anthropic',
     label:         'Repro Test Config',
     model:         'claude-sonnet-4-6',
     system_prompt: 'You are the Hass CMS read-only assistant.',
-    apiKey:        'sk-ant-DUMMY-key-for-repro-only',
+    // intentionally NO apiKey
+  });
+  out.saveNoKey = saveNoKey.ok
+    ? { config_id: saveNoKey.data.config_id, has_key: saveNoKey.data.has_key }
+    : { error: saveNoKey.error };
+  Logger.log('reproBot saveConfig(no key): ' + JSON.stringify(out.saveNoKey) +
+             (saveNoKey.ok && saveNoKey.data.has_key === false ? ' ✅ saved, no key' : ' ❌'));
+
+  // 3b. Activate + getConfig must succeed with has_key=false and never expose a raw key.
+  call('setActiveConfig', { config_id: 'REPRO_BOT_CFG' });
+  var getNoKey = call('getConfig', { config_id: 'REPRO_BOT_CFG' });
+  out.getNoKey = getNoKey.ok
+    ? { has_key: getNoKey.data.has_key, exposesRawKey: ('apiKey' in getNoKey.data) || ('api_key' in getNoKey.data) }
+    : { error: getNoKey.error };
+  Logger.log('reproBot getConfig(no key): ' + JSON.stringify(out.getNoKey) +
+             (getNoKey.ok && getNoKey.data.has_key === false ? ' ✅ active, has_key=false' : ' ❌'));
+
+  // 3c. Now save a DUMMY key — has_key must flip to true (the provider call will
+  //     still fail gracefully on auth, proving the path without burning tokens).
+  var save = call('saveConfig', {
+    config_id: 'REPRO_BOT_CFG',
+    apiKey:    'sk-ant-DUMMY-key-for-repro-only',
   });
   out.saveConfig = save.ok ? { config_id: save.data.config_id, has_key: save.data.has_key } : { error: save.error };
-  call('setActiveConfig', { config_id: 'REPRO_BOT_CFG' });
-  // Confirm the raw key NEVER comes back, only has_key.
+  // Confirm the raw key NEVER comes back, only has_key (now true).
   var getCfg = call('getConfig', { config_id: 'REPRO_BOT_CFG' });
   out.keyNeverReturned = getCfg.ok
     ? { has_key: getCfg.data.has_key, exposesRawKey: ('apiKey' in getCfg.data) || ('api_key' in getCfg.data) }
     : { error: getCfg.error };
-  Logger.log('reproBot config: ' + JSON.stringify(out.saveConfig) +
-             ' keyCheck=' + JSON.stringify(out.keyNeverReturned));
+  Logger.log('reproBot config(with key): ' + JSON.stringify(out.saveConfig) +
+             ' keyCheck=' + JSON.stringify(out.keyNeverReturned) +
+             (save.ok && save.data.has_key === true ? ' ✅ key set' : ' ❌'));
 
   // ── 4. Ask a read question (dummy key → provider fails gracefully) ─────────
   var ask = call('chat', { message: 'How many unpaid invoices are there?' });
@@ -371,6 +395,9 @@ function reproBot() {
   try { Session.invalidate(token); } catch (_) {}
 
   var pass = out.seed.writeToolRows === 0 &&
+             out.saveNoKey.has_key === false &&
+             out.getNoKey.has_key === false && out.getNoKey.exposesRawKey === false &&
+             out.saveConfig.has_key === true &&
              out.turnLogged.found === true &&
              out.chatCancel.ranWriteAction === false &&
              out.writeGuard.refused === true && out.writeGuard.executed === false &&
