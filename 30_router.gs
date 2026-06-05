@@ -52,13 +52,18 @@ function doGet(e) {
     return tmpl
       .evaluate()
       .setTitle(ENV.APP_NAME)
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      // Allow this published web app to be embedded in a third-party iframe
+      // (the GitHub Pages banner-crop wrapper). Without ALLOWALL the default
+      // X-Frame-Options blocks rendering inside any cross-origin frame.
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   } catch (err) {
     Log.error({ service: 'router', action: 'doGet', msg: err.message,
                 data: { page: page } });
     return HtmlService
       .createHtmlOutput('<p>Page not available.</p>')
-      .setTitle(ENV.APP_NAME);
+      .setTitle(ENV.APP_NAME)
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 }
 
