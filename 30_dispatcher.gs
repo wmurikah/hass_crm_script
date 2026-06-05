@@ -12,6 +12,13 @@ var _PUBLIC_ACTIONS_ = [
 var _registry_ = {};
 
 function register(opts) {
+  // Load-order guard: GAS executes top-level statements in file load order.
+  // If a service file calls register() before this file's `var _registry_ = {};`
+  // has executed, _registry_ would be undefined and the assignment below would
+  // throw. Lazily initialize it here so registration can NEVER throw.
+  if (typeof _registry_ === 'undefined' || _registry_ === null) {
+    _registry_ = {};
+  }
   var key = opts.service + '.' + opts.action;
   _registry_[key] = opts;
   Logger.log('[dispatcher] registered ' + key);
