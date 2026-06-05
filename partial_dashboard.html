@@ -39,12 +39,6 @@
 Router.register('dashboard', function (el) {
   el.innerHTML =
     '<div class="stat-grid" id="dashStats">' + spinnerHTML(30) + '</div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
-      '<div class="card"><div class="card-header"><span class="card-title">Recent Activity</span></div>' +
-        '<div class="card-body" id="dashFeed" style="max-height:320px;overflow-y:auto">' + spinnerHTML(20) + '</div></div>' +
-      '<div class="card"><div class="card-header"><span class="card-title">Orders (30 days)</span></div>' +
-        '<div class="card-body" id="dashOrders">' + spinnerHTML(20) + '</div></div>' +
-    '</div>' +
     // ── SLA Performance section (below the KPI cards, scanning order preserved) ──
     '<div class="sla-section">' +
       '<h2 class="sla-section-title">SLA Performance</h2>' +
@@ -68,35 +62,6 @@ Router.register('dashboard', function (el) {
     }).catch(function (e) {
       setHTML('dashStats', '<div style="grid-column:1/-1">' + errorCard(e, loadStats) + '</div>');
     });
-  }
-
-  function loadFeed() {
-    setHTML('dashFeed', spinnerHTML(20));
-    API.call('dashboard', 'activityFeed', { limit: 20 }).then(function (rows) {
-      if (Router.current() !== 'dashboard') return;
-      if (!rows.length) { setHTML('dashFeed', '<div class="empty-state">No recent activity.</div>'); return; }
-      setHTML('dashFeed', rows.map(function (r) {
-        return '<div style="padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px">' +
-               '<span style="color:#6b7280">' + fmtDateTime(r.created_at) + '</span> ' +
-               '<strong>' + esc(r.action) + '</strong> on ' + esc(r.entity_type) +
-               ' by ' + esc(r.actor_id) + '</div>';
-      }).join(''));
-    }).catch(function (e) { setHTML('dashFeed', errorCard(e, loadFeed)); });
-  }
-
-  function loadOrders() {
-    setHTML('dashOrders', spinnerHTML(20));
-    API.call('dashboard', 'ordersPulse', { days: 30 }).then(function (rows) {
-      if (Router.current() !== 'dashboard') return;
-      if (!rows.length) { setHTML('dashOrders', '<div class="empty-state">No order data.</div>'); return; }
-      var max = rows.reduce(function (m, r) { return Math.max(m, r.total_orders); }, 1);
-      setHTML('dashOrders', '<div style="display:flex;align-items:flex-end;gap:2px;height:80px">' +
-        rows.map(function (r) {
-          var h = Math.max(4, Math.round((r.total_orders / max) * 76));
-          return '<div title="' + r.day + ': ' + r.total_orders + ' orders" style="flex:1;background:var(--clr-primary);height:' + h + 'px;border-radius:2px 2px 0 0;min-width:4px"></div>';
-        }).join('') + '</div>' +
-        '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + rows[0].day + ' → ' + rows[rows.length-1].day + '</div>');
-    }).catch(function (e) { setHTML('dashOrders', errorCard(e, loadOrders)); });
   }
 
   // Stat cards are drill-downs: clicking navigates to the relevant list.
@@ -282,8 +247,6 @@ Router.register('dashboard', function (el) {
   function _cap(s) { s = String(s || ''); return s.charAt(0) + s.slice(1).toLowerCase(); }
 
   loadStats();
-  loadFeed();
-  loadOrders();
   loadSla();
 });
 </script>
