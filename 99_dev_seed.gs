@@ -116,6 +116,27 @@ function reproLoginThenValidate() {
 }
 
 /**
+ * checkLoginRoute()  —  Reproduce the "Log in again" route (run from the IDE).
+ *
+ * Confirms getLoginPage() returns the actual LOGIN FORM HTML (email/password
+ * fields), not the "Session expired" interstitial, the dashboard, or empty.
+ * NEVER auto-invoked.
+ */
+function checkLoginRoute() {
+  try {
+    var login = getLoginPage();
+    Logger.log('getLoginPage LEN: ' + (login ? login.length : 'NULL'));
+    Logger.log('getLoginPage HEAD: ' + (login ? login.substring(0, 300) : 'nothing'));
+    Logger.log('getLoginPage HAS EMAIL FIELD: ' +
+               (login && login.indexOf('id="email"') !== -1));
+    Logger.log('getLoginPage HAS PASSWORD FIELD: ' +
+               (login && login.indexOf('id="password"') !== -1));
+    Logger.log('getLoginPage IS EXPIRED PAGE: ' +
+               (login && login.indexOf('Session expired') !== -1));
+  } catch (e) { Logger.log('getLoginPage THREW: ' + e.message); }
+}
+
+/**
  * reproAllPages()  —  Manual verification harness (run from the Apps Script IDE).
  *
  * Mints a real SUPER_ADMIN session, then drives processRequest() for every

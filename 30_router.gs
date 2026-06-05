@@ -115,6 +115,46 @@ function getMfaEnrollPage(challengeId) {
 }
 
 /**
+ * The "Session expired" interstitial shown when getStaffDashboardPage() is
+ * called with an invalid/expired token.
+ *
+ * GAS-safe "Log in again": window.location / window.top navigation is blocked
+ * inside the sandboxed iframe, so a plain <a href target="_top"> link silently
+ * fails and the user is stuck on this page (the reported loop). Instead the
+ * button (1) clears the stale persisted token — otherwise the Login page would
+ * immediately auto-swap back to getStaffDashboardPage() with the same dead
+ * token and re-render this page — then (2) fetches the rendered login form via
+ * google.script.run.getLoginPage() and replaces the document. It NEVER calls
+ * the dashboard route again.
+ */
+function _sessionExpiredPage_() {
+  return [
+    '<!DOCTYPE html><html><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1"></head>',
+    '<body style="font-family:sans-serif;padding:40px">',
+    '<p>Session expired. ',
+    '<a href="#" id="hassLoginAgain">Log in again</a>.</p>',
+    '<script>',
+    '(function(){',
+    '  var link=document.getElementById("hassLoginAgain");',
+    '  link.addEventListener("click",function(ev){',
+    '    ev.preventDefault();',
+    '    link.textContent="Loading login…";',
+    // Drop the dead token so the login page does not bounce straight back here.
+    '    try{sessionStorage.removeItem("hass_token");}catch(e){}',
+    '    try{localStorage.removeItem("hass_token");}catch(e){}',
+    '    google.script.run',
+    '      .withSuccessHandler(function(html){document.open();document.write(html);document.close();})',
+    '      .withFailureHandler(function(){link.textContent="Log in again";link.href="#";})',
+    '      .getLoginPage();',
+    '  });',
+    '})();',
+    '<\/script>',
+    '</body></html>'
+  ].join('');
+}
+
+/**
  * Returns the staff dashboard HTML for a valid session token.
  * Invalid/expired tokens get a small error page (never a blank document).
  */
@@ -122,11 +162,7 @@ function getStaffDashboardPage(token) {
   try {
     var session = Session.validate(token);
     if (!session) {
-      var url = ScriptApp.getService().getUrl();
-      return '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px">'
-        + '<p>Session expired. '
-        + '<a href="' + url + '" target="_top">Log in again</a>.</p>'
-        + '</body></html>';
+      return _sessionExpiredPage_();
     }
     return _renderPage_('Staffdashboard', {
       sessionToken: token,
