@@ -1,0 +1,28 @@
+name = "hass-cms-proxy"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# --- Custom domain / route binding -----------------------------------------
+# Bind the Worker to your clean subdomain. Use ONE of the approaches below.
+#
+# 1) Custom Domain (recommended) — Cloudflare manages the DNS + TLS for you.
+#    The zone must already exist in your Cloudflare account.
+#
+# [[routes]]
+# pattern = "app.example.com"
+# custom_domain = true
+#
+# 2) Route pattern on an existing zone:
+#
+# [[routes]]
+# pattern = "app.example.com/*"
+# zone_name = "example.com"
+
+# --- Secrets ----------------------------------------------------------------
+# The target GAS /exec URL is provided at runtime as a secret and is NEVER
+# committed to this file or the repo. Set it with:
+#
+#   wrangler secret put GAS_EXEC_URL
+#
+# (paste the https://script.google.com/macros/s/AKfycb..../exec URL when
+# prompted). The Worker reads it via env.GAS_EXEC_URL.
