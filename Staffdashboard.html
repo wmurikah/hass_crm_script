@@ -22,10 +22,7 @@
   <!-- Main area -->
   <div class="main-area">
     <header class="app-header">
-      <div class="header-titles">
-        <span class="header-title" id="pageTitle">Dashboard</span>
-        <span class="header-greeting" id="headerGreeting"></span>
-      </div>
+      <span class="header-title" id="pageTitle">Dashboard</span>
       <div id="headerRight" style="display:flex;gap:8px;align-items:center"></div>
     </header>
     <div class="page-content" id="pageContent">
@@ -159,9 +156,6 @@
   var _botAdmin    = false; // user may manage bot configs (probed server-side)
 
   function initApp(me) {
-    // Time-based welcome greeting (local browser time + real first name).
-    showWelcomeGreeting(me);
-
     // Pull live branding (non-blocking): failure falls back to CSS defaults.
     API.call('branding', 'get', { scope_code: 'GLOBAL' })
       .then(function (b) { applyBranding(b); })
@@ -205,105 +199,67 @@
     renderNav(items);
   }
 
-  // ── Time-based welcome greeting ─────────────────────────────────
-  // Shows a brief, prominent banner that fades in then auto-dismisses
-  // after ~3s, and leaves a subtle greeting subtitle settled in the
-  // header. Uses the logged-in user's first name + local browser time.
-  function showWelcomeGreeting(me) {
-    var first = (me && me.first_name) ? me.first_name : '';
-    var text  = (typeof greetingFor === 'function')
-      ? greetingFor(first)
-      : ('Welcome' + (first ? ', ' + first : ''));
-
-    // Bold the name portion for both the banner and the header subtitle.
-    var html = first
-      ? text.replace(first, '<b>' + first + '</b>')
-      : text;
-
-    // Settled header subtitle (persists).
-    var sub = document.getElementById('headerGreeting');
-    if (sub) {
-      sub.innerHTML = html;
-      requestAnimationFrame(function () { sub.classList.add('show'); });
-    }
-
-    // Transient prominent banner (auto-dismisses ~3s).
-    var banner = document.createElement('div');
-    banner.className = 'welcome-banner';
-    banner.innerHTML = html;
-    document.body.appendChild(banner);
-    requestAnimationFrame(function () { banner.classList.add('show'); });
-    setTimeout(function () {
-      banner.classList.remove('show');
-      setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 500);
-    }, 3000);
-  }
-
-  // ── Sidebar render ──────────────────────────────────────────────
-  // Groups render as a STRICT single-open accordion: at most one group is
-  // expanded at any time. Clicking a collapsed header opens it and closes
-  // the previously-open one; clicking the open header collapses it (none
-  // open). On (re)render the group holding the active route is the open one.
-  var _openGroup = null; // data-group key of the currently expanded section
-
-  function groupOfRoute(items, route) {
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].id === route) return items[i].group;
-    }
-    return null;
-  }
+  // ── Sidebar render (collapsible accordion groups) ───────────────
+  // Open/closed state is held in-memory for the session (NO storage APIs in
+  // GAS artifacts). On the very first render we open only the group that
+  // contains the active route; the user's toggles persist across re-renders
+  // (menu reload, botconfig probe) and across page navigations.
+  var _openGroups   = null;   // { groupKey: bool }  — null until first render
+  var _routeToGroup = {};     // route id → group key, rebuilt each render
 
   function renderNav(items) {
     var nav = document.getElementById('sidebarNav');
     var groups = {};
+    _routeToGroup = {};
     items.forEach(function (item) {
       if (!groups[item.group]) groups[item.group] = [];
       groups[item.group].push(item);
+      _routeToGroup[item.id] = item.group;
     });
     var groupLabels = { main:'Main', finance:'Finance', ops:'Operations',
                         catalog:'Catalog', support:'Support', reports:'Reports', admin:'Admin' };
-    var present = Object.keys(groupLabels).filter(function (g) {
-      return groups[g] && groups[g].length;
-    });
 
-    // Decide which single group is open: keep the prior choice if it still
-    // exists, otherwise fall back to the active route's group, else the first.
-    var activeGroup = groupOfRoute(items, Router.current());
-    if (!_openGroup || present.indexOf(_openGroup) === -1) {
-      _openGroup = (activeGroup && present.indexOf(activeGroup) !== -1)
-        ? activeGroup : (present[0] || null);
+    // First render: initialise open state — only the active route's group opens.
+    if (_openGroups === null) {
+      _openGroups = {};
+      var activeGroup = _routeToGroup[Router.current()] || 'main';
+      Object.keys(groupLabels).forEach(function (g) { _openGroups[g] = (g === activeGroup); });
     }
 
-    var chevron = '<svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" ' +
-                  'fill="none" stroke="currentColor" stroke-width="2.5" ' +
-                  'stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+    var chevron =
+      '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+
     var html = '';
-    present.forEach(function (g) {
-      var open = (g === _openGroup);
-      html += '<div class="nav-group' + (open ? ' open' : '') + '" data-group="' + g + '">' +
-                '<button type="button" class="nav-group-header" aria-expanded="' +
-                  (open ? 'true' : 'false') + '">' +
-                  '<span>' + groupLabels[g] + '</span>' + chevron +
-                '</button>' +
-                '<div class="nav-group-body"><div class="nav-group-body-inner">';
+    Object.keys(groupLabels).forEach(function (g) {
+      if (!groups[g] || !groups[g].length) return;
+      var open = !!_openGroups[g];
+      html += '<div class="nav-group' + (open ? ' open' : '') + '" data-group="' + g + '">';
+      html += '<button type="button" class="nav-group-label" data-group="' + g + '" ' +
+              'aria-expanded="' + open + '"><span>' + groupLabels[g] + '</span>' + chevron + '</button>';
+      html += '<div class="nav-group-items">';
       groups[g].forEach(function (item) {
         html += '<div class="nav-item" data-route="' + item.id + '">' +
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>' +
                 '<span>' + item.label + '</span></div>';
       });
-      html += '</div></div></div>';
+      html += '</div></div>';
     });
     nav.innerHTML = html;
 
-    // Header clicks drive the single-open accordion.
-    nav.querySelectorAll('.nav-group-header').forEach(function (hdr) {
-      hdr.addEventListener('click', function () {
-        var key = hdr.parentNode.getAttribute('data-group');
-        setOpenGroup(_openGroup === key ? null : key);
+    // Group header toggles only its own group (active group starts open).
+    nav.querySelectorAll('.nav-group-label').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var g     = btn.dataset.group;
+        var group = btn.closest('.nav-group');
+        var open  = !group.classList.contains('open');
+        group.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', String(open));
+        _openGroups[g] = open;
       });
     });
 
-    // Item clicks navigate (and the active item always lives in an open group).
+    // Nav items navigate; their group is already open (you clicked inside it).
     nav.querySelectorAll('.nav-item').forEach(function (el) {
       el.addEventListener('click', function () {
         document.getElementById('pageTitle').textContent = el.querySelector('span').textContent;
@@ -312,19 +268,20 @@
     });
   }
 
-  // Open exactly the named group (or none when key is null), animating the
-  // outgoing and incoming sections simultaneously.
-  function setOpenGroup(key) {
-    _openGroup = key;
-    var nav = document.getElementById('sidebarNav');
-    if (!nav) return;
-    nav.querySelectorAll('.nav-group').forEach(function (g) {
-      var open = (g.getAttribute('data-group') === key);
-      g.classList.toggle('open', open);
-      var hdr = g.querySelector('.nav-group-header');
-      if (hdr) hdr.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-  }
+  // Open (and reveal) the group that owns a route — used by drill-down
+  // navigation (e.g. dashboard stat cards) so jumping into a collapsed
+  // group expands it and keeps the active item visible.
+  window._hassOpenNavGroup = function (route) {
+    var g = _routeToGroup[route];
+    if (!g || !_openGroups) return;
+    _openGroups[g] = true;
+    var groupEl = document.querySelector('.nav-group[data-group="' + g + '"]');
+    if (groupEl) {
+      groupEl.classList.add('open');
+      var btn = groupEl.querySelector('.nav-group-label');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+    }
+  };
 })();
 </script>
 </body>

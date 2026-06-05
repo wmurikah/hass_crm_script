@@ -220,6 +220,9 @@ window.setHTML = setHTML;
  * Used by drill-downs (dashboard cards, customer→contacts) so the page
  * title and active sidebar item stay in sync, matching a sidebar click. */
 function goRoute(route, params) {
+  // Reveal the sidebar group that owns this route (it may be collapsed when
+  // arriving via a drill-down). No-op outside the staff shell.
+  if (typeof window._hassOpenNavGroup === 'function') window._hassOpenNavGroup(route);
   var item = document.querySelector('.nav-item[data-route="' + route + '"]');
   if (item) {
     var t = document.getElementById('pageTitle');
@@ -288,19 +291,6 @@ function applyBranding(b) {
   }
 }
 window.applyBranding = applyBranding;
-
-/* ── Time-based greeting ─────────────────────────────────────────────
- * Uses the user's LOCAL browser time (new Date().getHours()), not the
- * server. Returns a friendly greeting string for the given first name. */
-function greetingFor(firstName, now) {
-  var h   = (now instanceof Date ? now : new Date()).getHours();
-  var who = firstName ? (' ' + firstName) : '';
-  if (h < 12)      return 'Good morning' + (who ? ',' + who : '');
-  if (h < 17)      return 'Good afternoon' + (who ? ',' + who : '');
-  if (h < 21)      return 'Good evening' + (who ? ',' + who : '');
-  return 'Working late' + (who ? ',' + who : '') + '?';
-}
-window.greetingFor = greetingFor;
 
 /* ── Floating Assistant chat widget ──────────────────────────────────
  * Fixed bottom-right launcher → toggles a chat panel. Talks to
