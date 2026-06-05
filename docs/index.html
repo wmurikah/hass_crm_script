@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Hass CMS</title>
+
+  <!--
+    GOAL 2 — iframe-crop the "created by a Google Apps Script user" banner.
+
+    Technique: embed the app in a full-viewport clip box with overflow:hidden,
+    then shift the iframe UP by exactly the banner height so the banner is
+    clipped off the top edge. The iframe is made TALLER than the viewport by
+    the same amount so the bottom of the app still reaches the bottom edge.
+
+    ── Set --banner to the MEASURED height (do NOT assume 45px) ──────────────
+    Google has changed this bar's height over time; measure YOURS:
+      1. Open the CLEAN Cloudflare URL DIRECTLY in a desktop browser
+         (not this page — the raw app, so the banner is visible).
+      2. Open DevTools (F12) → click the element-picker (top-left arrow icon,
+         Ctrl/Cmd+Shift+C).
+      3. Click the grey "This application was created by a Google Apps Script
+         user" bar at the very top of the page.
+      4. In the Elements panel the bar is selected; read its height from the
+         box-model diagram (Computed tab → "height"), OR paste this in the
+         Console and read the number it prints:
+            $0.getBoundingClientRect().height
+         ($0 is the element you just selected.)
+      5. Put that exact pixel value into --banner below (e.g. 45px, 38px, or
+         0px if Google no longer shows a bar for your deployment) and reload
+         this page. Add ~1px if you still see a sliver.
+  -->
+  <style>
+    :root {
+      --banner: 45px;            /* ← REPLACE with your measured value */
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    /* Full-viewport clip box: anything outside it (the banner pushed above
+       top:0) is hidden. */
+    #frameClip {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+    /* The app, shifted up by one banner height and grown by the same amount so
+       it still fills the viewport bottom-to-bottom. */
+    #appFrame {
+      position: absolute;
+      left: 0;
+      top: calc(-1 * var(--banner));
+      width: 100%;
+      height: calc(100% + var(--banner));
+      border: 0;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="frameClip">
+    <!--
+      src MUST be the clean Cloudflare URL (the fixed public URL), NEVER the
+      raw .../exec. The Worker hides the /exec and strips its X-Frame-Options;
+      combined with setXFrameOptionsMode(ALLOWALL) in Project A's doGet, the GAS
+      frames are allowed to render inside this cross-origin page.
+    -->
+    <iframe
+      id="appFrame"
+      title="Hass CMS"
+      src="https://REPLACE_WITH_CLEAN_CLOUDFLARE_URL/"
+      allow="clipboard-read; clipboard-write; fullscreen"
+      referrerpolicy="no-referrer-when-downgrade"></iframe>
+  </div>
+</body>
+</html>
