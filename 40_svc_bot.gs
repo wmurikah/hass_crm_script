@@ -362,13 +362,25 @@ function _botCallOpenai_(config, messages, tools) {
   var key = _botApiKey_(config);
   if (!key) return { error: 'API key not configured for this assistant.', text: '', toolCalls: [], tokensUsed: 0 };
 
-  var url  = config.endpoint_url || 'https://api.openai.com/v1/chat/completions';
+  var url   = config.endpoint_url || 'https://api.openai.com/v1/chat/completions';
+  var model = String(config.model || '');
+
+  // GPT-5 / o-series use the newer Chat Completions shape:
+  //  - the token-limit field is `max_completion_tokens` (the old `max_tokens`
+  //    is rejected with HTTP 400 "Unsupported parameter").
+  //  - they only accept the default temperature, so omit a custom one (a
+  //    non-default value also triggers a 400). Older models keep both fields.
+  var isNewShape = /^(gpt-5|o\d)/i.test(model);
+
   var body = {
-    model:       config.model,
-    max_tokens:  _botNum_(config.max_tokens, 1024),
-    temperature: _botNum_(config.temperature, 0),
-    messages:    messages,
+    model:    config.model,
+    messages: messages,
   };
+  // Always send max_completion_tokens: current OpenAI models accept it, and it
+  // is required for gpt-5*/o*. Only very old (deprecated) models needed the old
+  // max_tokens field, so we no longer send it at all.
+  body.max_completion_tokens = _botNum_(config.max_tokens, 1024);
+  if (!isNewShape) body.temperature = _botNum_(config.temperature, 0);
   if (tools && tools.length) { body.tools = tools; body.tool_choice = 'auto'; }
 
   var resp;
