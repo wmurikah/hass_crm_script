@@ -22,7 +22,10 @@
   <!-- Main area -->
   <div class="main-area">
     <header class="app-header">
-      <span class="header-title" id="pageTitle">Dashboard</span>
+      <div class="header-titles">
+        <span class="header-title" id="pageTitle">Dashboard</span>
+        <span class="header-greeting" id="headerGreeting"></span>
+      </div>
       <div id="headerRight" style="display:flex;gap:8px;align-items:center"></div>
     </header>
     <div class="page-content" id="pageContent">
@@ -156,6 +159,9 @@
   var _botAdmin    = false; // user may manage bot configs (probed server-side)
 
   function initApp(me) {
+    // Time-based welcome greeting (local browser time + real first name).
+    showWelcomeGreeting(me);
+
     // Pull live branding (non-blocking): failure falls back to CSS defaults.
     API.call('branding', 'get', { scope_code: 'GLOBAL' })
       .then(function (b) { applyBranding(b); })
@@ -197,6 +203,40 @@
       items.push({ id: 'botconfig', label: 'Bot Assistant', route: 'botconfig', group: 'admin' });
     }
     renderNav(items);
+  }
+
+  // ── Time-based welcome greeting ─────────────────────────────────
+  // Shows a brief, prominent banner that fades in then auto-dismisses
+  // after ~3s, and leaves a subtle greeting subtitle settled in the
+  // header. Uses the logged-in user's first name + local browser time.
+  function showWelcomeGreeting(me) {
+    var first = (me && me.first_name) ? me.first_name : '';
+    var text  = (typeof greetingFor === 'function')
+      ? greetingFor(first)
+      : ('Welcome' + (first ? ', ' + first : ''));
+
+    // Bold the name portion for both the banner and the header subtitle.
+    var html = first
+      ? text.replace(first, '<b>' + first + '</b>')
+      : text;
+
+    // Settled header subtitle (persists).
+    var sub = document.getElementById('headerGreeting');
+    if (sub) {
+      sub.innerHTML = html;
+      requestAnimationFrame(function () { sub.classList.add('show'); });
+    }
+
+    // Transient prominent banner (auto-dismisses ~3s).
+    var banner = document.createElement('div');
+    banner.className = 'welcome-banner';
+    banner.innerHTML = html;
+    document.body.appendChild(banner);
+    requestAnimationFrame(function () { banner.classList.add('show'); });
+    setTimeout(function () {
+      banner.classList.remove('show');
+      setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 500);
+    }, 3000);
   }
 
   // ── Sidebar render ──────────────────────────────────────────────
