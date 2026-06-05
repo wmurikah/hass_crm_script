@@ -240,6 +240,19 @@
   }
 
   // ── Sidebar render ──────────────────────────────────────────────
+  // Groups render as a STRICT single-open accordion: at most one group is
+  // expanded at any time. Clicking a collapsed header opens it and closes
+  // the previously-open one; clicking the open header collapses it (none
+  // open). On (re)render the group holding the active route is the open one.
+  var _openGroup = null; // data-group key of the currently expanded section
+
+  function groupOfRoute(items, route) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === route) return items[i].group;
+    }
+    return null;
+  }
+
   function renderNav(items) {
     var nav = document.getElementById('sidebarNav');
     var groups = {};
@@ -249,22 +262,67 @@
     });
     var groupLabels = { main:'Main', finance:'Finance', ops:'Operations',
                         catalog:'Catalog', support:'Support', reports:'Reports', admin:'Admin' };
+    var present = Object.keys(groupLabels).filter(function (g) {
+      return groups[g] && groups[g].length;
+    });
+
+    // Decide which single group is open: keep the prior choice if it still
+    // exists, otherwise fall back to the active route's group, else the first.
+    var activeGroup = groupOfRoute(items, Router.current());
+    if (!_openGroup || present.indexOf(_openGroup) === -1) {
+      _openGroup = (activeGroup && present.indexOf(activeGroup) !== -1)
+        ? activeGroup : (present[0] || null);
+    }
+
+    var chevron = '<svg class="nav-chevron" width="12" height="12" viewBox="0 0 24 24" ' +
+                  'fill="none" stroke="currentColor" stroke-width="2.5" ' +
+                  'stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
     var html = '';
-    Object.keys(groupLabels).forEach(function (g) {
-      if (!groups[g] || !groups[g].length) return;
-      html += '<div class="nav-group-label">' + groupLabels[g] + '</div>';
+    present.forEach(function (g) {
+      var open = (g === _openGroup);
+      html += '<div class="nav-group' + (open ? ' open' : '') + '" data-group="' + g + '">' +
+                '<button type="button" class="nav-group-header" aria-expanded="' +
+                  (open ? 'true' : 'false') + '">' +
+                  '<span>' + groupLabels[g] + '</span>' + chevron +
+                '</button>' +
+                '<div class="nav-group-body"><div class="nav-group-body-inner">';
       groups[g].forEach(function (item) {
         html += '<div class="nav-item" data-route="' + item.id + '">' +
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>' +
                 '<span>' + item.label + '</span></div>';
       });
+      html += '</div></div></div>';
     });
     nav.innerHTML = html;
+
+    // Header clicks drive the single-open accordion.
+    nav.querySelectorAll('.nav-group-header').forEach(function (hdr) {
+      hdr.addEventListener('click', function () {
+        var key = hdr.parentNode.getAttribute('data-group');
+        setOpenGroup(_openGroup === key ? null : key);
+      });
+    });
+
+    // Item clicks navigate (and the active item always lives in an open group).
     nav.querySelectorAll('.nav-item').forEach(function (el) {
       el.addEventListener('click', function () {
         document.getElementById('pageTitle').textContent = el.querySelector('span').textContent;
         Router.navigate(el.dataset.route, {});
       });
+    });
+  }
+
+  // Open exactly the named group (or none when key is null), animating the
+  // outgoing and incoming sections simultaneously.
+  function setOpenGroup(key) {
+    _openGroup = key;
+    var nav = document.getElementById('sidebarNav');
+    if (!nav) return;
+    nav.querySelectorAll('.nav-group').forEach(function (g) {
+      var open = (g.getAttribute('data-group') === key);
+      g.classList.toggle('open', open);
+      var hdr = g.querySelector('.nav-group-header');
+      if (hdr) hdr.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
   }
 })();
