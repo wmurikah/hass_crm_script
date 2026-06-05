@@ -289,6 +289,19 @@ function applyBranding(b) {
 }
 window.applyBranding = applyBranding;
 
+/* ── Time-based greeting ─────────────────────────────────────────────
+ * Uses the user's LOCAL browser time (new Date().getHours()), not the
+ * server. Returns a friendly greeting string for the given first name. */
+function greetingFor(firstName, now) {
+  var h   = (now instanceof Date ? now : new Date()).getHours();
+  var who = firstName ? (' ' + firstName) : '';
+  if (h < 12)      return 'Good morning' + (who ? ',' + who : '');
+  if (h < 17)      return 'Good afternoon' + (who ? ',' + who : '');
+  if (h < 21)      return 'Good evening' + (who ? ',' + who : '');
+  return 'Working late' + (who ? ',' + who : '') + '?';
+}
+window.greetingFor = greetingFor;
+
 /* ── Floating Assistant chat widget ──────────────────────────────────
  * Fixed bottom-right launcher → toggles a chat panel. Talks to
  * bot.chat with the user's session (RBAC + read-only guards stay
