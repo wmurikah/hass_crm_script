@@ -2,11 +2,20 @@
  * AIService.gs  —  Hass CMS  (AI-powered ticket triage)
  *
  * Adds ONE classification step IN FRONT OF the existing ticket pipeline. The
- * customer describes a problem in plain language; classifyTicket() asks the
- * Anthropic Messages API to turn that into structured ticket fields (category,
- * urgency, subject, description). The customer then confirms, and the client
- * submits the draft through the EXISTING tickets.create action. This file never
- * writes a ticket itself and never touches the ticket DB schema.
+ * customer describes a problem in plain language; classifyTicket() asks an LLM
+ * to turn that into structured ticket fields (category, urgency, subject,
+ * description). The customer then confirms, and the client submits the draft
+ * through the EXISTING tickets.create action. This file never writes a ticket
+ * itself and never touches the ticket DB schema.
+ *
+ * RESILIENCE (provider fallback): two interchangeable providers. Anthropic
+ * (Messages API) is the default primary; OpenAI (Chat Completions) is the
+ * fallback. If the primary throws, times out, returns a non-2xx, or returns
+ * output we cannot parse, the other provider is tried with an IDENTICAL request.
+ * If BOTH fail, the call returns a GENERAL-category fallback draft so the ticket
+ * flow never dead-ends. Order is set by the AI_PRIMARY Script Property. Both
+ * providers are normalised to ONE response shape: the caller neither knows nor
+ * cares which one answered.
  *
  * Wiring: registered with the dispatcher as the customer-facing action
  *   tickets.classifyTicket  (permission: null — any authenticated user, the same
@@ -14,22 +23,34 @@
  *   API.call('tickets','classifyTicket',{text}) → processRequest channel; no new
  *   google.script.run endpoint is introduced.
  *
- * SECURITY: the Anthropic API key is read at call time from the Script Property
- *   ANTHROPIC_API_KEY  (Project Settings → Script Properties). It is never
- *   hardcoded, never persisted to Turso, and never returned to the client.
+ * SECURITY: provider API keys are read at call time from Script Properties
+ *   ANTHROPIC_API_KEY and OPENAI_API_KEY (Project Settings, Script Properties).
+ *   They are never hardcoded, never persisted to Turso, never sent to the client.
  */
 
 // ════════════════════════════════════════════════════════════════════════════
 // CONFIGURATION
 // ════════════════════════════════════════════════════════════════════════════
 
-var AI_ENDPOINT     = 'https://api.anthropic.com/v1/messages';
-var AI_MODEL        = 'claude-sonnet-4-6';
-var AI_MAX_TOKENS   = 512;
-var AI_KEY_PROPERTY = 'ANTHROPIC_API_KEY';   // Script Property NAME (never the value)
-var AI_CATEGORIES   = ['GENERAL', 'ORDER', 'BILLING', 'DELIVERY', 'TECHNICAL', 'COMPLAINT'];
-var AI_URGENCIES    = ['LOW', 'MEDIUM', 'HIGH'];
-var AI_SUBJECT_MAX  = 80;
+// Anthropic (primary by default) — Messages API.
+var AI_ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+var AI_ANTHROPIC_MODEL    = 'claude-sonnet-4-6';
+
+// OpenAI (fallback by default) — Chat Completions; response_format forces JSON.
+var AI_OPENAI_ENDPOINT    = 'https://api.openai.com/v1/chat/completions';
+var AI_OPENAI_MODEL       = 'gpt-4o-mini';   // current low-cost, JSON-capable model
+
+var AI_MAX_TOKENS = 512;
+
+// Script Property NAMES (never the values). Either key alone is enough; if both
+// are present we try the primary first and fall back to the other.
+var AI_ANTHROPIC_KEY_PROPERTY = 'ANTHROPIC_API_KEY';
+var AI_OPENAI_KEY_PROPERTY    = 'OPENAI_API_KEY';
+var AI_PRIMARY_PROPERTY       = 'AI_PRIMARY';   // 'anthropic' (default) | 'openai'
+
+var AI_CATEGORIES  = ['GENERAL', 'ORDER', 'BILLING', 'DELIVERY', 'TECHNICAL', 'COMPLAINT'];
+var AI_URGENCIES   = ['LOW', 'MEDIUM', 'HIGH'];
+var AI_SUBJECT_MAX = 80;
 
 // ════════════════════════════════════════════════════════════════════════════
 // SYSTEM PROMPT
@@ -41,8 +62,8 @@ function _aiSystemPrompt_() {
     'lubricants distributor. A customer will describe a problem in their own words.',
     'Classify it and draft a clean support ticket on their behalf.',
     '',
-    'Respond with ONLY a single raw JSON object — no prose before or after it, and',
-    'no markdown code fences. The object must contain exactly these four keys:',
+    'Respond with ONLY a single raw JSON object, with no prose before or after it,',
+    'and no markdown code fences. The object must contain exactly these four keys:',
     '  "category"    one of: GENERAL, ORDER, BILLING, DELIVERY, TECHNICAL, COMPLAINT',
     '  "urgency"     one of: LOW, MEDIUM, HIGH',
     '  "subject"     a concise ticket title, at most 80 characters, on a single line',
@@ -60,38 +81,97 @@ function _aiSystemPrompt_() {
 
 /**
  * classifyTicket(userText)
- *   → { success:true,  draft:{category,urgency,subject,description} }
- *   | { success:false, error:'…' }
+ *   -> { success:true,  draft:{category,urgency,subject,description} }            (a provider answered)
+ *   |  { success:false, fallback:true, draft:{category:'GENERAL', ...} }          (both providers failed)
+ *   |  { success:false, error:'...' }                                             (no input / no key set)
  *
- * Calls the Anthropic Messages API and parses the model's reply defensively.
- * A PARSE failure never dead-ends the flow: it falls back to a GENERAL draft
- * that carries the customer's own words as the description. Transport / config
- * failures (missing key, network, non-200) return { success:false } so the
- * client can show a clear message.
+ * Tries the configured providers in order (AI_PRIMARY, default anthropic then
+ * openai). A provider "succeeds" only when it returns a 2xx whose body yields a
+ * parseable JSON draft; a throw, timeout, non-2xx, or unparseable body counts as
+ * a failure and advances to the next provider. The returned shape is IDENTICAL
+ * regardless of which provider answered, so the caller cannot tell them apart.
  */
 function classifyTicket(userText) {
   var text = String(userText == null ? '' : userText).trim();
   if (!text) return { success: false, error: 'Please describe your issue first.' };
 
-  var apiKey = PropertiesService.getScriptProperties().getProperty(AI_KEY_PROPERTY);
-  if (!apiKey) {
+  var props = PropertiesService.getScriptProperties();
+  var keys  = {
+    anthropic: props.getProperty(AI_ANTHROPIC_KEY_PROPERTY),
+    openai:    props.getProperty(AI_OPENAI_KEY_PROPERTY)
+  };
+
+  // No provider configured at all -> clear signal for the administrator.
+  if (!keys.anthropic && !keys.openai) {
     return {
       success: false,
-      error: 'AI triage is not configured yet. An administrator needs to set the ' +
-             AI_KEY_PROPERTY + ' script property.'
+      error: 'AI triage is not configured yet. An administrator needs to set ' +
+             AI_ANTHROPIC_KEY_PROPERTY + ' or ' + AI_OPENAI_KEY_PROPERTY +
+             ' in Script Properties.'
     };
   }
 
+  var order    = _aiProviderOrder_();
+  var failures = [];
+
+  for (var i = 0; i < order.length; i++) {
+    var name = order[i];
+    if (!keys[name]) continue;               // provider has no key -> skip
+    var r = (name === 'anthropic')
+      ? _aiCallAnthropic_(keys.anthropic, text)
+      : _aiCallOpenai_(keys.openai, text);
+    if (r.ok) {
+      _aiLog_('classifyTicket', 'answered by ' + name);   // which provider answered (debug)
+      return { success: true, draft: r.draft };
+    }
+    _aiLog_('classifyTicket', name + ' failed: ' + r.reason);
+    failures.push(name + ' (' + r.reason + ')');
+  }
+
+  // Every configured provider failed -> GENERAL fallback so the flow never
+  // dead-ends. Same draft field set as the success path; category forced GENERAL
+  // and the customer's own words preserved as the description.
+  _aiLog_('classifyTicket', 'all providers failed: ' + failures.join('; '));
+  return {
+    success:  false,
+    fallback: true,
+    draft: {
+      category:    'GENERAL',
+      urgency:     'MEDIUM',
+      subject:     _aiDeriveSubject_(text),
+      description: text
+    }
+  };
+}
+
+/** Provider try-order from the AI_PRIMARY Script Property (default anthropic). */
+function _aiProviderOrder_() {
+  var primary = String(
+    PropertiesService.getScriptProperties().getProperty(AI_PRIMARY_PROPERTY) || 'anthropic'
+  ).trim().toLowerCase();
+  return primary === 'openai' ? ['openai', 'anthropic'] : ['anthropic', 'openai'];
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PROVIDER CALLS   (each returns { ok:true, draft } | { ok:false, reason })
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Anthropic Messages API. muteHttpExceptions keeps a non-2xx as a normal
+ * response so we branch on the status instead of catching. Any failure mode
+ * (throw, timeout, non-2xx, unparseable body, no JSON object) returns
+ * { ok:false } so classifyTicket() can fall through to the other provider.
+ */
+function _aiCallAnthropic_(apiKey, text) {
   var payload = {
-    model:      AI_MODEL,
+    model:      AI_ANTHROPIC_MODEL,
     max_tokens: AI_MAX_TOKENS,
     system:     _aiSystemPrompt_(),
     messages:   [{ role: 'user', content: text }]
   };
-
   var resp;
   try {
-    resp = UrlFetchApp.fetch(AI_ENDPOINT, {
+    resp = UrlFetchApp.fetch(AI_ANTHROPIC_ENDPOINT, {
       method:             'post',
       contentType:        'application/json',
       headers:            { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -99,52 +179,92 @@ function classifyTicket(userText) {
       muteHttpExceptions: true
     });
   } catch (e) {
-    _aiLog_('classifyTicket', 'fetch failed: ' + e.message);
-    return { success: false, error: 'Could not reach the triage service. Please try again.' };
+    return { ok: false, reason: 'fetch threw: ' + (e && e.message ? e.message : e) };
   }
 
   var code = resp.getResponseCode();
-  if (code !== 200) {
-    _aiLog_('classifyTicket', 'HTTP ' + code + ': ' + resp.getContentText().substring(0, 300));
-    return { success: false, error: 'The triage service is unavailable right now (HTTP ' + code + ').' };
+  if (code < 200 || code >= 300) {
+    return { ok: false, reason: 'HTTP ' + code + ': ' + resp.getContentText().substring(0, 200) };
   }
 
-  // Extract the assistant text from the Anthropic Messages response.
-  var rawModelText = '';
+  // Concatenate the text blocks of the Messages response.
+  var raw = '';
   try {
     var data = JSON.parse(resp.getContentText());
     (data && data.content ? data.content : []).forEach(function (block) {
-      if (block && block.type === 'text' && block.text) rawModelText += block.text;
+      if (block && block.type === 'text' && block.text) raw += block.text;
     });
   } catch (e) {
-    rawModelText = '';   // fall through to the GENERAL fallback in _aiParseDraft_
+    return { ok: false, reason: 'response envelope unparseable' };
   }
 
-  return { success: true, draft: _aiParseDraft_(rawModelText, text) };
+  var draft = _aiExtractDraft_(raw, text);
+  return draft ? { ok: true, draft: draft } : { ok: false, reason: 'model output was not valid JSON' };
+}
+
+/**
+ * OpenAI Chat Completions. response_format:{type:'json_object'} forces a JSON
+ * body, so the assistant message content IS the raw JSON string we parse. Same
+ * system prompt and same required schema as the Anthropic branch; Bearer auth.
+ */
+function _aiCallOpenai_(apiKey, text) {
+  var payload = {
+    model:           AI_OPENAI_MODEL,
+    max_tokens:      AI_MAX_TOKENS,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: _aiSystemPrompt_() },
+      { role: 'user',   content: text }
+    ]
+  };
+  var resp;
+  try {
+    resp = UrlFetchApp.fetch(AI_OPENAI_ENDPOINT, {
+      method:             'post',
+      contentType:        'application/json',
+      headers:            { Authorization: 'Bearer ' + apiKey },
+      payload:            JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+  } catch (e) {
+    return { ok: false, reason: 'fetch threw: ' + (e && e.message ? e.message : e) };
+  }
+
+  var code = resp.getResponseCode();
+  if (code < 200 || code >= 300) {
+    return { ok: false, reason: 'HTTP ' + code + ': ' + resp.getContentText().substring(0, 200) };
+  }
+
+  var raw = '';
+  try {
+    var data = JSON.parse(resp.getContentText());
+    raw = (data && data.choices && data.choices[0] &&
+           data.choices[0].message && data.choices[0].message.content) || '';
+  } catch (e) {
+    return { ok: false, reason: 'response envelope unparseable' };
+  }
+
+  var draft = _aiExtractDraft_(raw, text);
+  return draft ? { ok: true, draft: draft } : { ok: false, reason: 'model output was not valid JSON' };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DEFENSIVE DRAFT PARSING
+// DEFENSIVE DRAFT PARSING   (shared by both providers)
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Turn the model's raw reply into a validated draft. Strips ```json fences,
- * JSON.parses inside a try/catch, and on ANY failure returns a GENERAL draft
- * whose description is the customer's original words — so the flow never
- * dead-ends. Each field is range-checked against the allowed enums / limits.
+ * Turn a provider's raw reply into a validated, normalised draft, or return
+ * null when it cannot be parsed at all. Strips ```json fences, isolates the
+ * first {...} block, then JSON.parses inside a try/catch. A null result signals
+ * an "unparseable" provider response so classifyTicket() advances to the next
+ * provider. When an object IS parsed, each field is range-checked against the
+ * allowed enums / limits (category coerced to GENERAL if not in the enum).
  */
-function _aiParseDraft_(rawModelText, originalText) {
-  var fallback = {
-    category:    'GENERAL',
-    urgency:     'MEDIUM',
-    subject:     _aiDeriveSubject_(originalText),
-    description: originalText
-  };
-
+function _aiExtractDraft_(rawModelText, originalText) {
   var cleaned = String(rawModelText == null ? '' : rawModelText).trim();
-  if (!cleaned) return fallback;
+  if (!cleaned) return null;
 
-  // Strip a wrapping markdown code fence (```json … ```), if the model added one.
+  // Strip a wrapping markdown code fence (```json ... ```), if the model added one.
   cleaned = cleaned.replace(/^\s*```[a-zA-Z]*\s*/, '').replace(/\s*```\s*$/, '').trim();
 
   // If prose still surrounds the object, isolate the first {...} block.
@@ -157,9 +277,9 @@ function _aiParseDraft_(rawModelText, originalText) {
   try {
     obj = JSON.parse(cleaned);
   } catch (e) {
-    return fallback;            // parse failed → GENERAL fallback, never dead-end
+    return null;               // unparseable -> caller advances to the next provider
   }
-  if (!obj || typeof obj !== 'object') return fallback;
+  if (!obj || typeof obj !== 'object') return null;
 
   var description = (obj.description != null && String(obj.description).trim())
     ? String(obj.description).trim()

@@ -28,6 +28,7 @@ var Jobs = (function () {
     { fn: 'runDailyMaintenance', type: 'hour',    value: 2   },
     { fn: 'runHourlyApproval',   type: 'minutes', value: 60  },
     { fn: 'runSlaBreachSweep',   type: 'minutes', value: 15  },
+    { fn: 'keepWarm',            type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
   ];
 
   function installAllTriggers() {
@@ -272,4 +273,50 @@ function runDailyMaintenance() {
     } catch (_) {}
   });
   Jobs.runJobs();
+}
+
+// ── keepWarm: anti-cold-start ping ────────────────────────────────────────────
+//
+// GAS spins down idle web-app instances; the first request after a quiet spell
+// then pays a V8 cold-start (seconds). A frequent, trivial time trigger keeps an
+// instance — and the Turso HTTP path — warm so real users land on a hot runtime.
+
+// GAS time triggers only accept minute intervals of 1, 5, 10, 15, or 30 — there
+// is no "every 2 minutes". 1 minute is used because it reliably prevents
+// cold starts; raise to 5 if you'd rather spend fewer executions from your daily
+// trigger-runtime quota (at a small cold-start risk).
+var KEEP_WARM_MINUTES = 1;
+
+/**
+ * keepWarm — the trivial server function the time trigger pings. A single 1-row
+ * read warms both the runtime and the Turso connection. Never throws.
+ */
+function keepWarm() {
+  try {
+    TursoClient.select('SELECT 1 AS ok');
+  } catch (e) {
+    try { Logger.log('[keepWarm] ' + (e && e.message ? e.message : e)); } catch (_) {}
+  }
+}
+
+/**
+ * installKeepWarmTrigger — (re)install ONLY the keepWarm trigger, leaving the
+ * other managed triggers untouched.
+ *
+ * HOW TO INSTALL (one time):
+ *   1. Open the project in the Apps Script editor.
+ *   2. In the function dropdown choose  installKeepWarmTrigger  and press Run.
+ *   3. Authorise the script.app scope if prompted (already in appsscript.json).
+ *   4. Verify under Triggers (clock icon): a time-driven "keepWarm", every
+ *      minute. Re-running this is safe — it removes any old keepWarm trigger
+ *      first, so it never stacks duplicates.
+ */
+function installKeepWarmTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(KEEP_WARM_MINUTES).create();
+  var msg = 'keepWarm trigger installed (every ' + KEEP_WARM_MINUTES + ' min).';
+  Logger.log(msg);
+  return msg;
 }

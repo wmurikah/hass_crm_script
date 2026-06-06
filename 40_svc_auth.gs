@@ -410,7 +410,7 @@ function _authMe_(ctx, params) {
   var uRows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
   var u = uRows.length ? uRows[0] : {};
   var roleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
-  return {
+  var me = {
     userId:     userId,
     userType:   'STAFF',
     email:      u.email      || '',
@@ -420,6 +420,37 @@ function _authMe_(ctx, params) {
     country:    u.country_code || sess.countryCode || '',
     team:       u.team_id || '',
   };
+
+  // ── Init bundle (staff dashboard first-screen, ONE round-trip) ────────────
+  // When the staff dashboard's auth guard asks for it (params.bundle), pigg-back
+  // the first-screen data the dashboard would otherwise pull in a cascade of
+  // separate google.script.run calls (branding, menu, the bot-admin flag, and
+  // the dashboard summary + SLA panels). This reuses the EXISTING auth.me init
+  // channel — no action is renamed and no new dispatcher route is added. The
+  // customer-portal path never sets params.bundle, so it is unaffected. Within
+  // this single invocation the Rbac per-request cache is shared across every
+  // part, so permissions resolve once rather than five times.
+  if (params && params.bundle) {
+    me.bundle = _authMeStaffBundle_(sess);
+  }
+  return me;
+}
+
+/**
+ * Assemble the staff dashboard first-screen bundle from in-process service
+ * calls. Every part is best-effort: a failure omits that key and the client
+ * falls back to its existing standalone API call for that widget. This neither
+ * writes anything nor changes any existing return shape.
+ */
+function _authMeStaffBundle_(session) {
+  var ctx = { session: session };
+  var bundle = {};
+  try { bundle.branding         = _brandingGet_(ctx, { scope_code: 'GLOBAL' }); } catch (e) {}
+  try { bundle.menu             = _menuList_(ctx, {}); }                          catch (e) {}
+  try { bundle.botAdmin         = !!Rbac.userHasPermission(session.userId, BOT_ADMIN_PERMISSION); } catch (e) { bundle.botAdmin = false; }
+  try { bundle.dashboardSummary = _dashSummary_(ctx, {}); }                       catch (e) {}
+  try { bundle.dashboardSla     = _dashSlaMetrics_(ctx, {}); }                    catch (e) {}
+  return bundle;
 }
 
 function _authGetStaffInfo_(ctx, params) {
