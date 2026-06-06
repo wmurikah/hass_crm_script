@@ -393,6 +393,8 @@
     var email    = document.getElementById('email').value.trim();
     var password = document.getElementById('password').value;
 
+    // Stamp the click time so the dashboard can log login → usable latency.
+    try { sessionStorage.setItem('hass_login_t0', String(Date.now())); } catch (e) {}
     startLoader();              // reskin: show overlay as the REAL call fires
 
     API.login(email, password)

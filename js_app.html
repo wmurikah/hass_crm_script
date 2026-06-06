@@ -4,6 +4,62 @@
 //  Router, Toast, Modal, and global event bus.
 // ─────────────────────────────────────────────────────────────────
 
+/* ── HassCache: sessionStorage-first cache (stale-while-revalidate) ──
+ * For data that does not change per-load (reference lists, branding, menu,
+ * profile, role/permission flags). Two layers: an in-memory map (instant,
+ * survives route changes) backed by sessionStorage (survives full reloads
+ * within the tab). Each entry carries an expiry so callers can choose between
+ * "fresh only" and "last-known" reads.
+ *
+ *   HassCache.fresh(key)        → value if present AND not past its TTL, else null
+ *   HassCache.any(key)          → last-known value ignoring TTL (instant paint), else null
+ *   HassCache.set(key, v, ttlS) → store with a TTL in seconds
+ *   HassCache.remove(key)       → drop one key
+ *   HassCache.clearAll()        → drop everything (called on logout / session loss)
+ *
+ * DO NOT cache live transactional data (orders, tickets, payments, invoices)
+ * beyond a short TTL — those must reflect the current backend state. This cache
+ * is for slow-moving reference/identity data only. */
+var HassCache = (function () {
+  'use strict';
+  var PREFIX = 'hc_';
+  var _mem = {};
+  function _now() { return Date.now(); }
+  function _read(key) {
+    if (_mem[key] !== undefined) return _mem[key];
+    try {
+      var raw = sessionStorage.getItem(PREFIX + key);
+      if (raw) { var o = JSON.parse(raw); _mem[key] = o; return o; }
+    } catch (_) {}
+    return null;
+  }
+  return {
+    set: function (key, value, ttlSec) {
+      var o = { v: value, exp: _now() + (ttlSec || 300) * 1000 };
+      _mem[key] = o;
+      try { sessionStorage.setItem(PREFIX + key, JSON.stringify(o)); } catch (_) {}
+    },
+    fresh: function (key) { var o = _read(key); return (o && o.exp > _now()) ? o.v : null; },
+    any:   function (key) { var o = _read(key); return o ? o.v : null; },
+    remove: function (key) {
+      delete _mem[key];
+      try { sessionStorage.removeItem(PREFIX + key); } catch (_) {}
+    },
+    clearAll: function () {
+      _mem = {};
+      try {
+        var kill = [];
+        for (var i = 0; i < sessionStorage.length; i++) {
+          var k = sessionStorage.key(i);
+          if (k && k.indexOf(PREFIX) === 0) kill.push(k);
+        }
+        kill.forEach(function (k) { sessionStorage.removeItem(k); });
+      } catch (_) {}
+    },
+  };
+})();
+window.HassCache = HassCache;
+
 /* ── Toast ─────────────────────────────────────────────────────── */
 var Toast = (function () {
   var _container;
@@ -178,6 +234,9 @@ var Router = (function () {
 
 /* ── Global logout handler ──────────────────────────────────────── */
 window.addEventListener('hass:logout', function () {
+  // Drop any cached reference/identity data so a different user signing in on
+  // this tab never sees the previous user's menu/branding/profile.
+  try { HassCache.clearAll(); } catch (_) {}
   Toast.error('Session expired. Please log in again.');
   // window.location is blocked in the GAS sandbox iframe; swap the document
   // with the freshly-rendered login page instead. _hassLoadLoginPage is
