@@ -5,34 +5,304 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Hass CMS — Login</title>
   <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
+
+  <!-- Reskin fonts: Fraunces (display) + Outfit (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Outfit:wght@300;400;500;600;700&display=swap">
+
+  <style>
+    /* ───────────────────────────────────────────────────────────────
+       Hass CMS login reskin — navy (#0B1733/#1F2D5C) + gold (#C9A227).
+       Scoped under .hl-* so it never collides with css_theme classes.
+       VISUAL ONLY: the auth JS below is preserved unchanged.
+       ─────────────────────────────────────────────────────────────── */
+    :root {
+      --hl-navy-900: #0B1733;
+      --hl-navy-700: #1F2D5C;
+      --hl-gold:     #C9A227;
+      --hl-gold-lt:  #E6C457;
+      --hl-ink:      #0B1733;
+      --hl-muted:    #5b6b8c;
+      --hl-line:     #e3e7f0;
+    }
+
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+      color: var(--hl-ink);
+      background: var(--hl-navy-900);
+    }
+
+    .hl-wrap { display: flex; min-height: 100vh; width: 100%; }
+
+    /* ── Left: brand panel ─────────────────────────────────────────── */
+    .hl-brand {
+      position: relative;
+      flex: 1 1 48%;
+      max-width: 580px;
+      padding: 56px 52px;
+      color: #e9edf8;
+      background:
+        radial-gradient(120% 90% at 12% 8%, rgba(201,162,39,.18) 0%, rgba(201,162,39,0) 42%),
+        linear-gradient(158deg, #0B1733 0%, #16234d 55%, #1F2D5C 100%);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: hl-fade-left .7s ease both;
+    }
+    /* decorative fuel drops */
+    .hl-blob { position: absolute; border-radius: 60% 60% 60% 0; transform: rotate(45deg); filter: blur(2px); opacity: .14; z-index: 0; }
+    .hl-blob.b1 { width: 320px; height: 320px; right: -120px; top: -90px; background: radial-gradient(circle at 35% 30%, var(--hl-gold-lt), transparent 70%); }
+    .hl-blob.b2 { width: 220px; height: 220px; left: -80px; bottom: 40px; background: radial-gradient(circle at 35% 30%, #3a4d86, transparent 70%); opacity: .5; }
+
+    .hl-brand__top, .hl-brand__content, .hl-brand__foot { position: relative; z-index: 2; }
+    .hl-brand__logo {
+      display: inline-flex; align-items: center;
+      background: #fff; padding: 9px 14px; border-radius: 12px;
+      box-shadow: 0 8px 22px rgba(0,0,0,.22);
+    }
+    .hl-brand__logo img { height: 34px; object-fit: contain; display: block; }
+
+    .hl-brand__content { margin-top: auto; margin-bottom: auto; padding: 40px 0; }
+    .hl-wordmark {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 600;
+      font-size: clamp(34px, 4.4vw, 52px);
+      line-height: 1.05;
+      letter-spacing: -.01em;
+      margin: 0 0 18px;
+      animation: hl-fade-up .6s .15s ease both;
+    }
+    .hl-wordmark span { color: var(--hl-gold); }
+    .hl-tag {
+      font-size: 17px; line-height: 1.55; max-width: 30ch;
+      color: #c3ccdf; margin: 0 0 30px;
+      animation: hl-fade-up .6s .24s ease both;
+    }
+    .hl-points { list-style: none; margin: 0; padding: 0; animation: hl-fade-up .6s .32s ease both; }
+    .hl-points li {
+      position: relative; padding-left: 26px; margin-bottom: 13px;
+      font-size: 14.5px; color: #d4dbeb;
+    }
+    .hl-points li::before {
+      content: ""; position: absolute; left: 0; top: 3px;
+      width: 14px; height: 14px; border-radius: 50% 50% 50% 0;
+      transform: rotate(45deg);
+      background: linear-gradient(135deg, var(--hl-gold-lt), var(--hl-gold));
+    }
+    .hl-brand__foot { font-size: 12.5px; color: #8b97b5; letter-spacing: .01em; }
+
+    /* ── Right: form panel ─────────────────────────────────────────── */
+    .hl-panel {
+      flex: 1 1 52%;
+      background: #f7f8fb;
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px 24px;
+    }
+    .hl-card {
+      width: 100%; max-width: 400px;
+      background: #fff;
+      border: 1px solid var(--hl-line);
+      border-radius: 18px;
+      box-shadow: 0 18px 50px rgba(11,23,51,.12);
+      padding: 40px 38px 30px;
+      animation: hl-fade-up .7s .08s ease both;
+    }
+    .hl-eyebrow {
+      text-transform: uppercase; letter-spacing: .14em;
+      font-size: 11.5px; font-weight: 600; color: var(--hl-gold);
+      margin: 0 0 8px;
+      animation: hl-fade-up .55s .22s ease both;
+    }
+    .hl-greeting {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 600; font-size: 30px; line-height: 1.15;
+      color: var(--hl-navy-900); margin: 0 0 6px;
+      animation: hl-fade-up .55s .29s ease both;
+    }
+    .hl-sub {
+      font-size: 14.5px; color: var(--hl-muted); margin: 0 0 26px;
+      animation: hl-fade-up .55s .36s ease both;
+    }
+
+    .hl-field { margin-bottom: 16px; animation: hl-fade-up .55s ease both; }
+    .hl-field.f1 { animation-delay: .42s; }
+    .hl-field.f2 { animation-delay: .48s; }
+    .hl-label {
+      display: block; font-size: 12.5px; font-weight: 500;
+      color: #3a466a; margin-bottom: 7px;
+    }
+    .hl-input {
+      display: block; width: 100%;
+      padding: 12px 14px; font-size: 15px;
+      color: var(--hl-ink);
+      background: #fbfcfe;
+      border: 1px solid #d8deea; border-radius: 11px;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .hl-input::placeholder { color: #9aa6bf; }
+    .hl-input:focus {
+      border-color: var(--hl-gold);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(201,162,39,.18);
+    }
+
+    .hl-error {
+      background: #fef2f2; border: 1px solid #f5c6c6; color: #b42318;
+      font-size: 13px; padding: 9px 12px; border-radius: 10px; margin-bottom: 16px;
+    }
+
+    .hl-btn {
+      width: 100%; margin-top: 6px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      padding: 13px 18px; font-size: 15px; font-weight: 600;
+      font-family: inherit;
+      color: var(--hl-navy-900);
+      background: linear-gradient(135deg, var(--hl-gold-lt) 0%, var(--hl-gold) 100%);
+      border: none; border-radius: 11px; cursor: pointer;
+      box-shadow: 0 8px 18px rgba(201,162,39,.28);
+      transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+      animation: hl-fade-up .55s .54s ease both;
+    }
+    .hl-btn:hover { transform: translateY(-1px); filter: brightness(1.03); box-shadow: 0 11px 24px rgba(201,162,39,.38); }
+    .hl-btn:active { transform: translateY(0); }
+    .hl-btn:disabled { cursor: default; opacity: .85; transform: none; box-shadow: none; }
+
+    .hl-foot {
+      margin-top: 22px; padding-top: 18px;
+      border-top: 1px solid var(--hl-line);
+      text-align: center; font-size: 12px; color: #97a1b8;
+    }
+
+    /* ── Fuel-drop loading overlay ─────────────────────────────────── */
+    .hl-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: none;
+      align-items: center; justify-content: center;
+      background: radial-gradient(120% 120% at 50% 40%, rgba(31,45,92,.94), rgba(11,23,51,.97));
+      backdrop-filter: blur(4px);
+    }
+    .hl-loader.show { display: flex; animation: hl-fade-in .25s ease both; }
+    .hl-loader__box { text-align: center; color: #eaf0ff; }
+    .hl-drop { width: 64px; height: 80px; display: block; margin: 0 auto 22px; animation: hl-bob 1.6s ease-in-out infinite; }
+    .hl-drop__liquid { animation: hl-fill 1.7s ease-in-out infinite; }
+    .hl-loader__status {
+      font-size: 15px; font-weight: 500; letter-spacing: .01em;
+      color: #dbe3f7; min-height: 20px;
+      transition: opacity .2s ease;
+    }
+    .hl-loader__sub { margin-top: 8px; font-size: 12.5px; color: #8b97b5; }
+
+    /* ── Animations ────────────────────────────────────────────────── */
+    @keyframes hl-fade-up   { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    @keyframes hl-fade-left { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+    @keyframes hl-fade-in   { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes hl-bob       { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+    @keyframes hl-fill      { 0%,100% { transform: translateY(30px); } 50% { transform: translateY(4px); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hl-brand, .hl-card, .hl-wordmark, .hl-tag, .hl-points,
+      .hl-eyebrow, .hl-greeting, .hl-sub, .hl-field, .hl-btn,
+      .hl-loader, .hl-drop, .hl-drop__liquid { animation: none !important; }
+    }
+
+    /* ── Responsive: stack on small screens ────────────────────────── */
+    @media (max-width: 880px) {
+      .hl-wrap { flex-direction: column; }
+      .hl-brand { max-width: none; flex-basis: auto; padding: 30px 26px; }
+      .hl-brand__content { padding: 22px 0; margin: 0; }
+      .hl-wordmark { font-size: 30px; margin-bottom: 12px; }
+      .hl-tag { margin-bottom: 16px; }
+      .hl-points { display: none; }
+      .hl-panel { padding: 28px 18px 44px; }
+      .hl-card { box-shadow: 0 10px 30px rgba(11,23,51,.16); }
+    }
+    @media (max-width: 420px) {
+      .hl-card { padding: 30px 24px 24px; border-radius: 14px; }
+    }
+  </style>
 </head>
 <body>
-<div class="login-page">
-  <div class="login-card">
-    <div class="login-logo">
-      <img src="https://hasspetroleum.com/wp-content/uploads/2021/02/hass-logo.png"
-           alt="Hass Petroleum" height="48" style="object-fit:contain"
-           onerror="this.style.display='none'">
-    </div>
-    <h2 class="login-title">Hass CMS</h2>
+<div class="hl-wrap">
 
-    <form id="loginForm" autocomplete="off">
-      <div class="form-group">
-        <label class="form-label" for="email">Email address</label>
-        <input class="form-control" type="email" id="email" name="email" required autofocus>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="password">Password</label>
-        <input class="form-control" type="password" id="password" name="password" required>
-      </div>
-      <div id="loginError" style="display:none;color:#dc2626;font-size:13px;margin-bottom:10px"></div>
-      <button class="btn btn-primary" type="submit" id="loginBtn" style="width:100%;justify-content:center">
-        Sign in
-      </button>
-    </form>
-    <div class="login-footer">
-      &copy; <?= new Date().getFullYear() ?> Hass Petroleum Group
+  <!-- Brand panel -->
+  <aside class="hl-brand">
+    <span class="hl-blob b1" aria-hidden="true"></span>
+    <span class="hl-blob b2" aria-hidden="true"></span>
+
+    <div class="hl-brand__top">
+      <span class="hl-brand__logo">
+        <img src="https://hasspetroleum.com/wp-content/uploads/2021/02/hass-logo.png"
+             alt="Hass Petroleum" onerror="this.style.display='none'">
+      </span>
     </div>
+
+    <div class="hl-brand__content">
+      <h1 class="hl-wordmark">Hass <span>CMS</span></h1>
+      <p class="hl-tag">Fuelling East &amp; Central Africa — one reliable delivery at a time.</p>
+      <ul class="hl-points">
+        <li>Customer &amp; staff operations in a single workspace</li>
+        <li>Orders, invoices, deliveries, tickets &amp; approvals</li>
+        <li>Secure, role-based access across the group</li>
+      </ul>
+    </div>
+
+    <div class="hl-brand__foot">
+      &copy; <?= new Date().getFullYear() ?> Hass Petroleum Group · All rights reserved
+    </div>
+  </aside>
+
+  <!-- Form panel -->
+  <main class="hl-panel">
+    <div class="hl-card">
+      <p class="hl-eyebrow">Welcome back</p>
+      <h2 class="hl-greeting" id="greeting">Welcome</h2>
+      <p class="hl-sub">Sign in to your Hass CMS account to continue.</p>
+
+      <form id="loginForm" autocomplete="off">
+        <div class="hl-field f1">
+          <label class="hl-label" for="email">Email address</label>
+          <input class="hl-input" type="email" id="email" name="email" required autofocus>
+        </div>
+        <div class="hl-field f2">
+          <label class="hl-label" for="password">Password</label>
+          <input class="hl-input" type="password" id="password" name="password" required>
+        </div>
+        <div id="loginError" class="hl-error" style="display:none"></div>
+        <button class="hl-btn" type="submit" id="loginBtn">Sign in</button>
+      </form>
+
+      <div class="hl-foot">Secure staff &amp; customer sign-in · Hass Petroleum Group</div>
+    </div>
+  </main>
+</div>
+
+<!-- Fuel-drop loading overlay (shown while the REAL auth call is in flight) -->
+<div class="hl-loader" id="hassLoader" aria-hidden="true">
+  <div class="hl-loader__box">
+    <svg class="hl-drop" viewBox="0 0 48 60" width="64" height="80" role="img" aria-label="Signing in">
+      <defs>
+        <clipPath id="hlDropClip">
+          <path d="M24 3 C24 3 43 27 43 39 A19 19 0 1 1 5 39 C5 27 24 3 24 3 Z"/>
+        </clipPath>
+        <linearGradient id="hlDropFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#E6C457"/>
+          <stop offset="1" stop-color="#C9A227"/>
+        </linearGradient>
+      </defs>
+      <g clip-path="url(#hlDropClip)">
+        <rect x="0" y="0" width="48" height="60" fill="rgba(255,255,255,.10)"/>
+        <rect class="hl-drop__liquid" x="-4" y="0" width="56" height="60" fill="url(#hlDropFill)"/>
+      </g>
+      <path d="M24 3 C24 3 43 27 43 39 A19 19 0 1 1 5 39 C5 27 24 3 24 3 Z"
+            fill="none" stroke="#C9A227" stroke-width="2.2"/>
+    </svg>
+    <div class="hl-loader__status" id="loaderStatus">Signing you in…</div>
+    <div class="hl-loader__sub">Hass CMS</div>
   </div>
 </div>
 
@@ -42,6 +312,47 @@
   var form    = document.getElementById('loginForm');
   var errDiv  = document.getElementById('loginError');
   var btn     = document.getElementById('loginBtn');
+
+  // ── Reskin presentation hooks (loader overlay + greeting) ──────────
+  // These are display-only. They do NOT change any auth call, the
+  // session-token handling, the MFA routing, or the redirect below.
+  var loader       = document.getElementById('hassLoader');
+  var loaderStatus = document.getElementById('loaderStatus');
+  var statusTimer  = null;
+
+  var STATUS_STEPS = [
+    'Signing you in…',
+    'Verifying credentials…',
+    'Preparing your workspace…'
+  ];
+
+  // Show the fuel-drop overlay and cycle the stepped status text while the
+  // REAL google.script.run login call is in flight. The interval only swaps
+  // text — it adds NO delay to auth or to the redirect.
+  function startLoader() {
+    var i = 0;
+    if (loaderStatus) loaderStatus.textContent = STATUS_STEPS[0];
+    if (loader) loader.classList.add('show');
+    statusTimer = setInterval(function () {
+      i = (i + 1) % STATUS_STEPS.length;
+      if (loaderStatus) loaderStatus.textContent = STATUS_STEPS[i];
+    }, 1100);
+  }
+
+  function stopLoader() {
+    if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+    if (loader) loader.classList.remove('show');
+  }
+
+  // Time-based greeting (morning / afternoon / evening by local hour).
+  (function setGreeting() {
+    var el = document.getElementById('greeting');
+    if (!el) return;
+    var h = new Date().getHours();
+    el.textContent = h < 12 ? 'Good morning'
+                  : h < 18 ? 'Good afternoon'
+                  : 'Good evening';
+  })();
 
   function showError(msg) {
     errDiv.textContent   = msg || 'Login failed. Check your credentials.';
@@ -82,10 +393,13 @@
     var email    = document.getElementById('email').value.trim();
     var password = document.getElementById('password').value;
 
+    startLoader();              // reskin: show overlay as the REAL call fires
+
     API.login(email, password)
       .then(function (data) {
         // Server returns mfaRequired (camelCase). Route accordingly:
         // mode 'enroll' = first-time setup, otherwise verify an existing factor.
+        stopLoader();           // reskin: hide overlay right before the redirect
         if (data && data.mfaRequired) {
           if (data.mode === 'enroll') {
             swapTo('getMfaEnrollPage', data.challengeId || '');
@@ -97,6 +411,7 @@
         }
       })
       .catch(function (err) {
+        stopLoader();           // reskin: hide overlay, then surface the error
         showError(err && err.message);
       });
   });
