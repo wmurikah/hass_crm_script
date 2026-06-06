@@ -56,28 +56,243 @@ function pAddComment(id) {
     .catch(function (e) { Toast.error(e.message); });
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// AI-powered ticket triage chat panel.
+//
+// Replaces the old fixed-category form. The customer describes the problem in
+// plain words; tickets.classifyTicket (server-side, Anthropic) drafts the
+// fields; the customer confirms (or edits), then we submit through the EXISTING
+// tickets.create path. After submit the same panel switches to live-chat mode,
+// where further messages post as comments via tickets.addComment — the same
+// mechanism the ticket detail view uses.
+//
+// State machine (phase): 'triage' → 'confirm' → ('edit' →) → 'live'.
+// ───────────────────────────────────────────────────────────────────────────
 function pNewTicketModal(onSuccess) {
+  var st = { phase: 'triage', draft: null, ticketId: null, busy: false, refreshed: false };
+
   Modal.open({
-    title: 'New Support Ticket',
-    body: '<div class="form-group"><label class="form-label">Category</label>' +
-            '<select class="form-control" id="pntCat"><option>BILLING</option><option>DELIVERY</option><option>TECHNICAL</option><option>GENERAL</option></select></div>' +
-          '<div class="form-group"><label class="form-label">Subject</label><input class="form-control" id="pntSubj"></div>' +
-          '<div class="form-group"><label class="form-label">Description</label><textarea class="form-control" id="pntDesc" rows="3"></textarea></div>' +
-          '<div id="pntErr" style="color:#dc2626;font-size:12px"></div>',
-    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
-            '<button class="btn btn-primary" id="pntSave">Submit</button>',
-    onOpen: function () {
-      document.getElementById('pntSave').onclick = function () {
-        var subj = document.getElementById('pntSubj').value.trim();
-        if (!subj) { document.getElementById('pntErr').textContent = 'Subject required.'; return; }
-        API.call('tickets', 'create', {
-          category: document.getElementById('pntCat').value,
-          subject: subj,
-          description: document.getElementById('pntDesc').value,
-          priority: 'MEDIUM',
-        }).then(function () { Modal.close(); Toast.success('Ticket submitted.'); if (onSuccess) onSuccess(); })
-          .catch(function (e) { document.getElementById('pntErr').textContent = e.message; });
-      };
+    title: 'Raise a Support Ticket',
+    body:
+      '<div id="pcLog" style="height:300px;overflow-y:auto;display:flex;flex-direction:column;' +
+        'gap:8px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px"></div>' +
+      '<div id="pcErr" style="color:#dc2626;font-size:12px;margin-top:6px"></div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<textarea class="form-control" id="pcInput" rows="2" style="resize:none" ' +
+          'placeholder="Describe your issue in your own words…"></textarea>' +
+        '<button class="btn btn-primary" id="pcSend" style="flex-shrink:0">Send</button>' +
+      '</div>',
+    footer: '<button class="btn btn-secondary" id="pcClose">Close</button>',
+    onOpen: function (bd) {
+      var log   = bd.querySelector('#pcLog');
+      var input = bd.querySelector('#pcInput');
+      var send  = bd.querySelector('#pcSend');
+      var errEl = bd.querySelector('#pcErr');
+
+      function scroll() { log.scrollTop = log.scrollHeight; }
+
+      function bubble(role, text) {
+        var d = document.createElement('div');
+        var mine = role === 'user';
+        d.style.cssText =
+          'max-width:85%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.45;' +
+          'white-space:pre-wrap;word-wrap:break-word;' +
+          (mine
+            ? 'align-self:flex-end;background:#1f2a44;color:#fff;border-bottom-right-radius:3px'
+            : 'align-self:flex-start;background:#fff;border:1px solid #e5e7eb;color:#111827;' +
+              'border-bottom-left-radius:3px');
+        d.textContent = text;             // textContent → no HTML injection from model text
+        log.appendChild(d); scroll();
+        return d;
+      }
+
+      function botCard(node) {
+        node.style.cssText =
+          'max-width:92%;align-self:flex-start;background:#fff;border:1px solid #e5e7eb;color:#111827;' +
+          'border-radius:12px;border-bottom-left-radius:3px;padding:10px 12px;font-size:13px;line-height:1.45';
+        log.appendChild(node); scroll();
+        return node;
+      }
+
+      function waiting(label) {
+        var d = document.createElement('div');
+        d.style.cssText = 'align-self:flex-start;font-size:12px;color:#6b7280;padding:6px 4px';
+        d.textContent = label;
+        log.appendChild(d); scroll();
+        return d;
+      }
+
+      function setBusy(b) { st.busy = b; send.disabled = b; input.disabled = b; }
+
+      function resetComposer(placeholder) {
+        input.style.display = ''; send.style.display = '';
+        input.value = ''; input.placeholder = placeholder;
+        input.focus();
+      }
+
+      // ── Draft presentation + Confirm / Edit ──────────────────────────────
+      function showDraft(draft) {
+        st.draft = draft; st.phase = 'confirm';
+        input.style.display = 'none'; send.style.display = 'none';   // decide first
+
+        var node = document.createElement('div');
+        node.appendChild(document.createTextNode(
+          'It sounds like this is a ' + draft.category + ' issue' +
+          (draft.urgency === 'HIGH' ? ' (marked urgent)' : '') + '. I\'ve drafted:'));
+
+        var subj = document.createElement('div');
+        subj.style.cssText = 'margin:8px 0 4px;font-weight:600';
+        subj.textContent = '“' + draft.subject + '”';
+        node.appendChild(subj);
+
+        var desc = document.createElement('div');
+        desc.style.cssText = 'font-size:12px;color:#4b5563;margin-bottom:8px;white-space:pre-wrap';
+        desc.textContent = draft.description;
+        node.appendChild(desc);
+
+        var ask = document.createElement('div');
+        ask.textContent = 'Shall I raise this ticket?';
+        node.appendChild(ask);
+
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:10px';
+        var confirm = document.createElement('button');
+        confirm.className = 'btn btn-primary btn-sm'; confirm.textContent = 'Confirm';
+        var edit = document.createElement('button');
+        edit.className = 'btn btn-secondary btn-sm'; edit.textContent = 'Edit';
+        row.appendChild(confirm); row.appendChild(edit);
+        node.appendChild(row);
+        botCard(node);
+
+        confirm.onclick = function () { row.remove(); submitDraft(); };
+        edit.onclick    = function () { row.remove(); showEdit(); };
+      }
+
+      function showEdit() {
+        st.phase = 'edit';
+        var node = document.createElement('div');
+
+        var l1 = document.createElement('div');
+        l1.style.cssText = 'font-size:12px;font-weight:600;margin-bottom:4px'; l1.textContent = 'Subject';
+        var subjIn = document.createElement('input');
+        subjIn.className = 'form-control'; subjIn.maxLength = 80; subjIn.value = st.draft.subject;
+
+        var l2 = document.createElement('div');
+        l2.style.cssText = 'font-size:12px;font-weight:600;margin:8px 0 4px'; l2.textContent = 'Description';
+        var descIn = document.createElement('textarea');
+        descIn.className = 'form-control'; descIn.rows = 3; descIn.value = st.draft.description;
+
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;margin-top:10px';
+        var save = document.createElement('button');
+        save.className = 'btn btn-primary btn-sm'; save.textContent = 'Submit ticket';
+        row.appendChild(save);
+
+        node.appendChild(l1); node.appendChild(subjIn);
+        node.appendChild(l2); node.appendChild(descIn);
+        node.appendChild(row);
+        botCard(node);
+        subjIn.focus();
+
+        save.onclick = function () {
+          var s = subjIn.value.trim(), d = descIn.value.trim();
+          if (s.length < 5) { errEl.textContent = 'Subject must be at least 5 characters.'; return; }
+          errEl.textContent = '';
+          st.draft.subject = s;
+          st.draft.description = d || st.draft.description;
+          save.disabled = true; row.remove();
+          submitDraft();
+        };
+      }
+
+      // ── Submit through the EXISTING tickets.create path ──────────────────
+      function submitDraft() {
+        errEl.textContent = '';
+        var w = waiting('Raising your ticket…'); setBusy(true);
+
+        var createParams = {
+          category:    st.draft.category,
+          subject:     st.draft.subject,
+          description: st.draft.description,
+          priority:    st.draft.urgency        // urgency → ticket priority (LOW/MEDIUM/HIGH)
+        };
+        if (st.draft.customer_id) createParams.customer_id = st.draft.customer_id;
+
+        API.call('tickets', 'create', createParams)
+          .then(function (res) {
+            w.remove(); setBusy(false);
+            st.ticketId = res && (res.ticket_id || res.ticketId);
+            st.phase = 'live';
+            if (!st.refreshed && onSuccess) { st.refreshed = true; onSuccess(); }
+            var num = (res && res.ticket_number) ? res.ticket_number : 'your ticket';
+            Toast.success('Ticket submitted.');
+            bubble('bot', '✓ Raised ' + num + '. You can keep typing here and anything you ' +
+                          'add will be posted to this ticket.');
+            resetComposer('Add a message to this ticket…');
+          })
+          .catch(function (e) {
+            w.remove(); setBusy(false);
+            errEl.textContent = (e && e.message) ? e.message : 'Could not raise the ticket.';
+            showDraft(st.draft);            // back to Confirm / Edit so they can retry
+          });
+      }
+
+      // ── Triage: classify the customer's free-text message ────────────────
+      function classify(text) {
+        var w = waiting('Reading your message…'); setBusy(true);
+        API.call('tickets', 'classifyTicket', { text: text })
+          .then(function (res) {
+            w.remove(); setBusy(false);
+            if (res && res.success && res.draft) {
+              showDraft(res.draft);
+            } else {
+              bubble('bot', (res && res.error) ? res.error :
+                'Sorry, I could not read that. Please describe your issue again.');
+              resetComposer('Describe your issue…');
+            }
+          })
+          .catch(function (e) {
+            w.remove(); setBusy(false);
+            bubble('bot', (e && e.message) ? e.message : 'Something went wrong. Please try again.');
+            resetComposer('Describe your issue…');
+          });
+      }
+
+      // ── Live mode: message → comment on the active ticket (as now) ───────
+      function postComment(text) {
+        var w = waiting('Sending…'); setBusy(true);
+        API.call('tickets', 'addComment', { ticketId: st.ticketId, content: text })
+          .then(function () { w.remove(); setBusy(false); bubble('bot', '✓ Added to your ticket.'); })
+          .catch(function (e) {
+            w.remove(); setBusy(false);
+            bubble('bot', (e && e.message) ? e.message : 'Could not send that message.');
+          });
+      }
+
+      // ── sendChatMessage: route by phase ──────────────────────────────────
+      function sendChatMessage() {
+        if (st.busy) return;
+        var text = (input.value || '').trim();
+        if (!text) return;
+        errEl.textContent = '';
+        bubble('user', text);
+        input.value = '';
+        if (st.phase === 'live' && st.ticketId) {
+          postComment(text);            // active ticket → comment, exactly as now
+        } else {
+          classify(text);              // no active ticket → AI triage
+        }
+      }
+
+      send.onclick = sendChatMessage;
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+      });
+      bd.querySelector('#pcClose').onclick = function () { Modal.close(); };
+
+      bubble('bot', 'Hi! Tell me what\'s going wrong in your own words and I\'ll set up a ' +
+                    'support ticket for you.');
+      setTimeout(function () { input.focus(); }, 50);
     },
   });
 }
