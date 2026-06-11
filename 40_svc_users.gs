@@ -51,6 +51,44 @@ function _usersGet_(ctx, params) {
   return u;
 }
 
+// Resolve the requested role codes for create/setRoles. Accepts the canonical
+// roleCodes array plus the aliases callers have historically sent (roles as an
+// array, role / roleCode as a single code, comma-separated strings). Throws
+// Validation when the resolved set is empty or contains a code not present in
+// roles — a caller must never be able to express "no roles" by accident.
+function _usersNormalizeRoleCodes_(params) {
+  var raw = params.roleCodes;
+  if (raw === undefined || raw === null) raw = params.roles;
+  if (raw === undefined || raw === null) raw = params.roleCode;
+  if (raw === undefined || raw === null) raw = params.role;
+  if (typeof raw === 'string') raw = raw.split(',');
+  if (!Array.isArray(raw)) raw = [];
+
+  var seen  = {};
+  var codes = [];
+  raw.forEach(function (c) {
+    var code = String(c == null ? '' : c).trim();
+    if (code && !seen[code]) { seen[code] = true; codes.push(code); }
+  });
+  if (!codes.length) {
+    throw new Errors.Validation(
+      'roleCodes must be a non-empty array of role codes — a user cannot be left with no role.'
+    );
+  }
+
+  var placeholders = codes.map(function () { return '?'; }).join(',');
+  var known = TursoClient.select(
+    'SELECT role_code FROM roles WHERE role_code IN (' + placeholders + ')', codes
+  ).map(function (row) { return row.role_code; });
+  var knownSet = {};
+  known.forEach(function (k) { knownSet[k] = true; });
+  var unknown = codes.filter(function (c) { return !knownSet[c]; });
+  if (unknown.length) {
+    throw new Errors.Validation('Unknown role code(s): ' + unknown.join(', '));
+  }
+  return codes;
+}
+
 function _usersCreate_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.create');
   var email = String(params.email || '').trim().toLowerCase();
@@ -58,10 +96,19 @@ function _usersCreate_(ctx, params) {
   var password = String(params.password || '').trim();
   if (!password) throw new Errors.Validation('Initial password is required.');
 
+  // A new user must start with at least one valid role, otherwise they show up
+  // role-less in the list and log in to an empty dashboard. Resolve and
+  // validate BEFORE any insert so a bad role never leaves a half-created
+  // account behind. Granting roles is gated by the same permission that
+  // users.setRoles / rbac.assignRole require.
+  var roleCodes = _usersNormalizeRoleCodes_(params);
+  Rbac.requirePermission(ctx.session, 'role.assign');
+
   Password.validatePolicy(password);
   var passwordHash = Password.hash(password);
   var userId = uuidv4();
   var now    = nowIso();
+  var actor  = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
 
   TursoClient.write(
     'INSERT INTO users (user_id, email, first_name, last_name, status, ' +
@@ -79,15 +126,23 @@ function _usersCreate_(ctx, params) {
     ]
   );
 
+  // Assign the initial role(s) in one round-trip; codes were validated above.
+  TursoClient.batch(roleCodes.map(function (code) {
+    return {
+      sql:  'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
+      args: [userId, code, actor, now],
+    };
+  }));
+
   // Record initial password in history.
   TursoClient.write(
     'INSERT INTO password_history (history_id, user_id, user_type, password_hash, created_at) VALUES (?,?,?,?,?)',
     [uuidv4(), userId, 'STAFF', passwordHash, now]
   );
 
-  Audit.log({ actor: ctx.actor || '', action: 'USER_CREATED', entity: 'users',
-              entityId: userId, after: { email: email, role: params.role }, metadata: {} });
-  return { userId: userId, email: email };
+  Audit.log({ actor: actor, action: 'USER_CREATED', entity: 'users',
+              entityId: userId, after: { email: email, roles: roleCodes }, metadata: {} });
+  return { userId: userId, email: email, roles: roleCodes };
 }
 
 function _usersUpdate_(ctx, params) {
@@ -143,7 +198,8 @@ function _usersUnlock_(ctx, params) {
 function _usersResetPassword_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.reset_password');
   var userId   = String(params.userId   || '');
-  var newPass  = String(params.password || '');
+  // partial_users.html sends newPassword; accept it alongside password.
+  var newPass  = String(params.password || params.newPassword || '');
   if (!userId || !newPass) throw new Errors.Validation('userId and password required.');
   var rows = TursoClient.select('SELECT password_hash FROM users WHERE user_id = ? LIMIT 1', [userId]);
   if (!rows.length) throw new Errors.NotFound('User not found.');
@@ -174,20 +230,30 @@ function _usersInvite_(ctx, params) {
 
 function _usersSetRoles_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'role.assign');
-  var userId    = String(params.userId    || '');
-  var roleCodes = params.roleCodes || [];
+  var userId = String(params.userId || params.user_id || '');
   if (!userId) throw new Errors.Validation('userId required.');
-  if (!Array.isArray(roleCodes)) throw new Errors.Validation('roleCodes must be an array.');
-  var now = nowIso();
-  // Clear existing roles then insert new ones.
-  TursoClient.write('DELETE FROM user_roles WHERE user_id = ?', [userId]);
+
+  // Validate the requested set BEFORE touching user_roles. A missing, empty or
+  // unknown set must fail loudly here — this handler used to DELETE first and
+  // then insert nothing, silently stripping every role while returning success.
+  var roleCodes = _usersNormalizeRoleCodes_(params);
+  var userRows = TursoClient.select('SELECT user_id FROM users WHERE user_id = ? LIMIT 1', [userId]);
+  if (!userRows.length) throw new Errors.NotFound('User not found.');
+
+  var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
+  var now   = nowIso();
+  // Replace the whole set in ONE pipeline call; the codes were validated above
+  // so the inserts cannot fail after the delete and strand the user role-less.
+  var stmts = [{ sql: 'DELETE FROM user_roles WHERE user_id = ?', args: [userId] }];
   roleCodes.forEach(function (code) {
-    TursoClient.write(
-      'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
-      [userId, code, ctx.actor || 'SYSTEM', now]
-    );
+    stmts.push({
+      sql:  'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
+      args: [userId, code, actor, now],
+    });
   });
-  Audit.log({ actor: ctx.actor || '', action: 'ROLES_ASSIGNED', entity: 'users',
+  TursoClient.batch(stmts);
+
+  Audit.log({ actor: actor, action: 'ROLES_ASSIGNED', entity: 'users',
               entityId: userId, after: { roles: roleCodes }, metadata: {} });
   return { success: true, roles: roleCodes };
 }

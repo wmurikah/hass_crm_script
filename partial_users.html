@@ -69,7 +69,7 @@ function newUserModal(onSuccess) {
           first_name: document.getElementById('nuFn').value.trim(),
           last_name:  document.getElementById('nuLn').value.trim(),
           email: email, password: pw,
-          role: document.getElementById('nuRole').value,
+          roleCodes: [document.getElementById('nuRole').value],
           country_code: document.getElementById('nuCC').value,
         }).then(function () { Modal.close(); Toast.success('User created.'); if (onSuccess) onSuccess(); })
           .catch(function (e) { document.getElementById('nuErr').textContent = e.message; });
