@@ -89,6 +89,56 @@ function _usersNormalizeRoleCodes_(params) {
   return codes;
 }
 
+// One shared role-binding path used by BOTH create (additive) and setRoles
+// (replace). A single writer here means the create and edit flows can never
+// drift apart again (create used to inline its own INSERT, divergent from
+// setRoles). Codes MUST already be validated by _usersNormalizeRoleCodes_.
+function _usersWriteRoles_(userId, roleCodes, actor, opts) {
+  var now   = nowIso();
+  var stmts = [];
+  if (opts && opts.replace) {
+    stmts.push({ sql: 'DELETE FROM user_roles WHERE user_id = ?', args: [userId] });
+  }
+  roleCodes.forEach(function (code) {
+    stmts.push({
+      sql:  'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
+      args: [userId, code, actor, now],
+    });
+  });
+  TursoClient.batch(stmts);   // delete + inserts ride one pipeline
+}
+
+// Anti-privilege-escalation guard: an actor may only grant role(s) whose
+// permissions are a subset of their OWN. SUPER_ADMIN (the '*' wildcard) may
+// grant anything. This stops a lower-privileged user who happens to hold
+// role.assign from minting a role that out-ranks them (e.g. handing out
+// SUPER_ADMIN, or any permission they do not themselves hold).
+function _usersAssertCanGrant_(ctx, roleCodes) {
+  var actorId    = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || '';
+  var actorPerms = Rbac.userPermissions(actorId) || [];
+  if (actorPerms.indexOf('*') !== -1) return;   // SUPER_ADMIN (wildcard) - unrestricted
+
+  var actorSet = {};
+  actorPerms.forEach(function (p) { actorSet[p] = true; });
+
+  var placeholders = roleCodes.map(function () { return '?'; }).join(',');
+  var rows = TursoClient.select(
+    'SELECT DISTINCT role_code, permission_code FROM role_permissions WHERE role_code IN (' + placeholders + ')',
+    roleCodes
+  );
+  var offending = {};
+  rows.forEach(function (r) {
+    // '*' is never delegable by a non-wildcard actor; nor is any perm the actor lacks.
+    if (r.permission_code === '*' || !actorSet[r.permission_code]) offending[r.role_code] = true;
+  });
+  var bad = Object.keys(offending);
+  if (bad.length) {
+    throw new Errors.PermissionDenied(
+      'You cannot assign role(s) that grant permissions beyond your own: ' + bad.join(', ') + '.'
+    );
+  }
+}
+
 function _usersCreate_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.create');
   var email = String(params.email || '').trim().toLowerCase();
@@ -103,6 +153,7 @@ function _usersCreate_(ctx, params) {
   // users.setRoles / rbac.assignRole require.
   var roleCodes = _usersNormalizeRoleCodes_(params);
   Rbac.requirePermission(ctx.session, 'role.assign');
+  _usersAssertCanGrant_(ctx, roleCodes);
 
   Password.validatePolicy(password);
   var passwordHash = Password.hash(password);
@@ -126,13 +177,9 @@ function _usersCreate_(ctx, params) {
     ]
   );
 
-  // Assign the initial role(s) in one round-trip; codes were validated above.
-  TursoClient.batch(roleCodes.map(function (code) {
-    return {
-      sql:  'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
-      args: [userId, code, actor, now],
-    };
-  }));
+  // Assign the initial role(s) via the shared binding path (additive: a
+  // brand-new user has nothing to replace). Codes were validated above.
+  _usersWriteRoles_(userId, roleCodes, actor, { replace: false });
 
   // Record initial password in history.
   TursoClient.write(
@@ -160,9 +207,38 @@ function _usersUpdate_(ctx, params) {
   ['team_id', 'country_code', 'reports_to'].forEach(function (k) {
     if (patch[k] !== undefined && !patch[k]) patch[k] = null;
   });
+
+  // Email is login identity. Normalise, and reject a collision with another user
+  // before writing (the column is UNIQUE; a clean message beats a raw DB error).
+  if (params.email !== undefined) {
+    var email = String(params.email).trim().toLowerCase();
+    if (!email) throw new Errors.Validation('Email cannot be empty.');
+    if (email !== String(before.email || '').toLowerCase()) {
+      var dupe = TursoClient.select(
+        'SELECT user_id FROM users WHERE LOWER(email) = ? AND user_id <> ? LIMIT 1', [email, userId]
+      );
+      if (dupe.length) throw new Errors.AppError('Email already in use by another user.', 'CONFLICT');
+    }
+    patch.email = email;
+  }
+
+  // Status - restrict to the known account states.
+  if (params.status !== undefined) {
+    var status = String(params.status).trim().toUpperCase();
+    if (['ACTIVE', 'INACTIVE', 'SUSPENDED'].indexOf(status) === -1) {
+      throw new Errors.Validation('Invalid status: ' + status + '.');
+    }
+    patch.status = status;
+  }
+
   if (Object.keys(patch).length <= 1) throw new Errors.Validation('No updatable fields provided.');
+
+  // Attribute the edit to the acting admin. The dispatcher sets ctx.session (not
+  // ctx.actor), so derive the actor from the validated session like the other
+  // mutating handlers; otherwise the audit row records an empty actor.
+  var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
   Repo.update('users', userId, patch);
-  Audit.log({ actor: ctx.actor || '', action: 'USER_UPDATED', entity: 'users',
+  Audit.log({ actor: actor, action: 'USER_UPDATED', entity: 'users',
               entityId: userId, before: before, after: patch, metadata: {} });
   return { success: true };
 }
@@ -237,21 +313,14 @@ function _usersSetRoles_(ctx, params) {
   // unknown set must fail loudly here — this handler used to DELETE first and
   // then insert nothing, silently stripping every role while returning success.
   var roleCodes = _usersNormalizeRoleCodes_(params);
+  _usersAssertCanGrant_(ctx, roleCodes);
   var userRows = TursoClient.select('SELECT user_id FROM users WHERE user_id = ? LIMIT 1', [userId]);
   if (!userRows.length) throw new Errors.NotFound('User not found.');
 
   var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
-  var now   = nowIso();
-  // Replace the whole set in ONE pipeline call; the codes were validated above
-  // so the inserts cannot fail after the delete and strand the user role-less.
-  var stmts = [{ sql: 'DELETE FROM user_roles WHERE user_id = ?', args: [userId] }];
-  roleCodes.forEach(function (code) {
-    stmts.push({
-      sql:  'INSERT OR IGNORE INTO user_roles (user_id, role_code, assigned_by, assigned_at) VALUES (?,?,?,?)',
-      args: [userId, code, actor, now],
-    });
-  });
-  TursoClient.batch(stmts);
+  // Replace the whole set through the shared binding path; codes were validated
+  // above so the inserts cannot fail after the delete and strand the user role-less.
+  _usersWriteRoles_(userId, roleCodes, actor, { replace: true });
 
   Audit.log({ actor: actor, action: 'ROLES_ASSIGNED', entity: 'users',
               entityId: userId, after: { roles: roleCodes }, metadata: {} });
