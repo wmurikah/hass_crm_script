@@ -3,7 +3,7 @@
  *
  * Read-only aggregation service. No new tables — queries existing domain tables.
  *
- * dashboard.{summary, activityFeed, ordersPulse, ticketsPulse}
+ * dashboard.{summary, activityFeed, ordersPulse, ticketsPulse, charts, slaMetrics}
  *
  * Country scope enforced via session.
  */
@@ -41,6 +41,21 @@ function _dashScopeClause_(scope, tableAlias) {
   if (!scope.countries.length) return { clause: ' AND 1=0', args: [] };
   var ph = scope.countries.map(function () { return '?'; }).join(',');
   return { clause: ' AND ' + alias + 'country_code IN (' + ph + ')', args: scope.countries.slice() };
+}
+
+// Six month buckets ending with the current month, oldest first, as 'YYYY-MM'.
+// Built in UTC so the labels line up with SQLite's strftime('%Y-%m', created_at),
+// which also evaluates the ISO-UTC timestamps in UTC. Using the first-of-month
+// avoids the day-overflow that plain month arithmetic hits (e.g. Mar 31 -> Feb).
+function _dashLast6Months_() {
+  var out = [];
+  var now = new Date();
+  var y = now.getUTCFullYear(), m = now.getUTCMonth();
+  for (var i = 5; i >= 0; i--) {
+    var dt = new Date(Date.UTC(y, m - i, 1));
+    out.push(dt.getUTCFullYear() + '-' + ('0' + (dt.getUTCMonth() + 1)).slice(-2));
+  }
+  return out;
 }
 
 // ── dashboard.summary ─────────────────────────────────────────────────────────
@@ -130,6 +145,108 @@ function _dashTicketsPulse_(ctx, params) {
               sc.clause +
               " GROUP BY day ORDER BY day";
   return TursoClient.select(sql, sc.args);
+}
+
+// ── dashboard.charts: four aggregated series for the dashboard charts ────────
+//
+// One Turso round-trip (batch) returns FOUR small, pre-aggregated series. The
+// browser never sees raw rows, only counts/sums grouped in SQL. Every query is
+// country-scoped via the session (same RBAC as the rest of the dashboard);
+// GLOBAL roles see all, COUNTRY roles see only countryCode + countries_access.
+//
+// Returns:
+//   ordersByMonth:   [{ month:'YYYY-MM', count }]              // last 6 months, line
+//   revenueByMonth:  { months:[...], currencies:[...],          // last 6 months, bar
+//                      series:{ CCY:[..6 numbers..] } }         //   grouped PER currency
+//   ordersByCountry: [{ country, label, count }]                // active countries, h-bar
+//   ticketsByStatus: [{ status, count }]                        // five statuses, doughnut
+//
+// CURRENCY RULE: revenue is grouped by (month, currency_code) and returned as a
+// separate series per currency. Amounts are NEVER summed across currencies (there
+// is no exchange_rates table and "no schema change" is a hard constraint). The
+// client charts one currency at a time via a selector.
+function _dashCharts_(ctx, params) {
+  Rbac.requirePermission(ctx.session, 'order.view');
+  var scope  = _dashScopeData_(ctx.session);
+  var sc     = _dashScopeClause_(scope, '');          // orders & tickets both carry country_code
+  var months = _dashLast6Months_();
+  // Confirmed revenue only: exclude draft/cancelled/rejected so the bar reflects
+  // booked order value, not abandoned or voided orders.
+  var REV_EXCLUDE = "status NOT IN ('DRAFT','CANCELLED','REJECTED')";
+
+  var res = TursoClient.batch([
+    // 0: orders created per month (all statuses = order activity)
+    { sql: "SELECT strftime('%Y-%m', created_at) AS ym, COUNT(*) AS n FROM orders " +
+           "WHERE date(created_at) >= date('now','start of month','-5 months')" + sc.clause +
+           " GROUP BY ym", args: sc.args },
+    // 1: confirmed revenue per month PER currency (never summed across currencies)
+    { sql: "SELECT strftime('%Y-%m', created_at) AS ym, UPPER(COALESCE(currency_code,'')) AS ccy, " +
+           "COALESCE(SUM(total_amount),0) AS revenue FROM orders " +
+           "WHERE date(created_at) >= date('now','start of month','-5 months') AND " + REV_EXCLUDE + sc.clause +
+           " GROUP BY ym, ccy", args: sc.args },
+    // 2: orders by country
+    { sql: "SELECT UPPER(COALESCE(country_code,'')) AS cc, COUNT(*) AS n FROM orders " +
+           "WHERE 1=1" + sc.clause + " GROUP BY cc", args: sc.args },
+    // 3: tickets by status
+    { sql: "SELECT UPPER(COALESCE(status,'')) AS st, COUNT(*) AS n FROM tickets " +
+           "WHERE 1=1" + sc.clause + " GROUP BY st", args: sc.args }
+  ]);
+
+  // Country code -> display name, read defensively from the reference table so an
+  // unknown name-column does not break the chart (we fall back to the code). This
+  // is reference data (labels only); the per-country COUNTS above are scoped.
+  var nameByCode = {};
+  try {
+    var cRows = TursoClient.select('SELECT * FROM countries', []);
+    cRows.forEach(function (r) {
+      var code = String(r.country_code || r.code || '').toUpperCase();
+      if (!code) return;
+      nameByCode[code] = String(r.country_name || r.name || r.label || r.title || code);
+    });
+  } catch (_) {}
+
+  function toInt(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+  function toNum(v) { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+  // ── 0. Orders per month (continuous 6-month series, gaps filled with 0) ──
+  var omMap = {};
+  res[0].rows.forEach(function (r) { omMap[r.ym] = toInt(r.n); });
+  var ordersByMonth = months.map(function (m) { return { month: m, count: omMap[m] || 0 }; });
+
+  // ── 1. Revenue per month per currency (highest-total currency first) ──
+  var revMap = {}, ccyTotals = {};
+  res[1].rows.forEach(function (r) {
+    var ccy = r.ccy || 'NA';
+    var rev = toNum(r.revenue);
+    if (!revMap[ccy]) revMap[ccy] = {};
+    revMap[ccy][r.ym] = rev;
+    ccyTotals[ccy] = (ccyTotals[ccy] || 0) + rev;
+  });
+  var currencies = Object.keys(revMap).sort(function (a, b) { return ccyTotals[b] - ccyTotals[a]; });
+  var revenueSeries = {};
+  currencies.forEach(function (ccy) {
+    revenueSeries[ccy] = months.map(function (m) { return revMap[ccy][m] || 0; });
+  });
+
+  // ── 2. Orders by country (most orders first) ──
+  var ordersByCountry = res[2].rows.map(function (r) {
+    var code = r.cc || '';
+    return { country: code, label: nameByCode[code] || code || 'Unknown', count: toInt(r.n) };
+  }).filter(function (r) { return r.country; });
+  ordersByCountry.sort(function (a, b) { return b.count - a.count; });
+
+  // ── 3. Tickets by the five lifecycle statuses (gaps filled with 0) ──
+  var TICKET_STATUSES = ['NEW', 'OPEN', 'PENDING', 'RESOLVED', 'CLOSED'];
+  var tsMap = {};
+  res[3].rows.forEach(function (r) { tsMap[r.st] = toInt(r.n); });
+  var ticketsByStatus = TICKET_STATUSES.map(function (s) { return { status: s, count: tsMap[s] || 0 }; });
+
+  return {
+    ordersByMonth:   ordersByMonth,
+    revenueByMonth:  { months: months, currencies: currencies, series: revenueSeries },
+    ordersByCountry: ordersByCountry,
+    ticketsByStatus: ticketsByStatus,
+  };
 }
 
 // ── dashboard.slaMetrics  —  SLA performance feed (4 datasets, 1 call) ───────
@@ -282,5 +399,6 @@ function _dashSlaMetrics_(ctx, params) {
   register({ service: 'dashboard', action: 'activityFeed',  permission: 'order.view', handler: _dashActivityFeed_ });
   register({ service: 'dashboard', action: 'ordersPulse',   permission: 'order.view', handler: _dashOrdersPulse_ });
   register({ service: 'dashboard', action: 'ticketsPulse',  permission: 'order.view', handler: _dashTicketsPulse_ });
+  register({ service: 'dashboard', action: 'charts',        permission: 'order.view', handler: _dashCharts_ });
   register({ service: 'dashboard', action: 'slaMetrics',    permission: 'order.view', handler: _dashSlaMetrics_ });
 })();
