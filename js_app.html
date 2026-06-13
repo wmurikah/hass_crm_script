@@ -213,10 +213,13 @@ var Router = (function () {
     if (!_routes[id]) { console.warn('Unknown route:', id); return; }
     _active = id;
     if (_content) _content.innerHTML = '';
-    // Update active nav item.
+    // Update active nav item (visual highlight + aria-current for wayfinding).
     if (_navItems) {
       document.querySelectorAll(_navItems).forEach(function (el) {
-        el.classList.toggle('active', el.dataset.route === id);
+        var isActive = el.dataset.route === id;
+        el.classList.toggle('active', isActive);
+        if (isActive) el.setAttribute('aria-current', 'page');
+        else          el.removeAttribute('aria-current');
       });
     }
     try {
@@ -285,8 +288,8 @@ function goRoute(route, params) {
   var item = document.querySelector('.nav-item[data-route="' + route + '"]');
   if (item) {
     var t = document.getElementById('pageTitle');
-    var span = item.querySelector('span');
-    if (t && span) t.textContent = span.textContent;
+    var labelEl = item.querySelector('.nav-label') || item.querySelector('span');
+    if (t && labelEl) t.textContent = labelEl.textContent;
   }
   Router.navigate(route, params || {});
 }
@@ -345,7 +348,9 @@ function applyBranding(b) {
   if (b.secondary_color) r.setProperty('--clr-gold',    b.secondary_color);
   if (b.accent_color)    r.setProperty('--clr-accent',  b.accent_color);
   if (b.app_name) {
-    document.querySelectorAll('.sidebar-logo, .login-title')
+    // Target the wordmark text span (not .sidebar-logo) so the gold brand mark
+    // beside it is preserved; .login-title keeps its legacy behaviour.
+    document.querySelectorAll('.sidebar-logo-text, .login-title')
       .forEach(function(el){ el.textContent = b.app_name; });
   }
 }

@@ -1,4 +1,9 @@
 <script>
+// Per-render lookup of the rows currently shown, so the row Edit button can
+// open a modal pre-filled from the same data without an extra round-trip.
+var _usersById  = {};
+var _usersReload = null;
+
 Router.register('users', function (el) {
   el.innerHTML =
     '<div class="filter-bar">' +
@@ -19,16 +24,22 @@ Router.register('users', function (el) {
     API.call('users', 'list', params).then(function (res) {
       var rows = Array.isArray(res) ? res : (res.items || []);
       if (!rows.length) { setHTML('usrBody', emptyRow(7, 'No users.')); return; }
+      _usersById = {};
+      rows.forEach(function (u) { _usersById[u.user_id] = u; });
       setHTML('usrBody', rows.map(function (u) {
         return '<tr><td>' + esc(u.first_name + ' ' + u.last_name) + '</td>' +
                '<td>' + esc(u.email) + '</td><td>' + esc(u.role || u.primary_role || '—') + '</td>' +
                '<td>' + esc(u.country_code || '—') + '</td><td>' + statusBadge(u.status) + '</td>' +
                '<td>' + fmtDate(u.last_login_at) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + esc(u.user_id) + '\')">Reset PW</button></td></tr>';
+               '<td class="actions">' +
+                 '<button class="btn btn-secondary btn-sm" onclick="editUser(\'' + esc(u.user_id) + '\')">Edit</button>' +
+                 '<button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + esc(u.user_id) + '\')">Reset PW</button>' +
+               '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('usrBody', errorRow(7, e, load)); });
   }
 
+  _usersReload = load;
   document.getElementById('usrRole').onchange = load;
   document.getElementById('usrNewBtn').onclick = function () { newUserModal(load); };
   load();
@@ -73,6 +84,124 @@ function newUserModal(onSuccess) {
           country_code: document.getElementById('nuCC').value,
         }).then(function () { Modal.close(); Toast.success('User created.'); if (onSuccess) onSuccess(); })
           .catch(function (e) { document.getElementById('nuErr').textContent = e.message; });
+      };
+    },
+  });
+}
+
+// Row "Edit" action: opens the editor pre-filled from the listed row.
+function editUser(userId) {
+  var u = _usersById[userId];
+  if (!u) { Toast.error('User not in the current list. Refresh and try again.'); return; }
+  editUserModal(u, _usersReload || function () {});
+}
+
+// Edit profile (name, email, country, status) AND reassign the role from the
+// LIVE roles list. Also the repair path for role-less users (BD Rep, Test Test):
+// pick a role and save. Profile saves via users.update; the role is sent to
+// users.setRoles under the accepted key `roleCodes`. Only changed fields are
+// written, and an empty role selection leaves the role unchanged (never wipes).
+function editUserModal(u, onSuccess) {
+  var COUNTRIES = ['KE','UG','TZ','RW','DRC','ZM','SS','MW'];
+  var STATUSES  = ['ACTIVE','INACTIVE','SUSPENDED'];
+  var curRole   = u.role || u.primary_role || '';
+  var curStatus = String(u.status || 'ACTIVE').toUpperCase();
+  var curCC     = String(u.country_code || '');
+
+  // Build <option>s, always keeping the user's current value selectable even if
+  // it is outside the standard list (so saving an unchanged field never alters it).
+  function selOptions(list, sel, allowBlank) {
+    var arr = list.slice();
+    if (sel && arr.indexOf(sel) === -1) arr.unshift(sel);
+    var html = allowBlank ? '<option value=""' + (!sel ? ' selected' : '') + '>(none)</option>' : '';
+    return html + arr.map(function (v) {
+      return '<option' + (v === sel ? ' selected' : '') + '>' + esc(v) + '</option>';
+    }).join('');
+  }
+
+  Modal.open({
+    title: 'Edit User',
+    body:
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">First Name</label><input class="form-control" id="euFn" value="' + esc(u.first_name || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Last Name</label><input class="form-control" id="euLn" value="' + esc(u.last_name || '') + '"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Email</label><input class="form-control" type="email" id="euEmail" value="' + esc(u.email || '') + '"></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Country</label><select class="form-control" id="euCC">' + selOptions(COUNTRIES, curCC, true) + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Status</label><select class="form-control" id="euStatus">' + selOptions(STATUSES, curStatus, false) + '</select></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Role</label>' +
+        '<select class="form-control" id="euRole"><option value="">Loading roles…</option></select>' +
+        '<div style="font-size:11px;color:var(--clr-text-light);margin-top:4px">Reassigning replaces this user\'s role. Leave it unchanged to keep the current role.</div>' +
+      '</div>' +
+      '<div id="euErr" style="color:#dc2626;font-size:12px"></div>',
+    footer:
+      '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+      '<button class="btn btn-primary" id="euSave">Save changes</button>',
+    onOpen: function () {
+      var roleSel = document.getElementById('euRole');
+      var saveBtn = document.getElementById('euSave');
+      var errEl   = document.getElementById('euErr');
+
+      // Populate roles from the SAME live action the RBAC screen uses.
+      saveBtn.disabled = true;
+      API.call('rbac', 'listRoles', {}).then(function (roles) {
+        var head = curRole ? 'Keep current role (' + esc(curRole) + ')' : 'Select a role';
+        var html = '<option value="">' + head + '</option>';
+        html += (roles || []).map(function (r) {
+          var code  = r.role_code || r.role_id;
+          var label = (r.label && r.label !== code) ? (esc(code) + ' - ' + esc(r.label)) : esc(code);
+          return '<option value="' + esc(code) + '"' + (code === curRole ? ' selected' : '') + '>' + label + '</option>';
+        }).join('');
+        roleSel.innerHTML = html;
+        saveBtn.disabled = false;
+      }).catch(function (e) {
+        roleSel.innerHTML = '<option value="">(could not load roles)</option>';
+        errEl.textContent = 'Could not load roles: ' + (e && e.message ? e.message : e);
+        saveBtn.disabled = false;   // profile fields can still be saved
+      });
+
+      saveBtn.onclick = function () {
+        errEl.textContent = '';
+        var firstName = document.getElementById('euFn').value.trim();
+        var lastName  = document.getElementById('euLn').value.trim();
+        var email     = document.getElementById('euEmail').value.trim();
+        var country   = document.getElementById('euCC').value;
+        var status    = document.getElementById('euStatus').value;
+        var role      = roleSel.value;
+        if (!email) { errEl.textContent = 'Email is required.'; return; }
+
+        // Send ONLY changed profile fields (so an unrelated edit never re-submits
+        // a value the server might reject, e.g. an out-of-set legacy status).
+        var patch = { userId: u.user_id };
+        var profileChanged = false;
+        if (firstName !== String(u.first_name || '')) { patch.first_name = firstName; profileChanged = true; }
+        if (lastName  !== String(u.last_name  || '')) { patch.last_name  = lastName;  profileChanged = true; }
+        if (email.toLowerCase() !== String(u.email || '').toLowerCase()) { patch.email = email; profileChanged = true; }
+        if (country !== curCC)     { patch.country_code = country; profileChanged = true; }
+        if (status  !== curStatus) { patch.status = status; profileChanged = true; }
+        var roleChanged = !!role && role !== curRole;
+
+        if (!profileChanged && !roleChanged) { Modal.close(); return; }
+
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+
+        var profileP = profileChanged ? API.call('users', 'update', patch) : Promise.resolve();
+        profileP
+          .then(function () {
+            // Role under the accepted key `roleCodes` (array); see _usersSetRoles_.
+            return roleChanged ? API.call('users', 'setRoles', { userId: u.user_id, roleCodes: [role] }) : null;
+          })
+          .then(function () {
+            Modal.close();
+            Toast.success('User updated.');
+            if (onSuccess) onSuccess();
+          })
+          .catch(function (e) {
+            saveBtn.disabled = false; saveBtn.textContent = 'Save changes';
+            errEl.textContent = (e && e.message) ? e.message : 'Save failed.';
+          });
       };
     },
   });
