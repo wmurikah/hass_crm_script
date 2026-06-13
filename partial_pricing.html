@@ -1,72 +1,555 @@
 <script>
+/* ──────────────────────────────────────────────────────────────────
+ * partial_pricing.html  —  Price Lists screen (tiered pricing)
+ *
+ * Three scopes per list: Default (country + currency baseline), Segment
+ * (every customer in a segment), Customer (one customer). Rates resolve
+ * per product through pricing.previewResolve (customer -> segment -> default).
+ * All data goes through API.call(pricing.*) / catalog.* / customers.*.
+ * ────────────────────────────────────────────────────────────────── */
+
+var _pricingListsById     = {};
+var _pricingSegmentsCache = null;
+var _pricingProductsCache = null;
+var _pricingDepotsByKey   = {};
+
 Router.register('pricing', function (el) {
   el.innerHTML =
     '<div class="filter-bar">' +
+      '<select class="form-control" id="plScopeFilter">' +
+        '<option value="">All scopes</option>' +
+        '<option value="default">Default</option>' +
+        '<option value="segment">Segment</option>' +
+        '<option value="customer">Customer</option>' +
+      '</select>' +
       '<button class="btn btn-primary btn-sm" id="plNewBtn">+ New Price List</button>' +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-      '<thead><tr><th>Price List</th><th>Country</th><th>Currency</th><th>Effective From</th><th>Status</th><th></th></tr></thead>' +
+      '<thead><tr><th>Scope</th><th>Country</th><th>Currency</th>' +
+        '<th>Effective From</th><th>Effective To</th><th>Status</th><th></th></tr></thead>' +
       '<tbody id="plBody"></tbody></table></div></div>' +
-    '<div id="plItems" style="margin-top:14px"></div>';
+    '<div id="plItems" style="margin-top:14px"></div>' +
+    '<div id="plPreview" style="margin-top:14px"></div>';
 
-  function load() {
-    setHTML('plBody', loadingRow(6));
-    API.call('pricing', 'listLists', { limit: 30 }).then(function (rows) {
-      if (!rows.length) { setHTML('plBody', emptyRow(6, 'No price lists.')); return; }
-      setHTML('plBody', rows.map(function (r) {
-        var pid  = esc(r.list_id);
-        var name = esc(r.list_name);
-        return '<tr style="cursor:pointer" onclick="loadPriceItems(\'' + pid + '\',\'' + name + '\')"><td>' + esc(r.list_name) + '</td><td>' + esc(r.country_code) + '</td>' +
-               '<td>' + esc(r.currency_code) + '</td><td>' + fmtDate(r.effective_from) + '</td>' +
-               '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();loadPriceItems(\'' + pid + '\',\'' + name + '\')">Items</button></td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('plBody', errorRow(6, e, load)); });
+  window._pricingReload = loadLists;
+  document.getElementById('plNewBtn').onclick      = function () { pricingListModal(null); };
+  document.getElementById('plScopeFilter').onchange = loadLists;
+
+  function loadLists() {
+    setHTML('plBody', loadingRow(7));
+    var p = { include_inactive: 1 };
+    var sf = document.getElementById('plScopeFilter').value;
+    if (sf) p.scope = sf;
+    API.call('pricing', 'listLists', p).then(function (rows) {
+      _pricingListsById = {};
+      (rows || []).forEach(function (r) { _pricingListsById[r.list_id || r.price_id] = r; });
+      if (!rows || !rows.length) { setHTML('plBody', emptyRow(7, 'No price lists yet.')); return; }
+      setHTML('plBody', rows.map(pricingRowHtml).join(''));
+      pricingWireRows();
+    }).catch(function (e) { setHTML('plBody', errorRow(7, e, loadLists)); });
   }
 
-  document.getElementById('plNewBtn').onclick = function () { newPriceListModal(load); };
-  load();
+  loadLists();
+  pricingRenderPreview();
 });
 
-function loadPriceItems(priceId, listName) {
-  setHTML('plItems', '<div class="card"><div class="card-header"><span class="card-title">Items — ' + esc(listName) + '</span></div>' +
-                '<div class="card-body" id="plItemBody">' + spinnerHTML(20) + '</div></div>');
-  // getPriceListItems requires the price_id — supply it from the clicked row.
-  API.call('pricing', 'getPriceListItems', { priceId: priceId }).then(function (rows) {
-    setHTML('plItemBody',
-      '<table class="data-table"><thead><tr><th>Product</th><th>Unit Price</th><th>Min Qty</th></tr></thead><tbody>' +
-      (rows.length ? rows.map(function (r) {
-        return '<tr><td>' + esc(r.product_name || r.product_id) + '</td><td>' + fmtMoney(r.unit_price) + '</td><td>' + (r.min_quantity || 1) + '</td></tr>';
-      }).join('') : emptyRow(3, 'No items in this price list.')) +
-      '</tbody></table>');
-  }).catch(function (e) { setHTML('plItemBody', errorCard(e, function () { loadPriceItems(priceId, listName); })); });
+/* ── List table rendering ──────────────────────────────────────────── */
+
+function pricingIsDefault(r) {
+  return r && (r.is_default === 1 || r.is_default === '1' || r.is_default === true);
 }
 
-function newPriceListModal(onSuccess) {
+function pricingStatusOf(r) {
+  var s = String(r.status != null ? r.status : r.is_active).toUpperCase();
+  return (s === 'INACTIVE' || s === '0') ? 'INACTIVE' : 'ACTIVE';
+}
+
+function pricingScopeLabel(r) {
+  if (pricingIsDefault(r)) return '<strong>Default</strong>';
+  if (r.segment_id)  return 'Segment: ' + esc(r.segment_name || r.segment_id);
+  if (r.customer_id) return 'Customer: ' + esc(r.customer_name || r.customer_id);
+  return esc('Unscoped');
+}
+
+function pricingRowHtml(r) {
+  var id     = esc(r.list_id || r.price_id);
+  var status = pricingStatusOf(r);
+  return '<tr data-id="' + id + '">' +
+    '<td>' + pricingScopeLabel(r) + '</td>' +
+    '<td>' + esc(r.country_code) + '</td>' +
+    '<td>' + esc(r.currency_code) + '</td>' +
+    '<td>' + fmtDate(r.effective_from) + '</td>' +
+    '<td>' + fmtDate(r.effective_to) + '</td>' +
+    '<td>' + statusBadge(status) + '</td>' +
+    '<td class="actions">' +
+      '<button class="btn btn-secondary btn-sm pl-items" data-id="' + id + '">Manage Items</button>' +
+      '<button class="btn btn-secondary btn-sm pl-edit"  data-id="' + id + '">Edit</button>' +
+      (status === 'ACTIVE'
+        ? '<button class="btn btn-danger btn-sm pl-deact" data-id="' + id + '">Deactivate</button>'
+        : '') +
+    '</td></tr>';
+}
+
+function pricingWireRows() {
+  document.querySelectorAll('.pl-items').forEach(function (b) {
+    b.onclick = function () {
+      var r = _pricingListsById[b.dataset.id] || {};
+      pricingManageItems(b.dataset.id, r.list_name || r.name || '');
+    };
+  });
+  document.querySelectorAll('.pl-edit').forEach(function (b) {
+    b.onclick = function () { pricingListModal(b.dataset.id); };
+  });
+  document.querySelectorAll('.pl-deact').forEach(function (b) {
+    b.onclick = function () { pricingDeactivate(b.dataset.id); };
+  });
+}
+
+function pricingDeactivate(id) {
+  Modal.confirm('Deactivate this price list? Orders will stop resolving rates from it.', function () {
+    API.call('pricing', 'deactivateList', { priceId: id })
+      .then(function () { Toast.success('Price list deactivated.'); if (window._pricingReload) window._pricingReload(); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+
+/* ── Create / Edit list modal ──────────────────────────────────────── */
+
+function pricingListModal(id) {
+  var existing = id ? (_pricingListsById[id] || {}) : null;
+  var isEdit   = !!id;
+  var scope    = 'default';
+  if (existing) {
+    if (existing.segment_id)       scope = 'segment';
+    else if (existing.customer_id) scope = 'customer';
+  }
+  var countries  = ['KE', 'UG', 'TZ', 'RW', 'DRC', 'ZM', 'SS', 'MW'];
+  var currencies = ['KES', 'UGX', 'TZS', 'RWF', 'USD'];
+  function opts(list, sel) {
+    // Keep the current value selectable even if it is not in the default list, so
+    // editing never silently rewrites country/currency to the first option.
+    var arr = list.slice();
+    if (sel && arr.indexOf(sel) === -1) arr.unshift(sel);
+    return arr.map(function (c) { return '<option' + (c === sel ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('');
+  }
+  function dval(v) { return v ? esc(String(v).substring(0, 10)) : ''; }
+
+  var body =
+    '<div class="form-group"><label class="form-label">List Name</label>' +
+      '<input class="form-control" id="plfName" value="' + esc(existing ? (existing.list_name || existing.name || '') : '') + '"></div>' +
+    '<div class="form-group"><label class="form-label">Scope</label>' +
+      '<select class="form-control" id="plfScope">' +
+        '<option value="default"'  + (scope === 'default'  ? ' selected' : '') + '>Default (country + currency baseline)</option>' +
+        '<option value="segment"'  + (scope === 'segment'  ? ' selected' : '') + '>Segment</option>' +
+        '<option value="customer"' + (scope === 'customer' ? ' selected' : '') + '>Customer</option>' +
+      '</select></div>' +
+    '<div class="form-group" id="plfSegRow" style="display:none"><label class="form-label">Segment</label>' +
+      '<select class="form-control" id="plfSeg"><option value="">Loading...</option></select></div>' +
+    '<div class="form-group" id="plfCustRow" style="display:none"><label class="form-label">Customer</label>' +
+      '<input class="form-control" id="plfCustSearch" placeholder="Search company name...">' +
+      '<div id="plfCustRes" style="margin-top:6px"></div>' +
+      '<input type="hidden" id="plfCustId" value="' + esc(existing && existing.customer_id ? existing.customer_id : '') + '">' +
+      '<div id="plfCustChosen" style="margin-top:6px;font-size:12px;color:var(--clr-text-light)"></div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Country</label>' +
+        '<select class="form-control" id="plfCC">' + opts(countries, existing ? existing.country_code : 'KE') + '</select></div>' +
+      '<div class="form-group"><label class="form-label">Currency</label>' +
+        '<select class="form-control" id="plfCur">' + opts(currencies, existing ? existing.currency_code : 'KES') + '</select></div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Effective From</label>' +
+        '<input type="date" class="form-control" id="plfFrom" value="' + dval(existing && existing.effective_from) + '"></div>' +
+      '<div class="form-group"><label class="form-label">Effective To</label>' +
+        '<input type="date" class="form-control" id="plfTo" value="' + dval(existing && existing.effective_to) + '"></div>' +
+    '</div>' +
+    (isEdit
+      ? '<div class="form-group"><label class="form-label">Status</label>' +
+        '<select class="form-control" id="plfStatus"><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>'
+      : '') +
+    '<div class="form-group"><label class="form-label">Notes</label>' +
+      '<textarea class="form-control" id="plfNotes" rows="2">' + esc(existing && existing.notes ? existing.notes : '') + '</textarea></div>' +
+    '<div id="plfErr" style="color:var(--clr-danger);font-size:12px"></div>';
+
   Modal.open({
-    title: 'New Price List',
-    body: '<div class="form-group"><label class="form-label">List Name</label><input class="form-control" id="plnName"></div>' +
-          '<div class="form-row">' +
-          '<div class="form-group"><label class="form-label">Country</label>' +
-            '<select class="form-control" id="plnCC"><option>KE</option><option>UG</option><option>TZ</option><option>RW</option><option>DRC</option><option>ZM</option><option>SS</option><option>MW</option></select></div>' +
-          '<div class="form-group"><label class="form-label">Currency</label>' +
-            '<select class="form-control" id="plnCur"><option>KES</option><option>UGX</option><option>TZS</option><option>RWF</option><option>USD</option></select></div></div>' +
-          '<div class="form-group"><label class="form-label">Effective From</label><input class="form-control" type="date" id="plnEff"></div>' +
-          '<div id="plnErr" style="color:#dc2626;font-size:12px"></div>',
+    title: isEdit ? 'Edit Price List' : 'New Price List',
+    body: body,
     footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
-            '<button class="btn btn-primary" id="plnSave">Create</button>',
+            '<button class="btn btn-primary" id="plfSave">' + (isEdit ? 'Save' : 'Create') + '</button>',
     onOpen: function () {
-      document.getElementById('plnSave').onclick = function () {
-        var name = document.getElementById('plnName').value.trim();
-        if (!name) { document.getElementById('plnErr').textContent = 'Name required.'; return; }
-        API.call('pricing', 'createList', {
-          list_name: name, country_code: document.getElementById('plnCC').value,
-          currency_code: document.getElementById('plnCur').value,
-          effective_from: document.getElementById('plnEff').value || new Date().toISOString().substring(0,10),
-        }).then(function () { Modal.close(); Toast.success('Price list created.'); if (onSuccess) onSuccess(); })
-          .catch(function (e) { document.getElementById('plnErr').textContent = e.message; });
-      };
+      var segRow  = document.getElementById('plfSegRow');
+      var custRow = document.getElementById('plfCustRow');
+      function applyScope() {
+        var s = document.getElementById('plfScope').value;
+        segRow.style.display  = (s === 'segment')  ? 'block' : 'none';
+        custRow.style.display = (s === 'customer') ? 'block' : 'none';
+        if (s === 'segment') pricingLoadSegments(existing ? existing.segment_id : null);
+      }
+      document.getElementById('plfScope').onchange = applyScope;
+      applyScope();
+      pricingWireCustomerSearch('plf');
+      if (isEdit) {
+        document.getElementById('plfStatus').value = pricingStatusOf(existing);
+        if (existing.customer_id) {
+          document.getElementById('plfCustChosen').textContent = 'Selected: ' + (existing.customer_name || existing.customer_id);
+        }
+      }
+      document.getElementById('plfSave').onclick = function () { pricingSaveList(id); };
     },
   });
+}
+
+function pricingLoadSegments(selId) {
+  var sel = document.getElementById('plfSeg');
+  if (!sel) return;
+  function fill(rows) {
+    _pricingSegmentsCache = rows || [];
+    sel.innerHTML = '<option value="">Select a segment...</option>' + _pricingSegmentsCache.map(function (s) {
+      var nm = s.segment_name || s.name || s.segment_id;
+      return '<option value="' + esc(s.segment_id) + '"' +
+        (selId && String(selId) === String(s.segment_id) ? ' selected' : '') + '>' + esc(nm) + '</option>';
+    }).join('');
+  }
+  if (_pricingSegmentsCache) { fill(_pricingSegmentsCache); return; }
+  API.call('catalog', 'listSegments', {}).then(fill)
+    .catch(function () { sel.innerHTML = '<option value="">Could not load segments</option>'; });
+}
+
+function pricingWireCustomerSearch(prefix) {
+  var input = document.getElementById(prefix + 'CustSearch');
+  var res   = document.getElementById(prefix + 'CustRes');
+  if (!input || !res) return;
+  input.oninput = function () {
+    clearTimeout(input._t);
+    var q = input.value.trim();
+    if (q.length < 2) { res.innerHTML = ''; return; }
+    input._t = setTimeout(function () {
+      API.call('customers', 'search', { q: q, limit: 8 }).then(function (rows) {
+        if (!rows || !rows.length) { res.innerHTML = '<div style="font-size:12px;color:var(--clr-text-light)">No matches.</div>'; return; }
+        res.innerHTML = rows.map(function (c) {
+          return '<button type="button" class="btn btn-secondary btn-sm pricing-cust-pick" ' +
+            'data-id="' + esc(c.customer_id) + '" data-name="' + esc(c.company_name || c.customer_id) + '" ' +
+            'style="display:block;width:100%;text-align:left;margin-bottom:4px">' +
+            esc(c.company_name || c.customer_id) +
+            ' <span style="color:var(--clr-text-light)">(' + esc(c.country_code || '') + ')</span></button>';
+        }).join('');
+        res.querySelectorAll('.pricing-cust-pick').forEach(function (b) {
+          b.onclick = function () {
+            document.getElementById(prefix + 'CustId').value = b.dataset.id;
+            var chosen = document.getElementById(prefix + 'CustChosen');
+            if (chosen) chosen.textContent = 'Selected: ' + b.dataset.name;
+            res.innerHTML = '';
+            input.value = b.dataset.name;
+          };
+        });
+      }).catch(function (e) { res.innerHTML = '<div style="font-size:12px;color:var(--clr-danger)">' + esc(e.message) + '</div>'; });
+    }, 350);
+  };
+}
+
+function pricingSaveList(id) {
+  var err = document.getElementById('plfErr');
+  err.textContent = '';
+  var name  = document.getElementById('plfName').value.trim();
+  var scope = document.getElementById('plfScope').value;
+  if (!name) { err.textContent = 'List name is required.'; return; }
+
+  var params = {
+    name:          name,
+    scope:         scope,
+    country_code:  document.getElementById('plfCC').value,
+    currency_code: document.getElementById('plfCur').value,
+    notes:         document.getElementById('plfNotes').value || '',
+  };
+  if (scope === 'segment') {
+    var seg = document.getElementById('plfSeg').value;
+    if (!seg) { err.textContent = 'Select a segment.'; return; }
+    params.segment_id = seg;
+  } else if (scope === 'customer') {
+    var cid = document.getElementById('plfCustId').value;
+    if (!cid) { err.textContent = 'Search for and select a customer.'; return; }
+    params.customer_id = cid;
+  }
+
+  var from = document.getElementById('plfFrom').value;
+  var to   = document.getElementById('plfTo').value;
+  var action;
+  if (id) {
+    params.price_list_id = id;
+    params.status = document.getElementById('plfStatus').value;
+    params.effective_from = from;   // empty clears on update
+    params.effective_to   = to;
+    action = 'updateList';
+  } else {
+    if (from) params.effective_from = from;
+    if (to)   params.effective_to   = to;
+    action = 'createList';
+  }
+
+  API.call('pricing', action, params).then(function () {
+    Modal.close();
+    Toast.success(id ? 'Price list updated.' : 'Price list created.');
+    if (window._pricingReload) window._pricingReload();
+  }).catch(function (e) { err.textContent = e.message; });
+}
+
+/* ── Manage items ──────────────────────────────────────────────────── */
+
+function pricingManageItems(priceId, listName) {
+  var r = _pricingListsById[priceId] || {};
+  setHTML('plItems',
+    '<div class="card"><div class="card-header">' +
+      '<span class="card-title">Items: ' + esc(listName || r.list_name || 'Price List') + '</span>' +
+      '<button class="btn btn-primary btn-sm" id="plAddItemBtn">+ Add Item</button>' +
+    '</div><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Product</th><th>Unit Price</th><th>Disc %</th><th>Tax %</th>' +
+        '<th>Min Qty</th><th>Max Qty</th><th>Depot</th><th>Effective</th><th></th></tr></thead>' +
+      '<tbody id="plItemBody">' + loadingRow(9) + '</tbody>' +
+    '</table></div></div>');
+  document.getElementById('plAddItemBtn').onclick = function () { pricingItemModal(priceId, null); };
+  pricingLoadItems(priceId);
+  var panel = document.getElementById('plItems');
+  if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function pricingLoadItems(priceId) {
+  var cur = (_pricingListsById[priceId] || {}).currency_code;
+  API.call('pricing', 'getPriceListItems', { priceId: priceId }).then(function (rows) {
+    if (!rows || !rows.length) {
+      setHTML('plItemBody', emptyRow(9, 'No items yet. Add the products this list prices.'));
+      return;
+    }
+    setHTML('plItemBody', rows.map(function (it) {
+      var eff = (it.effective_from || it.effective_to)
+        ? (fmtDate(it.effective_from) + ' to ' + (it.effective_to ? fmtDate(it.effective_to) : 'open'))
+        : 'List default';
+      return '<tr>' +
+        '<td>' + esc(it.product_name || it.product_id) + '</td>' +
+        '<td>' + fmtMoney(it.unit_price, cur) + '</td>' +
+        '<td>' + (it.discount_percent != null ? esc(it.discount_percent) : '0') + '</td>' +
+        '<td>' + (it.tax_rate != null ? esc(it.tax_rate) : '0') + '</td>' +
+        '<td>' + (it.min_quantity != null ? esc(it.min_quantity) : '1') + '</td>' +
+        '<td>' + (it.max_quantity != null ? esc(it.max_quantity) : 'Any') + '</td>' +
+        '<td>' + esc(it.depot_name || (it.depot_id ? it.depot_id : 'All')) + '</td>' +
+        '<td style="font-size:12px">' + esc(eff) + '</td>' +
+        '<td class="actions">' +
+          '<button class="btn btn-secondary btn-sm pli-edit">Edit</button>' +
+          '<button class="btn btn-danger btn-sm pli-del">Delete</button>' +
+        '</td></tr>';
+    }).join(''));
+    var edits = document.querySelectorAll('#plItemBody .pli-edit');
+    var dels  = document.querySelectorAll('#plItemBody .pli-del');
+    rows.forEach(function (it, i) {
+      if (edits[i]) edits[i].onclick = function () { pricingItemModal(priceId, it); };
+      if (dels[i])  dels[i].onclick  = function () { pricingDeleteItem(it.item_id, priceId); };
+    });
+  }).catch(function (e) { setHTML('plItemBody', errorRow(9, e, function () { pricingLoadItems(priceId); })); });
+}
+
+function pricingDeleteItem(itemId, priceId) {
+  Modal.confirm('Delete this price list item?', function () {
+    API.call('pricing', 'deleteItem', { item_id: itemId })
+      .then(function () { Toast.success('Item deleted.'); pricingLoadItems(priceId); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+
+function pricingItemModal(priceId, item) {
+  var r = _pricingListsById[priceId] || {};
+  var isEdit = !!(item && item.item_id);
+  Promise.all([pricingGetProducts(), pricingGetDepots(r.country_code)]).then(function (out) {
+    var products = out[0] || [];
+    var depots   = out[1] || [];
+    function nval(v) { return (v != null && v !== '') ? esc(v) : ''; }
+    var prodOpts = '<option value="">Select product...</option>' + products.map(function (p) {
+      return '<option value="' + esc(p.product_id) + '"' +
+        (item && String(item.product_id) === String(p.product_id) ? ' selected' : '') + '>' +
+        esc(p.name || p.product_id) + '</option>';
+    }).join('');
+    var depotOpts = '<option value="">All depots</option>' + depots.map(function (d) {
+      return '<option value="' + esc(d.depot_id) + '"' +
+        (item && String(item.depot_id) === String(d.depot_id) ? ' selected' : '') + '>' +
+        esc(d.depot_name || d.depot_id) + '</option>';
+    }).join('');
+
+    var body =
+      '<div class="form-group"><label class="form-label">Product</label>' +
+        '<select class="form-control" id="pliProd">' + prodOpts + '</select></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Unit Price (' + esc(r.currency_code || '') + ')</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pliPrice" value="' + nval(item && item.unit_price) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Depot (optional)</label>' +
+          '<select class="form-control" id="pliDepot">' + depotOpts + '</select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Discount %</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pliDisc" value="' + nval(item && item.discount_percent) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Tax %</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pliTax" value="' + nval(item && item.tax_rate) + '"></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Min Qty</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pliMin" value="' + nval(item && item.min_quantity) + '"></div>' +
+        '<div class="form-group"><label class="form-label">Max Qty</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pliMax" value="' + nval(item && item.max_quantity) + '"></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Item Effective From</label>' +
+          '<input type="date" class="form-control" id="pliFrom" value="' + (item && item.effective_from ? esc(String(item.effective_from).substring(0, 10)) : '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Item Effective To</label>' +
+          '<input type="date" class="form-control" id="pliTo" value="' + (item && item.effective_to ? esc(String(item.effective_to).substring(0, 10)) : '') + '"></div>' +
+      '</div>' +
+      '<div id="pliErr" style="color:var(--clr-danger);font-size:12px"></div>';
+
+    Modal.open({
+      title: isEdit ? 'Edit Item' : 'Add Item',
+      body: body,
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+              '<button class="btn btn-primary" id="pliSave">' + (isEdit ? 'Save' : 'Add') + '</button>',
+      onOpen: function () {
+        document.getElementById('pliSave').onclick = function () {
+          pricingSaveItem(priceId, isEdit ? item.item_id : null);
+        };
+      },
+    });
+  }).catch(function (e) { Toast.error((e && e.message) || 'Could not load product or depot lists.'); });
+}
+
+function pricingSaveItem(priceId, itemId) {
+  var err = document.getElementById('pliErr');
+  err.textContent = '';
+  var prod  = document.getElementById('pliProd').value;
+  var price = document.getElementById('pliPrice').value;
+  if (!prod) { err.textContent = 'Select a product.'; return; }
+  if (price === '' || isNaN(parseFloat(price)) || parseFloat(price) < 0) { err.textContent = 'Enter a valid unit price.'; return; }
+
+  var params = {
+    price_list_id:    priceId,
+    product_id:       prod,
+    unit_price:       price,
+    discount_percent: document.getElementById('pliDisc').value,
+    tax_rate:         document.getElementById('pliTax').value,
+    min_quantity:     document.getElementById('pliMin').value,
+    max_quantity:     document.getElementById('pliMax').value,
+    depot_id:         document.getElementById('pliDepot').value || '',
+    effective_from:   document.getElementById('pliFrom').value || '',
+    effective_to:     document.getElementById('pliTo').value || '',
+  };
+  if (itemId) params.item_id = itemId;
+
+  API.call('pricing', 'upsertItem', params).then(function () {
+    Modal.close();
+    Toast.success(itemId ? 'Item updated.' : 'Item added.');
+    pricingLoadItems(priceId);
+  }).catch(function (e) { err.textContent = e.message; });
+}
+
+/* ── Reference data caches ─────────────────────────────────────────── */
+
+function pricingGetProducts() {
+  if (_pricingProductsCache) return Promise.resolve(_pricingProductsCache);
+  return API.call('catalog', 'listProducts', { limit: 300 }).then(function (rows) {
+    _pricingProductsCache = rows || [];
+    return _pricingProductsCache;
+  });
+}
+
+function pricingGetDepots(country) {
+  var key = country || '_all';
+  if (_pricingDepotsByKey[key]) return Promise.resolve(_pricingDepotsByKey[key]);
+  var p = country ? { country_code: country } : {};
+  return API.call('catalog', 'listDepots', p).then(function (rows) {
+    _pricingDepotsByKey[key] = rows || [];
+    return _pricingDepotsByKey[key];
+  });
+}
+
+/* ── Price preview (resolver acceptance tool) ──────────────────────── */
+
+function pricingRenderPreview() {
+  setHTML('plPreview',
+    '<div class="card"><div class="card-header"><span class="card-title">Price Preview</span></div>' +
+    '<div class="card-body">' +
+      '<p style="margin:0 0 12px;color:var(--clr-text-light);font-size:13px">Check which tier and rate a customer gets for a product. This is the same resolver orders and invoices use.</p>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Customer</label>' +
+          '<input class="form-control" id="pvwCustSearch" placeholder="Search company name...">' +
+          '<div id="pvwCustRes" style="margin-top:6px"></div>' +
+          '<input type="hidden" id="pvwCustId">' +
+          '<div id="pvwCustChosen" style="margin-top:6px;font-size:12px;color:var(--clr-text-light)"></div>' +
+        '</div>' +
+        '<div class="form-group"><label class="form-label">Product</label>' +
+          '<select class="form-control" id="pvwProd"><option value="">Loading...</option></select></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Quantity</label>' +
+          '<input type="number" step="0.01" min="0" class="form-control" id="pvwQty" value="1"></div>' +
+        '<div class="form-group"><label class="form-label">As of date</label>' +
+          '<input type="date" class="form-control" id="pvwDate"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Depot (optional)</label>' +
+        '<select class="form-control" id="pvwDepot"><option value="">All depots</option></select></div>' +
+      '<button class="btn btn-primary btn-sm" id="pvwRun">Resolve price</button>' +
+      '<div id="pvwResult" style="margin-top:14px"></div>' +
+    '</div></div>');
+
+  document.getElementById('pvwDate').value = new Date().toISOString().substring(0, 10);
+  pricingWireCustomerSearch('pvw');
+
+  pricingGetProducts().then(function (rows) {
+    var sel = document.getElementById('pvwProd');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Select product...</option>' + rows.map(function (p) {
+      return '<option value="' + esc(p.product_id) + '">' + esc(p.name || p.product_id) + '</option>';
+    }).join('');
+  }).catch(function () { var s = document.getElementById('pvwProd'); if (s) s.innerHTML = '<option value="">Could not load products</option>'; });
+
+  pricingGetDepots(null).then(function (rows) {
+    var sel = document.getElementById('pvwDepot');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All depots</option>' + rows.map(function (d) {
+      return '<option value="' + esc(d.depot_id) + '">' + esc(d.depot_name || d.depot_id) +
+        ' (' + esc(d.country_code || '') + ')</option>';
+    }).join('');
+  }).catch(function () {});
+
+  document.getElementById('pvwRun').onclick = pricingRunPreview;
+}
+
+function pricingRunPreview() {
+  var res  = document.getElementById('pvwResult');
+  var cid  = document.getElementById('pvwCustId').value;
+  var prod = document.getElementById('pvwProd').value;
+  if (!cid)  { res.innerHTML = '<div style="color:var(--clr-danger);font-size:13px">Select a customer.</div>'; return; }
+  if (!prod) { res.innerHTML = '<div style="color:var(--clr-danger);font-size:13px">Select a product.</div>'; return; }
+  res.innerHTML = spinnerHTML(16);
+  API.call('pricing', 'previewResolve', {
+    customer_id: cid,
+    product_id:  prod,
+    quantity:    document.getElementById('pvwQty').value || 1,
+    depot_id:    document.getElementById('pvwDepot').value || '',
+    as_of:       document.getElementById('pvwDate').value || '',
+  }).then(function (r) {
+    if (!r) {
+      res.innerHTML = '<div class="empty-state" style="padding:18px">' +
+        "No active price list covers this product for the customer's country and currency." + '</div>';
+      return;
+    }
+    var tierCls = r.source_tier === 'CUSTOMER' ? 'badge-primary'
+                : (r.source_tier === 'SEGMENT' ? 'badge-warning' : 'badge-neutral');
+    res.innerHTML =
+      '<div class="card" style="box-shadow:none;border:1px solid var(--clr-border)"><div class="card-body">' +
+        '<div style="margin-bottom:10px">' +
+          '<span class="badge ' + tierCls + '">' + esc(r.source_tier) + ' tier</span> ' +
+          '<span style="color:var(--clr-text-light);font-size:13px">' + esc(r.list_name || r.source_price_list_id || '') + '</span>' +
+        '</div>' +
+        '<table class="data-table"><tbody>' +
+          '<tr><td>Unit price</td><td style="text-align:right"><strong>' + fmtMoney(r.unit_price, r.currency_code) + '</strong></td></tr>' +
+          '<tr><td>Discount</td><td style="text-align:right">' + esc(r.discount_percent || 0) + ' %</td></tr>' +
+          '<tr><td>Tax</td><td style="text-align:right">' + esc(r.tax_rate || 0) + ' %</td></tr>' +
+          '<tr><td>Net unit (after discount)</td><td style="text-align:right">' + fmtMoney(r.line_total_each, r.currency_code) + '</td></tr>' +
+        '</tbody></table>' +
+      '</div></div>';
+  }).catch(function (e) { res.innerHTML = '<div style="color:var(--clr-danger);font-size:13px">' + esc(e.message) + '</div>'; });
 }
 </script>

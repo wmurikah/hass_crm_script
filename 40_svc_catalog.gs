@@ -82,7 +82,14 @@ function _catalogGetPriceListItems_(ctx, params) {
 
 function _catalogListSegments_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'customer.view');
-  return TursoClient.select('SELECT * FROM segments ORDER BY segment_name');
+  // The segments label column may be `name` or `segment_name` depending on the
+  // physical schema; discover it so the ORDER BY can never reference a missing
+  // column. Also expose it as `segment_name` so existing readers keep working.
+  var nameCol = SchemaIntrospect.pick('segments', ['name', 'segment_name', 'segment', 'title']) || 'segment_id';
+  var sql = 'SELECT s.*';
+  if (nameCol.toLowerCase() !== 'segment_name') sql += ', s.' + nameCol + ' AS segment_name';
+  sql += ' FROM segments s ORDER BY s.' + nameCol;
+  return TursoClient.select(sql);
 }
 
 // ── Registration ──────────────────────────────────────────────────────────────

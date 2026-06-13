@@ -110,6 +110,21 @@ function _invoiceGenerate_(ctx, params) {
   var now           = nowIso();
   var dueDate       = addMinutes(new Date(), 30 * 24 * 60).toISOString().substring(0, 10); // 30 days
 
+  // Compute amounts from the resolved order lines (the per-line rates set by
+  // Pricing.resolve at order time) so the invoice always matches what was priced.
+  var totals = Pricing.sumOrderLineTotals(orderId);
+  // Safety net for any order created before per-line tax was stored: if the lines
+  // carry no tax but the order header (kept in sync by the totals recompute) shows
+  // tax above the subtotal, trust the header so legacy invoices are not understated.
+  var headerTotal = parseFloat(order.total_amount || 0);
+  if (totals.tax === 0 && totals.subtotal > 0 && headerTotal - totals.subtotal > 0.005) {
+    totals = {
+      subtotal: parseFloat(order.subtotal    || 0),
+      tax:      parseFloat(order.tax_amount   || 0),
+      total:    headerTotal,
+    };
+  }
+
   TursoClient.write(
     'INSERT INTO invoices ' +
     '(invoice_id, invoice_number, order_id, customer_id, country_code, ' +
@@ -118,9 +133,9 @@ function _invoiceGenerate_(ctx, params) {
     'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
     [
       invoiceId, invoiceNumber, orderId, order.customer_id, order.country_code,
-      parseFloat(order.subtotal    || 0),
-      parseFloat(order.tax_amount  || 0),
-      parseFloat(order.total_amount || 0),
+      totals.subtotal,
+      totals.tax,
+      totals.total,
       String(order.currency_code   || 'KES'),
       'ISSUED', 'UNPAID',
       dueDate, now,
