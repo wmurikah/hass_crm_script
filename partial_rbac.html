@@ -1,109 +1,487 @@
+<style>
+/* ── Roles & Permissions: grouped permission matrix + readable roles list ──
+   Scoped (.rbac-*/.perm-*) so nothing here leaks into other views. Brand tokens
+   only (navy/gold), AA contrast, >=44px toggle targets (Fitts), keyboard-first. */
+
+/* Roles list: a count badge plus a short per-category summary replaces the old
+   long comma-separated permission string (recognition, low cognitive load). */
+.rbac-count       { display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px;
+                    font-size:11px; font-weight:700; background:#e5edff; color:#1d4ed8; }
+.rbac-count.all   { background:#fbf3d6; color:#8a6d12; }
+.rbac-summary     { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px; }
+.rbac-chip        { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px;
+                    font-size:11px; font-weight:600; background:#f3f4f6; color:#374151; }
+.rbac-chip b      { font-weight:700; color:var(--clr-primary-d); }
+.rbac-role-label  { font-size:12px; color:var(--clr-text-light); }
+
+/* Matrix modal: wider than the default 560px where there is room, full width on
+   small screens (no horizontal page overflow). */
+.modal:has(.rbac-modal) { width:820px; }
+.rbac-modal       { display:flex; flex-direction:column; gap:16px; }
+.rbac-meta-grid   { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.rbac-meta-grid .form-group { margin:0; }
+.rbac-switch      { display:inline-flex; align-items:center; gap:10px; cursor:pointer; min-height:36px; }
+.rbac-switch input{ position:absolute; opacity:0; width:1px; height:1px; }
+.rbac-sw          { position:relative; flex-shrink:0; width:40px; height:22px; border-radius:999px;
+                    background:#cbd5e1; transition:background .18s ease; }
+.rbac-sw::after   { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+                    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .18s ease; }
+.rbac-switch input:checked + .rbac-sw        { background:var(--clr-gold); }
+.rbac-switch input:checked + .rbac-sw::after { transform:translateX(18px); }
+.rbac-switch input:focus-visible + .rbac-sw  { outline:2px solid var(--clr-primary); outline-offset:2px; }
+.rbac-switch-txt  { font-size:13px; color:var(--clr-text); }
+
+/* Matrix toolbar: search + live unsaved-change indicator. */
+.rbac-matrix-bar  { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.rbac-search      { display:flex; align-items:center; gap:6px; flex:1; min-width:200px;
+                    border:1px solid var(--clr-border); border-radius:var(--radius); padding:0 10px; background:var(--clr-surface); }
+.rbac-search:focus-within { border-color:var(--clr-primary); box-shadow:0 0 0 3px rgba(31,42,68,.15); }
+.rbac-search svg  { width:15px; height:15px; color:var(--clr-text-light); flex-shrink:0; }
+.rbac-search input{ border:none; outline:none; padding:8px 0; background:transparent; width:100%; }
+.rbac-dirty       { font-size:12px; font-weight:600; color:var(--clr-warning); white-space:nowrap; }
+.rbac-dirty.clean { color:var(--clr-text-light); font-weight:500; }
+
+/* The matrix: one card per category (chunking), scrollable within the modal. */
+.rbac-matrix      { max-height:46vh; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-right:4px; }
+.rbac-cat         { border:1px solid var(--clr-border); border-radius:var(--radius); overflow:hidden; }
+.rbac-cat-head    { display:flex; align-items:center; justify-content:space-between; gap:8px;
+                    padding:9px 12px; background:var(--clr-bg); border-bottom:1px solid var(--clr-border); }
+.rbac-cat-title   { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700;
+                    text-transform:uppercase; letter-spacing:.05em; color:var(--clr-primary-d); }
+.rbac-cat-badge   { display:inline-flex; align-items:center; padding:1px 8px; border-radius:999px;
+                    font-size:11px; font-weight:700; background:#e5edff; color:#1d4ed8; }
+.rbac-cat-actions { display:flex; gap:4px; }
+.rbac-linkbtn     { background:none; border:none; color:var(--clr-primary); font-size:12px; font-weight:600;
+                    padding:4px 7px; border-radius:4px; cursor:pointer; }
+.rbac-linkbtn:hover         { background:rgba(31,42,68,.08); }
+.rbac-linkbtn:focus-visible { outline:2px solid var(--clr-gold); outline-offset:1px; }
+
+.rbac-perms       { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:2px; padding:8px; }
+.perm-toggle      { display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:8px;
+                    min-height:44px; cursor:pointer; }
+.perm-toggle:hover{ background:var(--clr-bg); }
+/* Visually-hidden but still keyboard-focusable (Space toggles); never display:none. */
+.perm-toggle input{ position:absolute; opacity:0; width:1px; height:1px; }
+.perm-sw          { position:relative; flex-shrink:0; width:38px; height:22px; border-radius:999px;
+                    background:#cbd5e1; transition:background .18s ease; }
+.perm-sw::after   { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+                    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .18s ease; }
+.perm-toggle input:checked + .perm-sw        { background:var(--clr-gold); }
+.perm-toggle input:checked + .perm-sw::after { transform:translateX(16px); }
+.perm-toggle input:focus-visible + .perm-sw  { outline:2px solid var(--clr-primary); outline-offset:2px; }
+.perm-text        { display:flex; flex-direction:column; min-width:0; }
+.perm-label       { font-size:13px; color:var(--clr-text); line-height:1.25; }
+.perm-toggle input:checked ~ .perm-text .perm-label { font-weight:600; color:var(--clr-primary-d); }
+.perm-code        { font-size:11px; color:var(--clr-text-light); font-family:ui-monospace,Menlo,Consolas,monospace; }
+.rbac-cat.is-empty { display:none; }
+.rbac-no-match    { padding:18px; text-align:center; color:var(--clr-text-light); font-size:13px; }
+.rbac-note        { font-size:12.5px; line-height:1.5; padding:11px 13px; border-radius:var(--radius);
+                    background:#fbf3d6; border:1px solid #ecd98c; color:#7a5d05; }
+
+@media (max-width:680px) {
+  .modal:has(.rbac-modal) { width:95vw; }
+  .rbac-meta-grid { grid-template-columns:1fr; }
+}
+</style>
+
 <script>
+// ── Roles & Permissions (route 'rbac') ────────────────────────────────────────
+//
+// Permissions are edited through a grouped, searchable toggle matrix, not a
+// comma-separated text box. The matrix writes role_permissions through the SAME
+// action that owns that table: rbac.updateRole (Edit) and rbac.createRole (New).
+// rbac.assignRole is intentionally NOT used here, it binds a role to a USER
+// (user_roles); using it would double-write the wrong table.
+//
+// The permission catalogue (rbac.listPermissions, code + label + category +
+// description) is fetched once and reused by both the roles list (to build the
+// per-category summary) and the matrix (to group/label/tooltip the toggles).
+
+var _rbacCatalogue = null;        // [{permission_code,label,category,description}]
+var _rbacByCode    = {};          // permission_code -> catalogue row
+
+function rbacEnsureCatalogue() {
+  if (_rbacCatalogue) return Promise.resolve(_rbacCatalogue);
+  return API.call('rbac', 'listPermissions', {}).then(function (rows) {
+    _rbacCatalogue = (rows || []).map(function (p) {
+      return {
+        permission_code: p.permission_code,
+        label:           p.label || p.permission_code,
+        category:        p.category || 'Other',
+        description:     p.description || '',
+      };
+    });
+    _rbacByCode = {};
+    _rbacCatalogue.forEach(function (p) { _rbacByCode[p.permission_code] = p; });
+    return _rbacCatalogue;
+  });
+}
+
+// Short, readable per-role summary: top categories by granted count, e.g.
+// "Orders 5 · Tickets 3 · +2 more". The wildcard role shows "All permissions".
+function rbacCategorySummary(codes) {
+  codes = codes || [];
+  if (codes.indexOf('*') !== -1) {
+    return '<span class="rbac-chip"><b>All permissions</b></span>';
+  }
+  if (!codes.length) return '<span class="rbac-role-label">No permissions</span>';
+  var counts = {};
+  codes.forEach(function (c) {
+    var p   = _rbacByCode[c];
+    var cat = (p && p.category) ? p.category : 'Other';
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+  var entries = Object.keys(counts).map(function (k) { return { cat: k, n: counts[k] }; });
+  entries.sort(function (a, b) { return b.n - a.n; });
+  var top  = entries.slice(0, 3);
+  var rest = entries.length - top.length;
+  var html = top.map(function (e) {
+    return '<span class="rbac-chip">' + esc(e.cat) + ' <b>' + e.n + '</b></span>';
+  }).join('');
+  if (rest > 0) html += '<span class="rbac-chip">+' + rest + ' more</span>';
+  return html;
+}
+
 Router.register('rbac', function (el) {
+  // Write controls are shown only when the delivered permission set grants the
+  // role.assign code that gates every rbac mutation server-side. A viewer with
+  // only order.manage still sees the read-only roles list and summaries. The
+  // server enforces this regardless of what the client renders.
+  var canManage = !!(window.HassPerms && window.HassPerms.has('role.assign'));
+
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
-      '<h2 style="font-size:16px;font-weight:600">Roles & Permissions</h2>' +
-      '<button class="btn btn-primary btn-sm" id="rbacNewRole">+ New Role</button>' +
+      '<h2 style="font-size:16px;font-weight:600">Roles &amp; Permissions</h2>' +
+      (canManage ? '<button class="btn btn-primary btn-sm" id="rbacNewRole">+ New Role</button>' : '') +
     '</div>' +
 
     '<div class="card" style="margin-bottom:16px">' +
       '<div style="font-weight:600;font-size:13px;margin-bottom:10px">Roles</div>' +
       '<div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>Role Code</th><th>Label</th><th>Scope</th><th>Country</th><th>Permissions</th><th></th></tr></thead>' +
+        '<thead><tr><th>Role</th><th>Scope</th><th>Permissions</th>' +
+          (canManage ? '<th style="text-align:right">Actions</th>' : '') + '</tr></thead>' +
         '<tbody id="rbacRoleTbody"></tbody>' +
       '</table></div>' +
     '</div>' +
 
-    '<div class="card">' +
-      '<div style="font-weight:600;font-size:13px;margin-bottom:10px">Assign Role to User</div>' +
-      '<div style="display:flex;gap:8px;align-items:flex-end">' +
-        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">User ID</label>' +
-          '<input class="form-control" id="rbacUserId" placeholder="user_id"></div>' +
-        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">Role Code</label>' +
-          '<input class="form-control" id="rbacRoleCode" placeholder="SALES_REP"></div>' +
-        '<div class="form-group" style="margin:0;flex:1"><label class="form-label">Country (optional)</label>' +
-          '<input class="form-control" id="rbacCountry" placeholder="KE"></div>' +
-        '<button class="btn btn-primary btn-sm" id="rbacAssignBtn" style="margin-bottom:0">Assign</button>' +
-      '</div>' +
-      '<div id="rbacAssignErr" style="color:#dc2626;font-size:12px;margin-top:6px"></div>' +
-    '</div>';
+    (canManage
+      ? '<div class="card">' +
+          '<div style="font-weight:600;font-size:13px;margin-bottom:10px">Assign Role to User</div>' +
+          '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">' +
+            '<div class="form-group" style="margin:0;flex:1;min-width:160px"><label class="form-label">User ID</label>' +
+              '<input class="form-control" id="rbacUserId" placeholder="user_id"></div>' +
+            '<div class="form-group" style="margin:0;flex:1;min-width:160px"><label class="form-label">Role Code</label>' +
+              '<input class="form-control" id="rbacRoleCode" placeholder="SALES_REP"></div>' +
+            '<button class="btn btn-primary btn-sm" id="rbacAssignBtn" style="margin-bottom:0">Assign</button>' +
+          '</div>' +
+          '<div id="rbacAssignErr" style="color:var(--clr-danger);font-size:12px;margin-top:6px"></div>' +
+        '</div>'
+      : '');
+
+  var cols = canManage ? 4 : 3;   // the Actions column only exists for managers
 
   function loadRoles() {
-    setHTML('rbacRoleTbody', loadingRow(6));
-    API.call('rbac', 'listRoles', {}).then(function (roles) {
-      if (!roles.length) { setHTML('rbacRoleTbody', emptyRow(6, 'No roles defined.')); return; }
-      setHTML('rbacRoleTbody', roles.map(function (r) {
-        var perms = (r.permissions || []).join(', ') || '—';
-        return '<tr>' +
-          '<td><code>' + esc(r.role_code) + '</code></td>' +
-          '<td>' + esc(r.label) + '</td>' +
-          '<td>' + statusBadge(r.scope) + '</td>' +
-          '<td>' + esc(r.country_code || 'ALL') + '</td>' +
-          '<td style="font-size:11px;max-width:260px;white-space:normal">' + esc(perms) + '</td>' +
-          '<td><button class="btn btn-secondary btn-sm" onclick="rbacEditRole(\'' + esc(r.role_id) + '\')">Edit</button></td>' +
-        '</tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('rbacRoleTbody', errorRow(6, e, loadRoles)); });
+    setHTML('rbacRoleTbody', loadingRow(cols));
+    // Catalogue first so the per-category summary can resolve codes, then roles.
+    rbacEnsureCatalogue()
+      .then(function () { return API.call('rbac', 'listRoles', {}); })
+      .then(function (roles) {
+        if (!roles.length) { setHTML('rbacRoleTbody', emptyRow(cols, 'No roles defined.')); return; }
+        setHTML('rbacRoleTbody', roles.map(function (r) {
+          var codes    = r.permissions || [];
+          var isWild   = codes.indexOf('*') !== -1;
+          var count    = isWild ? 'ALL' : (r.permission_count != null ? r.permission_count : codes.length);
+          var isSystem = r.is_system === 1 || r.is_system === true || String(r.is_system) === '1';
+          var rid      = esc(r.role_id);
+          var actions  = '';
+          if (canManage) {
+            var delBtn = isSystem
+              ? '<button class="btn btn-secondary btn-sm" disabled title="System roles cannot be deleted">Delete</button>'
+              : '<button class="btn btn-danger btn-sm rbac-del" data-role="' + rid + '" data-label="' + esc(r.label || r.role_code) + '">Delete</button>';
+            actions = '<td><div class="actions" style="justify-content:flex-end">' +
+              '<button class="btn btn-secondary btn-sm rbac-edit" data-role="' + rid + '">Edit</button>' +
+              delBtn +
+            '</div></td>';
+          }
+          return '<tr>' +
+            '<td><code>' + esc(r.role_code) + '</code>' +
+              (isSystem ? ' <span class="badge badge-neutral">system</span>' : '') +
+              '<div class="rbac-role-label">' + esc(r.label || '') + '</div></td>' +
+            '<td>' + statusBadge(r.scope) + '</td>' +
+            '<td><span class="rbac-count' + (isWild ? ' all' : '') + '">' + esc(String(count)) + (isWild ? '' : ' granted') + '</span>' +
+              '<div class="rbac-summary">' + rbacCategorySummary(codes) + '</div></td>' +
+            actions +
+          '</tr>';
+        }).join(''));
+
+        // Wire row actions after render (avoids inline-handler escaping issues
+        // with arbitrary role codes).
+        var tb = document.getElementById('rbacRoleTbody');
+        tb.querySelectorAll('.rbac-edit').forEach(function (b) {
+          b.onclick = function () { rbacEditRole(b.dataset.role); };
+        });
+        tb.querySelectorAll('.rbac-del').forEach(function (b) {
+          b.onclick = function () { rbacDeleteRole(b.dataset.role, b.dataset.label, loadRoles); };
+        });
+      })
+      .catch(function (e) { setHTML('rbacRoleTbody', errorRow(cols, e, loadRoles)); });
   }
 
-  document.getElementById('rbacNewRole').onclick = function () { rbacRoleModal(null, loadRoles); };
+  var newBtn = document.getElementById('rbacNewRole');
+  if (newBtn) newBtn.onclick = function () {
+    rbacEnsureCatalogue()
+      .then(function () { rbacRoleModal(null, loadRoles); })
+      .catch(function (e) { Toast.error(e.message || 'Could not load permissions.'); });
+  };
 
-  document.getElementById('rbacAssignBtn').onclick = function () {
+  var assignBtn = document.getElementById('rbacAssignBtn');
+  if (assignBtn) assignBtn.onclick = function () {
     var userId   = document.getElementById('rbacUserId').value.trim();
     var roleCode = document.getElementById('rbacRoleCode').value.trim();
-    var country  = document.getElementById('rbacCountry').value.trim();
     document.getElementById('rbacAssignErr').textContent = '';
     if (!userId || !roleCode) { document.getElementById('rbacAssignErr').textContent = 'User ID and Role Code required.'; return; }
-    API.call('rbac', 'assignRole', { userId: userId, roleCode: roleCode, countryCode: country || null })
-      .then(function () { Toast.success('Role assigned.'); loadRoles(); })
+    API.call('rbac', 'assignRole', { userId: userId, roleCode: roleCode })
+      .then(function () { Toast.success('Role assigned.'); document.getElementById('rbacUserId').value = ''; })
       .catch(function (e) { document.getElementById('rbacAssignErr').textContent = e.message; });
   };
 
   loadRoles();
 });
 
+// Edit: load the role (flat: code/label/description/scope/mfa_required/permissions)
+// alongside the catalogue, then open the matrix modal.
 function rbacEditRole(roleId) {
   var l = Loader.show();
-  API.call('rbac', 'getRole', { roleId: roleId }).then(function (role) {
-    Loader.hide(l);
-    rbacRoleModal(role, function () {});
-  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+  Promise.all([rbacEnsureCatalogue(), API.call('rbac', 'getRole', { roleId: roleId })])
+    .then(function (res) { Loader.hide(l); rbacRoleModal(res[1], null); })
+    .catch(function (e) { Loader.hide(l); Toast.error(e.message); });
 }
 
+// Delete: confirm in a modal, then call rbac.deleteRole. The server refuses
+// system roles and roles still assigned to users; surface that message verbatim.
+function rbacDeleteRole(roleCode, label, onDone) {
+  Modal.confirm(
+    'Delete role <b>' + esc(roleCode) + '</b>' + (label ? ' (' + esc(label) + ')' : '') + '?<br>' +
+    'This removes the role and its permission grants. It is refused if any user is still assigned to it.',
+    function () {
+      API.call('rbac', 'deleteRole', { roleCode: roleCode })
+        .then(function () { Toast.success('Role deleted.'); if (onDone) onDone(); })
+        .catch(function (e) { Toast.error(e.message); });
+    }
+  );
+}
+
+// ── The grouped, searchable permission matrix ─────────────────────────────────
+// Builds the matrix into `mount`, seeded from `selected` (granted codes). Returns
+// { getSelected, isDirty } so the modal can read the final set and reflect unsaved
+// state. Category select-all/clear and search operate on the visible toggles.
+function rbacBuildMatrix(mount, selected, onDirty) {
+  var initial = {};
+  (selected || []).forEach(function (c) { initial[c] = true; });
+
+  // Group catalogue by category, stable order.
+  var cats = {}, order = [];
+  _rbacCatalogue.forEach(function (p) {
+    if (!cats[p.category]) { cats[p.category] = []; order.push(p.category); }
+    cats[p.category].push(p);
+  });
+
+  var html = '';
+  order.forEach(function (cat) {
+    html +=
+      '<div class="rbac-cat">' +
+        '<div class="rbac-cat-head">' +
+          '<span class="rbac-cat-title">' + esc(cat) +
+            '<span class="rbac-cat-badge">0/0</span></span>' +
+          '<span class="rbac-cat-actions">' +
+            '<button type="button" class="rbac-linkbtn" data-all="' + esc(cat) + '">Select all</button>' +
+            '<button type="button" class="rbac-linkbtn" data-clear="' + esc(cat) + '">Clear</button>' +
+          '</span>' +
+        '</div>' +
+        '<div class="rbac-perms">';
+    cats[cat].forEach(function (p) {
+      html +=
+        '<label class="perm-toggle" title="' + esc(p.description || p.label) + '" ' +
+               'data-code="' + esc(p.permission_code) + '" data-text="' + esc((p.label + ' ' + p.permission_code).toLowerCase()) + '">' +
+          '<input type="checkbox" value="' + esc(p.permission_code) + '"' + (initial[p.permission_code] ? ' checked' : '') + '>' +
+          '<span class="perm-sw" aria-hidden="true"></span>' +
+          '<span class="perm-text">' +
+            '<span class="perm-label">' + esc(p.label) + '</span>' +
+            '<span class="perm-code">' + esc(p.permission_code) + '</span>' +
+          '</span>' +
+        '</label>';
+    });
+    html += '</div></div>';
+  });
+  html += '<div class="rbac-no-match" style="display:none">No permissions match your search.</div>';
+  mount.innerHTML = html;
+
+  function inputs(catEl) { return catEl.querySelectorAll('input[type=checkbox]'); }
+  function visibleInputs(catEl) {
+    return Array.prototype.filter.call(inputs(catEl), function (i) {
+      return i.closest('.perm-toggle').style.display !== 'none';
+    });
+  }
+  function updateBadge(catEl) {
+    var all = inputs(catEl), on = 0;
+    Array.prototype.forEach.call(all, function (i) { if (i.checked) on++; });
+    var badge = catEl.querySelector('.rbac-cat-badge');
+    if (badge) badge.textContent = on + '/' + all.length;
+  }
+  function currentSet() {
+    var out = [];
+    mount.querySelectorAll('input[type=checkbox]:checked').forEach(function (i) { out.push(i.value); });
+    return out;
+  }
+  function isDirty() {
+    var cur = currentSet();
+    var curMap = {}; cur.forEach(function (c) { curMap[c] = true; });
+    if (cur.length !== Object.keys(initial).length) return true;
+    for (var k in initial) { if (!curMap[k]) return true; }
+    return false;
+  }
+  function notify() { if (onDirty) onDirty(isDirty(), currentSet().length); }
+
+  mount.querySelectorAll('.rbac-cat').forEach(function (catEl) {
+    updateBadge(catEl);
+    catEl.querySelector('[data-all]').onclick = function () {
+      visibleInputs(catEl).forEach(function (i) { i.checked = true; });
+      updateBadge(catEl); notify();
+    };
+    catEl.querySelector('[data-clear]').onclick = function () {
+      visibleInputs(catEl).forEach(function (i) { i.checked = false; });
+      updateBadge(catEl); notify();
+    };
+    inputs(catEl).forEach(function (i) {
+      i.addEventListener('change', function () { updateBadge(catEl); notify(); });
+    });
+  });
+
+  notify();
+
+  return {
+    getSelected: currentSet,
+    isDirty: isDirty,
+    filter: function (q) {
+      q = (q || '').trim().toLowerCase();
+      var anyVisible = false;
+      mount.querySelectorAll('.rbac-cat').forEach(function (catEl) {
+        var shown = 0;
+        catEl.querySelectorAll('.perm-toggle').forEach(function (t) {
+          var match = !q || t.dataset.text.indexOf(q) !== -1;
+          t.style.display = match ? '' : 'none';
+          if (match) shown++;
+        });
+        catEl.classList.toggle('is-empty', shown === 0);
+        if (shown) anyVisible = true;
+      });
+      var none = mount.querySelector('.rbac-no-match');
+      if (none) none.style.display = anyVisible ? 'none' : 'block';
+    },
+  };
+}
+
+// ── Create / Edit role modal (metadata + permission matrix) ───────────────────
 function rbacRoleModal(role, onSuccess) {
-  var isEdit = !!role;
+  var isEdit     = !!role;
+  var codes      = (role && role.permissions) || [];
+  var isWildcard = codes.indexOf('*') !== -1;            // SUPER_ADMIN: full access
+  var mfaOn      = role && (role.mfa_required === 1 || role.mfa_required === true || String(role.mfa_required) === '1');
+  var scope      = (role && role.scope) || 'COUNTRY';
+
+  var permsSection = isWildcard
+    ? '<div class="rbac-note">This role holds the <b>*</b> wildcard, granting full access to everything. ' +
+      'Its permission set is managed separately and cannot be edited here; name, scope and MFA can still be changed.</div>'
+    : '<div class="rbac-matrix-bar">' +
+        '<div class="rbac-search">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+          '<input id="rrmSearch" type="text" placeholder="Search permissions by label or code" aria-label="Search permissions">' +
+        '</div>' +
+        '<span class="rbac-dirty clean" id="rrmDirty">No changes</span>' +
+      '</div>' +
+      '<div class="rbac-matrix" id="rrmMatrix"></div>';
+
   Modal.open({
-    title: isEdit ? 'Edit Role' : 'New Role',
+    title: isEdit ? ('Edit Role: ' + esc(role.role_code)) : 'New Role',
     body:
-      '<div class="form-group"><label class="form-label">Role Code</label>' +
-        '<input class="form-control" id="rrmCode" value="' + esc((role && role.role_code) || '') + '" ' + (isEdit ? 'readonly' : '') + '></div>' +
-      '<div class="form-group"><label class="form-label">Label</label>' +
-        '<input class="form-control" id="rrmLabel" value="' + esc((role && role.label) || '') + '"></div>' +
-      '<div class="form-group"><label class="form-label">Scope</label>' +
-        '<select class="form-control" id="rrmScope">' +
-          '<option' + ((role && role.scope === 'GLOBAL')  ? ' selected' : '') + '>GLOBAL</option>' +
-          '<option' + ((role && role.scope === 'COUNTRY') ? ' selected' : '') + '>COUNTRY</option>' +
-        '</select></div>' +
-      '<div class="form-group"><label class="form-label">Permissions (comma-separated)</label>' +
-        '<textarea class="form-control" id="rrmPerms" rows="3">' + esc(((role && role.permissions) || []).join(', ')) + '</textarea></div>' +
-      '<div id="rrmErr" style="color:#dc2626;font-size:12px"></div>',
+      '<div class="rbac-modal">' +
+        '<div class="rbac-meta-grid">' +
+          '<div class="form-group"><label class="form-label">Role Code</label>' +
+            '<input class="form-control" id="rrmCode" value="' + esc((role && role.role_code) || '') + '" ' +
+              (isEdit ? 'readonly' : 'placeholder="SALES_REP"') + '></div>' +
+          '<div class="form-group"><label class="form-label">Label</label>' +
+            '<input class="form-control" id="rrmLabel" value="' + esc((role && role.label) || '') + '" placeholder="Sales Representative"></div>' +
+          '<div class="form-group"><label class="form-label">Scope</label>' +
+            '<select class="form-control" id="rrmScope">' +
+              '<option value="GLOBAL"' + (scope === 'GLOBAL' ? ' selected' : '') + '>GLOBAL</option>' +
+              '<option value="COUNTRY"' + (scope === 'COUNTRY' ? ' selected' : '') + '>COUNTRY</option>' +
+            '</select></div>' +
+          '<div class="form-group"><label class="form-label">Multi-factor auth</label>' +
+            '<label class="rbac-switch"><input type="checkbox" id="rrmMfa"' + (mfaOn ? ' checked' : '') + '>' +
+              '<span class="rbac-sw" aria-hidden="true"></span>' +
+              '<span class="rbac-switch-txt">Require MFA at login</span></label></div>' +
+        '</div>' +
+        '<div class="form-group" style="margin:0"><label class="form-label">Description</label>' +
+          '<input class="form-control" id="rrmDesc" value="' + esc((role && role.description) || '') + '" placeholder="What this role is for"></div>' +
+        '<div>' +
+          '<label class="form-label" style="margin-bottom:8px">Permissions</label>' +
+          permsSection +
+        '</div>' +
+        '<div id="rrmErr" style="color:var(--clr-danger);font-size:12px"></div>' +
+      '</div>',
     footer:
-      '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
-      '<button class="btn btn-primary" id="rrmSave">' + (isEdit ? 'Save' : 'Create') + '</button>',
-    onOpen: function () {
-      document.getElementById('rrmSave').onclick = function () {
-        var code  = document.getElementById('rrmCode').value.trim();
-        var label = document.getElementById('rrmLabel').value.trim();
-        var scope = document.getElementById('rrmScope').value;
-        var perms = document.getElementById('rrmPerms').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        document.getElementById('rrmErr').textContent = '';
-        if (!code || !label) { document.getElementById('rrmErr').textContent = 'Code and Label required.'; return; }
-        var action = isEdit ? 'updateRole' : 'createRole';
-        var params = { roleCode: code, label: label, scope: scope, permissions: perms };
+      '<button class="btn btn-secondary" id="rrmCancel">Cancel</button>' +
+      '<button class="btn btn-primary" id="rrmSave">' + (isEdit ? 'Save changes' : 'Create role') + '</button>',
+    onOpen: function (bd) {
+      var matrix = null;
+      var saveBtn = bd.querySelector('#rrmSave');
+      bd.querySelector('#rrmCancel').onclick = function () { Modal.close(); };
+
+      if (!isWildcard) {
+        var dirtyEl = bd.querySelector('#rrmDirty');
+        matrix = rbacBuildMatrix(bd.querySelector('#rrmMatrix'), codes, function (dirty, count) {
+          // Live unsaved-change state, clearly distinct from the saved baseline.
+          if (dirty) {
+            dirtyEl.className = 'rbac-dirty';
+            dirtyEl.textContent = 'Unsaved changes · ' + count + ' selected';
+          } else {
+            dirtyEl.className = 'rbac-dirty clean';
+            dirtyEl.textContent = count + ' selected';
+          }
+        });
+        var search = bd.querySelector('#rrmSearch');
+        if (search) search.addEventListener('input', function () { matrix.filter(search.value); });
+      }
+
+      saveBtn.onclick = function () {
+        var code  = bd.querySelector('#rrmCode').value.trim();
+        var label = bd.querySelector('#rrmLabel').value.trim();
+        var errEl = bd.querySelector('#rrmErr');
+        errEl.textContent = '';
+        if (!code || !label) { errEl.textContent = 'Role Code and Label are required.'; return; }
+
+        var params = {
+          roleCode:    code,
+          label:       label,
+          description: bd.querySelector('#rrmDesc').value.trim(),
+          scope:       bd.querySelector('#rrmScope').value,
+          mfaRequired: bd.querySelector('#rrmMfa').checked ? 1 : 0,
+        };
+        // Only send a permission set when this role's matrix is editable. For the
+        // wildcard role we omit it so the server preserves '*' (no reconcile).
+        if (matrix) params.permissions = matrix.getSelected();
         if (isEdit) params.roleId = role.role_id;
+
+        var action = isEdit ? 'updateRole' : 'createRole';   // both own role_permissions
+        saveBtn.disabled = true;
         API.call('rbac', action, params)
-          .then(function () { Modal.close(); Toast.success(isEdit ? 'Role updated.' : 'Role created.'); if (onSuccess) onSuccess(); })
-          .catch(function (e) { document.getElementById('rrmErr').textContent = e.message; });
+          .then(function () {
+            Modal.close();
+            Toast.success(isEdit ? 'Role updated.' : 'Role created.');
+            if (onSuccess) onSuccess();
+            else if (Router.current() === 'rbac') Router.navigate('rbac', {});
+          })
+          .catch(function (e) { saveBtn.disabled = false; errEl.textContent = e.message; });
       };
     },
   });

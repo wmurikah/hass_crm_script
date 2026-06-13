@@ -244,10 +244,16 @@
   // ── App init ───────────────────────────────────────────────────
   var _menuItems   = [];   // cached menu.list result
   var _botAdmin    = false; // user may manage bot configs (probed server-side)
+  var _landed      = false; // first-section navigation has happened
 
   function initApp(me) {
     var bundle  = me.bundle || {};
     var cacheNs = me.userId || me.email || 'staff';   // per-user cache namespace
+
+    // Resolved permission union delivered by auth.me. The menu arrives already
+    // filtered server-side, but loading the set here lets sections/actions gate
+    // client-side via HassPerms.has(code) (server still enforces every call).
+    Perms.load(me.permissions || []);
 
     // ── Branding ── paint last-known instantly (cache), then refresh from the
     // init bundle (preferred) or a standalone call. Failure → CSS defaults.
@@ -265,19 +271,21 @@
     Router.init(document.getElementById('pageContent'), '.nav-item');
 
     // ── Sidebar menu ── render last-known instantly, then refresh.
-    var cachedMenu = HassCache.any('menu_' + cacheNs);
+    var cachedMenu  = HassCache.any('menu_' + cacheNs);
+    var menuIsFinal = !!bundle.menu;   // bundle menu is authoritative this load
     if (cachedMenu) { _menuItems = cachedMenu; rebuildNav(); }
     function freshMenu(items) {
       _menuItems = items || [];
       rebuildNav();
-      HassCache.set('menu_' + cacheNs, _menuItems, 3600);   // 1h — menu rarely changes
+      HassCache.set('menu_' + cacheNs, _menuItems, 3600);   // 1h, menu rarely changes
     }
     if (bundle.menu) {
-      freshMenu(bundle.menu);
+      freshMenu(bundle.menu);   // synchronous: landing happens at the end of init
     } else {
+      // Menu arrives async: land once it (and the no-sections fallback) is known.
       API.call('menu', 'list', {})
-        .then(freshMenu)
-        .catch(function () { if (!cachedMenu) { _menuItems = []; rebuildNav(); } });
+        .then(function (items) { freshMenu(items); goLanding(true); })
+        .catch(function () { if (!cachedMenu) { _menuItems = []; rebuildNav(); } goLanding(true); });
     }
 
     // ── Bot Assistant admin entry ── the bundle carries the resolved RBAC flag;
@@ -289,7 +297,7 @@
     } else {
       if (HassCache.any('botAdmin_' + cacheNs)) { _botAdmin = true; rebuildNav(); }
       API.call('bot', 'listConfigs', {})
-        .then(function () { _botAdmin = true; HassCache.set('botAdmin_' + cacheNs, true, 3600); rebuildNav(); })
+        .then(function () { _botAdmin = true; HassCache.set('botAdmin_' + cacheNs, true, 3600); rebuildNav(); goLanding(false); })
         .catch(function () { HassCache.set('botAdmin_' + cacheNs, false, 3600); });
     }
 
@@ -318,11 +326,13 @@
       });
     };
 
-    // Floating assistant widget — only for logged-in staff (auth guard passed).
+    // Floating assistant widget, only for logged-in staff (auth guard passed).
     if (typeof ChatWidget !== 'undefined') ChatWidget.mount(me);
 
-    // Navigate to default page.
-    Router.navigate('dashboard', {});
+    // Land on the first section this role can open. When the menu came from the
+    // init bundle it is already authoritative, so pass that; otherwise the async
+    // freshMenu()/catch above drives the landing once the menu resolves.
+    goLanding(menuIsFinal);
 
     // ── Perf marker: login-click → dashboard-usable ──
     // Login.html stashes the click time; by now the first screen has painted
@@ -344,6 +354,45 @@
       items.push({ id: 'botconfig', label: 'Bot Assistant', route: 'botconfig', group: 'admin', icon: 'cpu' });
     }
     renderNav(items);
+  }
+
+  // The route to open first. Dashboard when the user can see it (its data is
+  // gated order.view), else the first visible menu item, else botconfig for a
+  // bot-admin-only user, else null (no sections this role can open).
+  function landingRoute() {
+    var items = _menuItems || [];
+    if (items.some(function (i) { return i.id === 'dashboard'; })) return 'dashboard';
+    if (items.length) return items[0].id;
+    if (_botAdmin) return 'botconfig';
+    return null;
+  }
+
+  // Navigate to the landing route exactly once. `final` means the menu is now
+  // authoritative: if there is still nothing to land on, show a clear empty
+  // state instead of leaving the user on the initial spinner. A non-final call
+  // with no route is a no-op (a later menu/botAdmin update calls goLanding again).
+  function goLanding(final) {
+    if (_landed) return;
+    var route = landingRoute();
+    if (route) {
+      _landed = true;
+      var navItem = document.querySelector('.nav-item[data-route="' + route + '"]');
+      var title   = document.getElementById('pageTitle');
+      if (navItem && title && navItem.dataset.label) title.textContent = navItem.dataset.label;
+      Router.navigate(route, {});
+      return;
+    }
+    if (final) {
+      _landed = true;
+      var t = document.getElementById('pageTitle');
+      if (t) t.textContent = 'Welcome';
+      setHTML('pageContent',
+        '<div class="card"><div class="card-body"><div class="empty-state">' +
+        '<div style="font-weight:600;margin-bottom:6px">No sections available</div>' +
+        '<p style="margin:0">Your account has no permissions assigned yet. ' +
+        'Please contact an administrator.</p>' +
+        '</div></div></div>');
+    }
   }
 
   // ── Sidebar render (collapsible accordion groups) ───────────────
