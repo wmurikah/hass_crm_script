@@ -33,16 +33,21 @@ function _rbacListRoles_(ctx, params) {
     'SELECT r.role_code, ' +
     '       r.role_name AS label, ' +
     '       r.scope, ' +
+    '       r.is_system, ' +
     '       r.is_active, ' +
     '       r.role_code AS role_id, ' +
     '       GROUP_CONCAT(rp.permission_code) AS perm_csv ' +
     'FROM roles r ' +
     'LEFT JOIN role_permissions rp ON rp.role_code = r.role_code ' +
-    'GROUP BY r.role_code, r.role_name, r.scope, r.is_active ' +
+    'GROUP BY r.role_code, r.role_name, r.scope, r.is_system, r.is_active ' +
     'ORDER BY r.role_code',
     []
   );
 
+  // The client renders a permission COUNT plus a short category summary per row
+  // (it maps these codes against the rbac.listPermissions catalogue), and shows
+  // the full grouped matrix only on Edit. is_system lets the client disable the
+  // Delete control for built-in roles (delete is also refused server-side).
   return rows.map(function (r) {
     var perms = r.perm_csv ? String(r.perm_csv).split(',').filter(Boolean) : [];
     return {
@@ -52,6 +57,7 @@ function _rbacListRoles_(ctx, params) {
       role_name:        r.label,
       scope:            r.scope,
       country_code:     null,
+      is_system:        r.is_system,
       is_active:        r.is_active,
       permissions:      perms,
       permission_count: perms.length,
@@ -107,15 +113,17 @@ function _rbacGetRole_(ctx, params) {
 
   // Return a FLAT role object (not a nested {role, permissions, allPermissions}):
   // rbacRoleModal() in partial_rbac.html reads role.role_code / role.label /
-  // role.scope / role.permissions / role.role_id directly.
+  // role.scope / role.description / role.mfa_required / role.permissions /
+  // role.role_id directly.
   return {
     role_code:    r.role_code,
-    role_id:      r.role_code,   // alias — keeps parity with listRoles
+    role_id:      r.role_code,   // alias, keeps parity with listRoles
     label:        r.role_name,
     role_name:    r.role_name,
     description:  r.description,
     scope:        r.scope,
     is_system:    r.is_system,
+    mfa_required: r.mfa_required,
     is_active:    r.is_active,
     country_code: null,
     permissions:  perms,
@@ -130,8 +138,9 @@ function _rbacGetRole_(ctx, params) {
 
 function _rbacListPermissions_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.manage');
+  // description feeds the per-toggle tooltip in the grouped permission matrix.
   return TursoClient.select(
-    'SELECT permission_code, label, category FROM permissions ORDER BY category, label',
+    'SELECT permission_code, label, category, description FROM permissions ORDER BY category, label',
     []
   );
 }
@@ -212,7 +221,7 @@ function _rbacUpdateRole_(ctx, params) {
   if (!roleCode) throw new Errors.Validation('roleCode required.');
 
   var rows = TursoClient.select(
-    'SELECT role_code, role_name, scope, is_system FROM roles WHERE role_code = ? LIMIT 1',
+    'SELECT role_code, role_name, description, scope, is_system, mfa_required FROM roles WHERE role_code = ? LIMIT 1',
     [roleCode]
   );
   if (!rows.length) throw new Errors.NotFound('Role not found: ' + roleCode);
@@ -222,6 +231,14 @@ function _rbacUpdateRole_(ctx, params) {
             : (params.roleName  !== undefined) ? String(params.roleName  || '').trim()
             : existing.role_name;
   var scope = (params.scope !== undefined) ? String(params.scope || '').trim() : existing.scope;
+  var description = (params.description !== undefined)
+    ? (params.description == null ? null : String(params.description))
+    : existing.description;
+  // Accept the camelCase form the modal sends and the snake_case alias; fall back
+  // to the stored value when the field is not supplied at all.
+  var mfaRequired = (params.mfaRequired  !== undefined) ? (_rbacIsTruthyFlag_(params.mfaRequired)  ? 1 : 0)
+                  : (params.mfa_required !== undefined) ? (_rbacIsTruthyFlag_(params.mfa_required) ? 1 : 0)
+                  : (_rbacIsTruthyFlag_(existing.mfa_required) ? 1 : 0);
 
   var permsSupplied = (params.permissions !== undefined) || (params.permissionCodes !== undefined);
   var perms = permsSupplied
@@ -243,8 +260,8 @@ function _rbacUpdateRole_(ctx, params) {
   var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
 
   TursoClient.write(
-    'UPDATE roles SET role_name = ?, scope = ?, updated_at = ? WHERE role_code = ?',
-    [label, scope, nowIso(), roleCode]
+    'UPDATE roles SET role_name = ?, description = ?, scope = ?, mfa_required = ?, updated_at = ? WHERE role_code = ?',
+    [label, description, scope, mfaRequired, nowIso(), roleCode]
   );
 
   // Only reconcile when the caller actually supplied a permission set.
@@ -252,10 +269,12 @@ function _rbacUpdateRole_(ctx, params) {
 
   Audit.log({
     actor: actor, action: 'ROLE_UPDATED', entity: 'roles', entityId: roleCode,
-    after: { role_code: roleCode, role_name: label, scope: scope, permissions: perms },
+    after: { role_code: roleCode, role_name: label, description: description, scope: scope,
+             mfa_required: mfaRequired, permissions: (permsSupplied ? perms : undefined) },
   });
 
-  return { success: true, role_code: roleCode, label: label, scope: scope, permissions: perms };
+  return { success: true, role_code: roleCode, label: label, description: description,
+           scope: scope, mfa_required: mfaRequired, permissions: perms };
 }
 
 // ── rbac.createRole ──────────────────────────────────────────────────────────────
@@ -277,24 +296,81 @@ function _rbacCreateRole_(ctx, params) {
   var perms = _rbacNormalizePerms_(params.permissions !== undefined ? params.permissions : params.permissionCodes);
   var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
   var now   = nowIso();
+  var description = (params.description != null && params.description !== '') ? String(params.description) : null;
+  var mfaRequired = (_rbacIsTruthyFlag_(params.mfaRequired) || _rbacIsTruthyFlag_(params.mfa_required)) ? 1 : 0;
 
-  // New roles are never system roles.
+  // New roles are never system roles (is_system = 0), which also keeps them
+  // deletable; built-in roles are seeded with is_system = 1.
   TursoClient.write(
     'INSERT INTO roles ' +
     '(role_code, role_name, description, scope, is_system, mfa_required, is_active, created_at, updated_at) ' +
     'VALUES (?,?,?,?,?,?,?,?,?)',
-    [roleCode, label, (params.description != null ? String(params.description) : null),
-     scope, 0, 0, 1, now, now]
+    [roleCode, label, description, scope, 0, mfaRequired, 1, now, now]
   );
 
   if (perms.length) _rbacReconcilePermissions_(roleCode, perms);
 
   Audit.log({
     actor: actor, action: 'ROLE_CREATED', entity: 'roles', entityId: roleCode,
-    after: { role_code: roleCode, role_name: label, scope: scope, permissions: perms },
+    after: { role_code: roleCode, role_name: label, description: description, scope: scope,
+             mfa_required: mfaRequired, permissions: perms },
   });
 
-  return { success: true, role_code: roleCode, label: label, scope: scope, permissions: perms };
+  return { success: true, role_code: roleCode, label: label, description: description,
+           scope: scope, mfa_required: mfaRequired, permissions: perms };
+}
+
+// ── deleteRole ───────────────────────────────────────────────────────────────────
+
+// Hard-delete a role plus its role_permissions rows, behind two guards so the
+// RBAC model can never be left inconsistent:
+//   1. A system role (roles.is_system = 1, e.g. SUPER_ADMIN) is never deletable.
+//   2. A role still referenced by any user_roles row is refused; those users must
+//      be reassigned first (the message names the count so the admin knows).
+// Gated by the existing role.assign permission, the same code that guards
+// create/update; SUPER_ADMIN's '*' covers it. The delete is audit-logged.
+function _rbacDeleteRole_(ctx, params) {
+  Rbac.requirePermission(ctx.session, 'role.assign');
+
+  var roleCode = String(params.roleCode || params.roleId || params.role_code || '').trim();
+  if (!roleCode) throw new Errors.Validation('roleCode required.');
+
+  var rows = TursoClient.select(
+    'SELECT role_code, role_name, scope, is_system FROM roles WHERE role_code = ? LIMIT 1',
+    [roleCode]
+  );
+  if (!rows.length) throw new Errors.NotFound('Role not found: ' + roleCode);
+  var existing = rows[0];
+
+  if (_rbacIsTruthyFlag_(existing.is_system)) {
+    throw new Errors.Validation('System roles cannot be deleted.');
+  }
+
+  var usage = TursoClient.select(
+    'SELECT COUNT(*) AS n FROM user_roles WHERE role_code = ?', [roleCode]
+  );
+  var assigned = usage.length ? (parseInt(usage[0].n, 10) || 0) : 0;
+  if (assigned > 0) {
+    throw new Errors.Validation(
+      'Role is still assigned to ' + assigned + ' user' + (assigned === 1 ? '' : 's') +
+      '. Reassign them before deleting this role.'
+    );
+  }
+
+  var actor = (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
+
+  // Drop the grant rows first, then the role itself (FK-safe in one round-trip).
+  TursoClient.batch([
+    { sql: 'DELETE FROM role_permissions WHERE role_code = ?', args: [roleCode] },
+    { sql: 'DELETE FROM roles WHERE role_code = ?',            args: [roleCode] },
+  ]);
+
+  Audit.log({
+    actor: actor, action: 'ROLE_DELETED', entity: 'roles', entityId: roleCode,
+    before: { role_code: existing.role_code, role_name: existing.role_name, scope: existing.scope },
+  });
+
+  return { success: true, role_code: roleCode };
 }
 
 // ── Registration ───────────────────────────────────────────────────────────────
@@ -306,4 +382,5 @@ function _rbacCreateRole_(ctx, params) {
   register({ service: 'rbac', action: 'assignRole',      permission: 'role.assign',  handler: _rbacAssignRole_ });
   register({ service: 'rbac', action: 'updateRole',      permission: 'role.assign',  handler: _rbacUpdateRole_ });
   register({ service: 'rbac', action: 'createRole',      permission: 'role.assign',  handler: _rbacCreateRole_ });
+  register({ service: 'rbac', action: 'deleteRole',      permission: 'role.assign',  handler: _rbacDeleteRole_ });
 })();

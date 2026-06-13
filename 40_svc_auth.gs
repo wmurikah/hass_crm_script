@@ -410,15 +410,24 @@ function _authMe_(ctx, params) {
   var uRows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [userId]);
   var u = uRows.length ? uRows[0] : {};
   var roleRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [userId]);
+  // Resolve the union of permission codes across ALL of this user's roles and
+  // deliver it to the client. SUPER_ADMIN resolves to ['*']; every other role
+  // resolves to its real granted codes. The client uses this set to render the
+  // permission-filtered menu and to gate sections, so without it a non-admin
+  // user receives no permissions and the whole app renders empty (the bug this
+  // fixes). Resolution is memoized per request in Rbac, so this is cheap even
+  // though the staff init bundle also calls into Rbac.
+  var permissions = Rbac.userPermissions(userId);
   var me = {
-    userId:     userId,
-    userType:   'STAFF',
-    email:      u.email      || '',
-    first_name: u.first_name || '',
-    last_name:  u.last_name  || '',
-    role:       sess.role || (roleRows.length ? roleRows[0].role_code : null),
-    country:    u.country_code || sess.countryCode || '',
-    team:       u.team_id || '',
+    userId:      userId,
+    userType:    'STAFF',
+    email:       u.email      || '',
+    first_name:  u.first_name || '',
+    last_name:   u.last_name  || '',
+    role:        sess.role || (roleRows.length ? roleRows[0].role_code : null),
+    country:     u.country_code || sess.countryCode || '',
+    team:        u.team_id || '',
+    permissions: permissions,
   };
 
   // ── Init bundle (staff dashboard first-screen, ONE round-trip) ────────────

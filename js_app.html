@@ -60,6 +60,28 @@ var HassCache = (function () {
 })();
 window.HassCache = HassCache;
 
+/* ── Perms: the current user's resolved permission set ───────────────
+ * auth.me delivers the union of permission codes across all of the signed-in
+ * user's roles (SUPER_ADMIN resolves to ['*']). The shell loads it once after
+ * the auth guard passes; menu/section/action gating reads it through has().
+ * This is the client mirror of Rbac.userHasPermission on the server: '*' grants
+ * everything, otherwise an exact code match is required. It is a convenience for
+ * the UI only; every action is still enforced server-side by the dispatcher. */
+var Perms = (function () {
+  'use strict';
+  var _set = {};
+  return {
+    load: function (list) {
+      _set = {};
+      (list || []).forEach(function (c) { if (c) _set[String(c)] = 1; });
+    },
+    has: function (code) { return !!(_set['*'] || (code && _set[String(code)])); },
+    list: function () { return Object.keys(_set); },
+    isSuperAdmin: function () { return !!_set['*']; },
+  };
+})();
+window.HassPerms = Perms;
+
 /* ── Toast ─────────────────────────────────────────────────────── */
 var Toast = (function () {
   var _container;
