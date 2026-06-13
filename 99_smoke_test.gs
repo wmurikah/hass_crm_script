@@ -524,6 +524,7 @@ function smokeOrders() {
       account_number:        'SMKT-' + Date.now(),
       customer_type:         'B2B',
       country_code:          'KE',
+      currency_code:         'KES',
       segment_id:            'SEG-STANDARD',
       relationship_owner_id: null,
       parent_customer_id:    null,
@@ -531,6 +532,23 @@ function smokeOrders() {
   });
   if (!custRes.ok) throw new Error('Prereq customer create failed: ' + JSON.stringify(custRes.error));
   var customerId = custRes.data.customer_id;
+
+  // Order line rates now resolve through the tiered price lists (Pricing.resolve),
+  // so seed a CUSTOMER-scoped list with an item for PROD-AGO. A customer-scoped
+  // list sidesteps the single-active-default unique index, so this is safe to run
+  // repeatedly regardless of any existing default list.
+  var plRes = processRequest({
+    service: 'pricing', action: 'createList', sessionToken: saToken,
+    params: { name: 'Smoke Customer List', scope: 'customer', customer_id: customerId,
+              country_code: 'KE', currency_code: 'KES' },
+  });
+  if (!plRes.ok) throw new Error('Prereq price list create failed: ' + JSON.stringify(plRes.error));
+  var smokePriceId = plRes.data.price_id;
+  var pliRes = processRequest({
+    service: 'pricing', action: 'upsertItem', sessionToken: saToken,
+    params: { price_list_id: smokePriceId, product_id: 'PROD-AGO', unit_price: 150, tax_rate: 16 },
+  });
+  if (!pliRes.ok) throw new Error('Prereq price item create failed: ' + JSON.stringify(pliRes.error));
 
   var orderId, cancelOrderId;
 

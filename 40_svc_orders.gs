@@ -81,18 +81,13 @@ var Orders = (function () {
   // ── Totals ────────────────────────────────────────────────────────────────────
 
   function _recalculateTotals_(orderId) {
-    var lines = TursoClient.select(
-      'SELECT line_subtotal FROM order_lines WHERE order_id = ?', [orderId]
-    );
-    var subtotal = lines.reduce(function (s, l) {
-      return s + (parseFloat(l.line_subtotal) || 0);
-    }, 0);
-    var taxRate = 0.16; // VAT
-    var tax     = Math.round(subtotal * taxRate * 100) / 100;
-    var total   = Math.round((subtotal + tax) * 100) / 100;
+    // Totals are the sum of the resolved per-line amounts (unit price, discount
+    // and tax come from Pricing.resolve at the time the line is added), so the
+    // order header always equals the lines and, in turn, the invoice.
+    var t = Pricing.sumOrderLineTotals(orderId);
     TursoClient.write(
       'UPDATE orders SET subtotal = ?, tax_amount = ?, total_amount = ?, updated_at = ? WHERE order_id = ?',
-      [subtotal, tax, total, nowIso(), orderId]
+      [t.subtotal, t.tax, t.total, nowIso(), orderId]
     );
   }
 
@@ -168,6 +163,24 @@ var Orders = (function () {
                       '-' + Date.now().toString(36).toUpperCase();
     var now         = nowIso();
 
+    // Resolve every requested line BEFORE inserting the order, so a product with
+    // no active price list blocks the whole create with a clear message instead
+    // of leaving a half-built order behind.
+    var orderCtx = {
+      order_id:        orderId,
+      customer_id:     customerId,
+      source_depot_id: params.source_depot_id || null,
+      country_code:    customer.country_code,
+      currency_code:   customer.currency_code,
+      created_at:      now,
+    };
+    var resolvedLines = [];
+    if (Array.isArray(params.lines) && params.lines.length) {
+      params.lines.forEach(function (line) {
+        resolvedLines.push(_resolveLinePricing_(orderCtx, line));
+      });
+    }
+
     TursoClient.write(
       'INSERT INTO orders ' +
       '(order_id, order_number, oracle_order_id, customer_id, contact_id, ' +
@@ -200,13 +213,14 @@ var Orders = (function () {
       ]
     );
 
-    // Add lines if provided.
-    if (Array.isArray(params.lines) && params.lines.length) {
-      params.lines.forEach(function (line) {
-        _addLine_(orderId, line, ctx.session.userId);
+    // Persist the pre-resolved lines and recompute the header totals.
+    if (resolvedLines.length) {
+      resolvedLines.forEach(function (rl) {
+        _insertResolvedLine_(orderId, rl);
       });
       _recalculateTotals_(orderId);
     }
+    _refreshOrderListRef_(orderId, customerId, now);
 
     Audit.log({
       actor: ctx.session.userId, action: 'ORDER_CREATED',
@@ -217,27 +231,78 @@ var Orders = (function () {
     return { order_id: orderId, order_number: orderNumber, status: 'DRAFT' };
   }
 
-  function _addLine_(orderId, line, actorId) {
-    var lineId    = genId('LIN');
-    var quantity  = parseFloat(line.quantity)   || 0;
-    var unitPrice = parseFloat(line.unit_price) || 0;
-    var discount  = parseFloat(line.discount_percent) || 0;
+  // Resolve the rate for one line from the tiered price lists using the order's
+  // customer, source depot, line quantity and order date. Throws Validation when
+  // no active list prices the product (we never silently fall back to zero).
+  function _resolveLinePricing_(order, line) {
+    var productId = String(line.product_id || '');
+    if (!productId) throw new Errors.Validation('product_id is required on every order line.');
+    var quantity = parseFloat(line.quantity) || 0;
+    if (quantity <= 0) throw new Errors.Validation('quantity must be greater than 0 for product ' + productId + '.');
+
+    var asOf  = order.created_at || order.requested_date || nowIso();
+    var depot = order.source_depot_id || null;
+    var r = Pricing.resolve(order.customer_id, productId, asOf, depot, quantity);
+    if (!r) {
+      throw new Errors.Validation(
+        'No active price list covers product ' + productId + " for the customer's country and currency. " +
+        'Add it on the Price Lists screen before ordering this product.');
+    }
+
+    var unitPrice = parseFloat(r.unit_price) || 0;
+    var discount  = parseFloat(r.discount_percent) || 0;
+    var taxRate   = parseFloat(r.tax_rate) || 0;
     var subtotal  = Math.round(quantity * unitPrice * (1 - discount / 100) * 100) / 100;
-    var now       = nowIso();
-    TursoClient.write(
-      'INSERT INTO order_lines ' +
-      '(line_id, order_id, product_id, product_name, quantity, unit_price, ' +
-      'discount_percent, line_subtotal, delivered_quantity, created_at) ' +
-      'VALUES (?,?,?,?,?,?,?,?,0,?)',
-      [
-        lineId, orderId,
-        String(line.product_id   || ''),
-        String(line.product_name || ''),
-        quantity, unitPrice, discount, subtotal,
-        now,
-      ]
-    );
+    var lineTax   = Math.round(subtotal * (taxRate / 100) * 100) / 100;
+    var lineTotal = Math.round((subtotal + lineTax) * 100) / 100;
+    return {
+      product_id:           productId,
+      product_name:         String(line.product_name || ''),
+      quantity:             quantity,
+      unit_price:           unitPrice,
+      discount_percent:     discount,
+      tax_rate:             taxRate,
+      line_subtotal:        subtotal,
+      line_tax:             lineTax,
+      line_total:           lineTotal,
+      source_price_list_id: r.source_price_list_id,
+      source_tier:          r.source_tier,
+    };
+  }
+
+  function _insertResolvedLine_(orderId, rl) {
+    var lineId = genId('LIN');
+    var cols = ['line_id', 'order_id', 'product_id', 'product_name', 'quantity',
+                'unit_price', 'discount_percent', 'line_subtotal', 'delivered_quantity', 'created_at'];
+    var vals = [lineId, orderId, rl.product_id, rl.product_name, rl.quantity,
+                rl.unit_price, rl.discount_percent, rl.line_subtotal, 0, nowIso()];
+    // Persist tax_rate / line_tax / line_total when the columns exist.
+    if (SchemaIntrospect.has('order_lines', 'tax_rate'))   { cols.push('tax_rate');   vals.push(rl.tax_rate); }
+    if (SchemaIntrospect.has('order_lines', 'line_tax'))   { cols.push('line_tax');   vals.push(rl.line_tax); }
+    if (SchemaIntrospect.has('order_lines', 'line_total')) { cols.push('line_total'); vals.push(rl.line_total); }
+    var ph = cols.map(function () { return '?'; }).join(',');
+    TursoClient.write('INSERT INTO order_lines (' + cols.join(', ') + ') VALUES (' + ph + ')', vals);
     return lineId;
+  }
+
+  function _addLine_(order, line, actorId) {
+    var rl = _resolveLinePricing_(order, line);
+    return _insertResolvedLine_(order.order_id, rl);
+  }
+
+  // Refresh orders.price_list_id to the most specific list in scope for the
+  // customer (customer else segment else default). Informational only; the
+  // per-line stored rate is the source of truth under item-level override.
+  function _refreshOrderListRef_(orderId, customerId, asOf) {
+    try {
+      var plId = Pricing.mostSpecificListId(customerId, asOf);
+      if (plId) {
+        TursoClient.write(
+          'UPDATE orders SET price_list_id = ?, updated_at = ? WHERE order_id = ?',
+          [plId, nowIso(), orderId]
+        );
+      }
+    } catch (_) {}
   }
 
   // ── addLine ───────────────────────────────────────────────────────────────────
@@ -255,8 +320,9 @@ var Orders = (function () {
     if (['DELIVERED', 'CANCELLED', 'REJECTED'].indexOf(order.status) !== -1) {
       throw new Errors.Validation('Cannot add lines to an order in status ' + order.status + '.');
     }
-    var lineId = _addLine_(orderId, params, ctx.session.userId);
+    var lineId = _addLine_(order, params, ctx.session.userId);
     _recalculateTotals_(orderId);
+    _refreshOrderListRef_(orderId, order.customer_id, order.created_at);
     Audit.log({
       actor: ctx.session.userId, action: 'ORDER_LINE_ADDED',
       entity: 'orders', entityId: orderId,

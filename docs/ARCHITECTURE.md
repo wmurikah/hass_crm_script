@@ -160,6 +160,9 @@ Because GAS loads files in filename order and `40_svc_auth.gs` loads after `30_d
 | `pricing.createList` | `invoice.generate` | `invoices.get` | `invoice.view` |
 | `pricing.upsertItem` | `invoice.generate` | `invoices.generate` | `invoice.generate` |
 | `pricing.deactivateList` | `invoice.generate` | `invoices.cancel` | `invoice.cancel` |
+| `pricing.updateList` | `invoice.generate` | | |
+| `pricing.deleteItem` | `invoice.generate` | | |
+| `pricing.previewResolve` | `order.view` | | |
 | `delivery_locations.list` | `customer.view` | `payments.upload` | `invoice.view` |
 | `delivery_locations.get` | `customer.view` | `payments.approve` | `invoice.generate` |
 | `delivery_locations.create` | `customer.manage` | `payments.reject` | `invoice.generate` |
@@ -167,6 +170,8 @@ Because GAS loads files in filename order and `40_svc_auth.gs` loads after `30_d
 | `delivery_locations.softDelete` | `customer.manage` | | |
 
 > `payments.*` is split across two files: `upload/approve/reject` in `40_svc_invoices.gs:298-300`, `list` in `40_svc_payments.gs:58`. `pricing.getPriceListItems` reuses the catalog handler `_catalogGetPriceListItems_`.
+
+> **Tiered pricing (`40_svc_pricing.gs`).** Price lists carry exactly one scope dimension (XOR, enforced in `_normalizeScope_`): a Default list (`is_default = 1`), a Segment list (`segment_id`), or a Customer list (`customer_id`), each keyed to a `country_code` + `currency_code`. `Pricing.resolve(customerId, productId, asOf, depotId, quantity)` walks the tiers **customer -> segment -> default** and returns the rate from the most specific tier that has an item for the product (item-level partial override), or `null` when none does; it never crosses currencies. Order lines (`40_svc_orders.gs` `_resolveLinePricing_`) and invoice amounts (`40_svc_invoices.gs` via `Pricing.sumOrderLineTotals`) both source their rates from the resolver; a product with no covering list blocks the line rather than pricing at zero. `orders.price_list_id` is set to the most specific in-scope list for reference only (`Pricing.mostSpecificListId`); the per-line stored rate is authoritative. The live DB enforces one active default per country+currency via the partial unique index `ux_price_list_default`, which create/update translate into a clear validation message.
 
 **Support**
 
