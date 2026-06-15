@@ -1,6 +1,6 @@
 <script>
 // ─────────────────────────────────────────────────────────────────
-//  js_app.html  — Hass CMS app framework (Stage 6)
+//  js_app.html  - Hass CMS app framework (Stage 6)
 //  Router, Toast, Modal, and global event bus.
 // ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@
  *   HassCache.clearAll()        → drop everything (called on logout / session loss)
  *
  * DO NOT cache live transactional data (orders, tickets, payments, invoices)
- * beyond a short TTL — those must reflect the current backend state. This cache
+ * beyond a short TTL - those must reflect the current backend state. This cache
  * is for slow-moving reference/identity data only. */
 var HassCache = (function () {
   'use strict';
@@ -81,6 +81,18 @@ var Perms = (function () {
   };
 })();
 window.HassPerms = Perms;
+
+/* can(code): gate a UI affordance by a permission code. Null-safe wrapper over
+ * Perms.has that reads well inline in the section partials, e.g.
+ *   (can('customers.create') ? newButtonHtml : '')
+ * Every create / edit / delete / status / assign control across the app is driven
+ * by this, so a user sees exactly the actions their delivered permission set
+ * allows. SUPER_ADMIN holds the '*' wildcard and therefore sees every control.
+ * This is a UI convenience only, never a security boundary: the dispatcher and
+ * Rbac.requirePermission still enforce every call server-side, so hiding a button
+ * cannot be bypassed and showing one can never grant access the role lacks. */
+function can(code) { return !!(window.HassPerms && window.HassPerms.has(code)); }
+window.can = can;
 
 /* ── Toast ─────────────────────────────────────────────────────── */
 var Toast = (function () {
@@ -186,18 +198,18 @@ function statusBadge(status) {
 
 /* ── Format helpers ─────────────────────────────────────────────── */
 function fmtDate(ts) {
-  if (!ts) return '—';
+  if (!ts) return '-';
   var d = new Date(ts);
   return isNaN(d) ? ts : d.toLocaleDateString();
 }
 function fmtDateTime(ts) {
-  if (!ts) return '—';
+  if (!ts) return '-';
   var d = new Date(ts);
   return isNaN(d) ? ts : d.toLocaleString();
 }
 function fmtMoney(v, ccy) {
   var n = parseFloat(v);
-  if (isNaN(n)) return '—';
+  if (isNaN(n)) return '-';
   return (ccy || 'KES') + ' ' + n.toLocaleString(undefined, { minimumFractionDigits: 2 });
 }
 
@@ -484,7 +496,7 @@ var ChatWidget = (function () {
 
   function _renderEmpty() {
     _els.body.innerHTML =
-      '<div class="hass-chat-empty">Hi! I can look up customers, orders, invoices and more — ' +
+      '<div class="hass-chat-empty">Hi! I can look up customers, orders, invoices and more - ' +
       'all read-only and scoped to your access. What do you need?</div>';
   }
 

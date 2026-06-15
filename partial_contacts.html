@@ -1,5 +1,8 @@
 <script>
+var _contactsReload = null;   // reload the current customer's contacts after a mutation
+
 Router.register('contacts', function (el, params) {
+  var lastCustomerId = '';
   el.innerHTML =
     '<div class="filter-bar">' +
       '<input class="form-control" id="contCust" placeholder="Customer ID…" style="width:220px">' +
@@ -11,14 +14,21 @@ Router.register('contacts', function (el, params) {
 
   function load(customerId) {
     if (!customerId) return;
+    lastCustomerId = customerId;
     setHTML('contBody', loadingRow(6));
     API.call('contacts', 'list', { customer_id: customerId }).then(function (rows) {
       if (!rows.length) { setHTML('contBody', emptyRow(6, 'No contacts for this customer.')); return; }
+      var canManage = can('contacts.manage');
       setHTML('contBody', rows.map(function (r) {
+        var cid  = esc(r.contact_id);
+        var acts = canManage
+          ? '<button class="btn btn-secondary btn-sm" onclick="editContact(\'' + cid + '\')">Edit</button>' +
+            '<button class="btn btn-secondary btn-sm" onclick="deactivateContact(\'' + cid + '\')">Deactivate</button>'
+          : '';
         return '<tr><td>' + esc(r.first_name + ' ' + r.last_name) + '</td>' +
-               '<td>' + esc(r.email) + '</td><td>' + esc(r.phone || '—') + '</td>' +
+               '<td>' + esc(r.email) + '</td><td>' + esc(r.phone || '-') + '</td>' +
                '<td>' + esc(r.portal_role) + '</td><td>' + statusBadge(r.status) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="deactivateContact(\'' + esc(r.contact_id) + '\')">Deactivate</button></td></tr>';
+               '<td class="actions">' + acts + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('contBody', errorRow(6, e, function () { load(customerId); })); });
   }
@@ -32,13 +42,65 @@ Router.register('contacts', function (el, params) {
     document.getElementById('contCust').value = params.customerId;
     load(params.customerId);
   }
+
+  _contactsReload = function () { if (lastCustomerId) load(lastCustomerId); };
 });
 
 function deactivateContact(id) {
   Modal.confirm('Deactivate this contact?', function () {
     API.call('contacts', 'deactivate', { contactId: id })
-      .then(function () { Toast.success('Contact deactivated.'); })
+      .then(function () { Toast.success('Contact deactivated.'); if (_contactsReload) _contactsReload(); })
       .catch(function (e) { Toast.error(e.message); });
+  });
+}
+
+// Edit affordance, gated by contacts.manage and wired to the existing
+// contacts.update action. Sends only the profile fields the user changed.
+// Portal role is intentionally left to the dedicated setPortalRole flow.
+function editContact(id) {
+  var l = Loader.show();
+  API.call('contacts', 'get', { contactId: id }).then(function (c) {
+    Loader.hide(l);
+    editContactModal(c, function () { if (_contactsReload) _contactsReload(); });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function editContactModal(c, onSuccess) {
+  Modal.open({
+    title: 'Edit Contact',
+    body:
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">First Name</label><input class="form-control" id="ectFn" value="' + esc(c.first_name || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Last Name</label><input class="form-control" id="ectLn" value="' + esc(c.last_name || '') + '"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Phone</label><input class="form-control" id="ectPhone" value="' + esc(c.phone || '') + '"></div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Job Title</label><input class="form-control" id="ectTitle" value="' + esc(c.job_title || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Department</label><input class="form-control" id="ectDept" value="' + esc(c.department || '') + '"></div>' +
+      '</div>' +
+      '<div id="ectErr" style="color:var(--clr-danger);font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="ectSave">Save changes</button>',
+    onOpen: function (bd) {
+      var saveBtn = bd.querySelector('#ectSave');
+      saveBtn.onclick = function () {
+        var err = bd.querySelector('#ectErr');
+        err.textContent = '';
+        var patch   = { contactId: c.contact_id };
+        var changed = false;
+        function add(k, v, cur) { if (String(v) !== String(cur == null ? '' : cur)) { patch[k] = v; changed = true; } }
+        add('first_name', bd.querySelector('#ectFn').value.trim(),    c.first_name);
+        add('last_name',  bd.querySelector('#ectLn').value.trim(),    c.last_name);
+        add('phone',      bd.querySelector('#ectPhone').value.trim(), c.phone);
+        add('job_title',  bd.querySelector('#ectTitle').value.trim(), c.job_title);
+        add('department', bd.querySelector('#ectDept').value.trim(),  c.department);
+        if (!changed) { Modal.close(); return; }
+        saveBtn.disabled = true;
+        API.call('contacts', 'update', patch)
+          .then(function () { Modal.close(); Toast.success('Contact updated.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { saveBtn.disabled = false; err.textContent = e.message; });
+      };
+    },
   });
 }
 </script>

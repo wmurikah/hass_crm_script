@@ -1,15 +1,16 @@
 <script>
 Router.register('knowledge', function (el) {
+  var canManage = can('order.manage');
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
       '<h2 style="font-size:16px;font-weight:600">Knowledge Base</h2>' +
-      '<button class="btn btn-primary btn-sm" id="kbNewArticle">+ New Article</button>' +
+      (canManage ? '<button class="btn btn-primary btn-sm" id="kbNewArticle">+ New Article</button>' : '') +
     '</div>' +
     '<div style="display:grid;grid-template-columns:220px 1fr;gap:12px">' +
       '<div class="card" id="kbCategories" style="height:fit-content">' +
         '<div style="font-weight:600;font-size:13px;margin-bottom:8px">Categories</div>' +
         '<div id="kbCatList"></div>' +
-        '<button class="btn btn-secondary btn-sm" id="kbNewCat" style="margin-top:8px;width:100%">+ Category</button>' +
+        (canManage ? '<button class="btn btn-secondary btn-sm" id="kbNewCat" style="margin-top:8px;width:100%">+ Category</button>' : '') +
       '</div>' +
       '<div>' +
         '<div class="card" style="margin-bottom:10px;padding:10px">' +
@@ -46,12 +47,12 @@ Router.register('knowledge', function (el) {
       setHTML('kbArticleTbody', rows.map(function (r) {
         return '<tr>' +
           '<td>' + esc(r.title) + '</td>' +
-          '<td style="font-size:12px">' + esc(r.category_name || '—') + '</td>' +
+          '<td style="font-size:12px">' + esc(r.category_name || '-') + '</td>' +
           '<td>' + statusBadge(r.status) + '</td>' +
           '<td style="font-size:11px">' + fmtDate(r.updated_at) + '</td>' +
           '<td style="white-space:nowrap">' +
             '<button class="btn btn-secondary btn-sm" onclick="kbViewArticle(\'' + esc(r.article_id) + '\')">View</button> ' +
-            '<button class="btn btn-secondary btn-sm" onclick="kbEditArticle(\'' + esc(r.article_id) + '\')">Edit</button>' +
+            (canManage ? '<button class="btn btn-secondary btn-sm" onclick="kbEditArticle(\'' + esc(r.article_id) + '\')">Edit</button>' : '') +
           '</td>' +
         '</tr>';
       }).join(''));
@@ -71,9 +72,11 @@ Router.register('knowledge', function (el) {
     loadArticles(q ? { search: q } : {});
   };
 
-  document.getElementById('kbNewArticle').onclick = function () { kbArticleModal(null, function () { loadArticles(_activeCat ? { categoryId: _activeCat } : {}); }); };
+  var kbNewArticleBtn = document.getElementById('kbNewArticle');
+  if (kbNewArticleBtn) kbNewArticleBtn.onclick = function () { kbArticleModal(null, function () { loadArticles(_activeCat ? { categoryId: _activeCat } : {}); }); };
 
-  document.getElementById('kbNewCat').onclick = function () {
+  var kbNewCatBtn = document.getElementById('kbNewCat');
+  if (kbNewCatBtn) kbNewCatBtn.onclick = function () {
     Modal.open({
       title: 'New Category',
       body: '<div class="form-group"><label class="form-label">Name</label><input class="form-control" id="kbCatName"></div>' +

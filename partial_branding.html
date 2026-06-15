@@ -20,10 +20,11 @@ Router.register('branding', function (el) {
         '<div class="form-group"><label class="form-label">Accent Color</label>' +
           '<input class="form-control" id="brAccent" value="' + esc(b.accent_color || '#FF6F00') + '"></div>' +
       '</div>' +
-      '<div><button class="btn btn-primary" id="brSaveBtn">Save</button></div>' +
+      (can('order.manage') ? '<div><button class="btn btn-primary" id="brSaveBtn">Save</button></div>' : '') +
       '</div>';
 
-    document.getElementById('brSaveBtn').onclick = function () {
+    var brSaveBtn = document.getElementById('brSaveBtn');
+    if (brSaveBtn) brSaveBtn.onclick = function () {
       API.call('branding', 'update', {
         scope_code:      'GLOBAL',
         app_name:        document.getElementById('brAppName').value.trim(),

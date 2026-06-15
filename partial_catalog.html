@@ -1,5 +1,20 @@
 <script>
+// ── Products, Depots, Segments (route 'catalog') ──────────────────────────────
+// Products and depots are reference data shared across orders, pricing and
+// logistics. Their create / edit / status controls render only when the delivered
+// permission set grants order.manage (the same code that gates catalog mutations
+// server-side); SUPER_ADMIN holds the '*' wildcard and therefore sees them all,
+// while a viewer with only order.view sees the read-only lists. Segments stay
+// read-only because no segment mutation action exists. Every write goes through
+// google.script.run via API.call and is re-checked server-side, so hiding a
+// control is a UX nicety, never the security boundary.
+
+var _catRows   = { products: {}, depots: {} };   // id -> row, to prefill Edit
+var _catReload = null;                            // active tab body reloader
+
 Router.register('catalog', function (el) {
+  var canManage = can('order.manage');
+
   el.innerHTML =
     '<div style="display:flex;gap:14px;margin-bottom:14px">' +
       '<button class="btn btn-secondary btn-sm catTab active" data-t="products">Products</button>' +
@@ -18,39 +33,247 @@ Router.register('catalog', function (el) {
     });
   });
 
+  // Toolbar (managers only): a "+ New" action plus a "Show inactive" toggle so a
+  // deactivated row can be found and reactivated. Rendered once per tab so its
+  // checkbox state survives a table-body refresh.
+  function toolbar(newId, label, inactiveId) {
+    if (!canManage) return '';
+    return '<div class="filter-bar" style="margin-bottom:12px">' +
+      '<button class="btn btn-primary btn-sm" id="' + newId + '">+ ' + label + '</button>' +
+      '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--clr-text-light)">' +
+        '<input type="checkbox" id="' + inactiveId + '"> Show inactive</label>' +
+    '</div>';
+  }
+
   function loadCat() {
     setHTML('catContent', spinnerHTML(24));
-    if (_active === 'products') {
-      API.call('catalog', 'listProducts', { limit: 50 }).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Unit</th><th>Status</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.sku || '—') + '</td><td>' + esc(r.name) + '</td>' +
-                   '<td>' + esc(r.category || '—') + '</td><td>' + esc(r.unit_of_measure || '—') + '</td>' +
-                   '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td></tr>';
-          }).join('') : emptyRow(5, 'No products.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
-    } else if (_active === 'depots') {
-      API.call('catalog', 'listDepots', {}).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>Depot</th><th>Country</th><th>Status</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.depot_name || r.name) + '</td><td>' + esc(r.country_code) + '</td><td>' + statusBadge(r.status || 'ACTIVE') + '</td></tr>';
-          }).join('') : emptyRow(3, 'No depots.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
-    } else {
-      API.call('catalog', 'listSegments', {}).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>Segment</th><th>Description</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.segment_name || r.name) + '</td><td>' + esc(r.description || '—') + '</td></tr>';
-          }).join('') : emptyRow(2, 'No segments.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
-    }
+    if (_active === 'products') return showProducts();
+    if (_active === 'depots')   return showDepots();
+    return showSegments();
   }
+
+  // ── Products ────────────────────────────────────────────────────────────────
+  function showProducts() {
+    setHTML('catContent',
+      toolbar('catNewProduct', 'New Product', 'catProdInactive') +
+      '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        '<thead><tr><th>Code</th><th>Name</th><th>Category</th><th>Unit</th><th>Status</th>' +
+          (canManage ? '<th style="text-align:right">Actions</th>' : '') + '</tr></thead>' +
+        '<tbody id="catProdBody"></tbody></table></div></div>');
+    var n = document.getElementById('catNewProduct');
+    if (n) n.onclick = function () { catProductModal(null, loadProdBody); };
+    var t = document.getElementById('catProdInactive');
+    if (t) t.onchange = loadProdBody;
+    _catReload = loadProdBody;
+    loadProdBody();
+  }
+
+  function loadProdBody() {
+    var cols = canManage ? 6 : 5;
+    setHTML('catProdBody', loadingRow(cols));
+    var t = document.getElementById('catProdInactive');
+    var params = { limit: 100 };
+    if (t && t.checked) params.is_active = false;
+    API.call('catalog', 'listProducts', params).then(function (rows) {
+      _catRows.products = {};
+      (rows || []).forEach(function (r) { _catRows.products[r.product_id] = r; });
+      if (!rows || !rows.length) { setHTML('catProdBody', emptyRow(cols, 'No products.')); return; }
+      setHTML('catProdBody', rows.map(function (r) {
+        var pid    = esc(r.product_id);
+        var active = !(r.is_active === 0 || String(r.is_active) === '0');
+        var acts   = canManage
+          ? '<td><div class="actions" style="justify-content:flex-end">' +
+              '<button class="btn btn-secondary btn-sm" onclick="catProductEdit(\'' + pid + '\')">Edit</button>' +
+              '<button class="btn btn-' + (active ? 'danger' : 'primary') + ' btn-sm" onclick="catProductStatus(\'' + pid + '\',' + (active ? 'false' : 'true') + ')">' +
+                (active ? 'Deactivate' : 'Activate') + '</button>' +
+            '</div></td>'
+          : '';
+        return '<tr><td>' + esc(r.product_code || r.sku || '-') + '</td><td>' + esc(r.name) + '</td>' +
+               '<td>' + esc(r.category || '-') + '</td><td>' + esc(r.unit_of_measure || r.unit || '-') + '</td>' +
+               '<td>' + statusBadge(active ? 'ACTIVE' : 'INACTIVE') + '</td>' + acts + '</tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('catProdBody', errorRow(cols, e, loadProdBody)); });
+  }
+
+  // ── Depots ──────────────────────────────────────────────────────────────────
+  function showDepots() {
+    setHTML('catContent',
+      toolbar('catNewDepot', 'New Depot', 'catDepotInactive') +
+      '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        '<thead><tr><th>Depot</th><th>Country</th><th>Status</th>' +
+          (canManage ? '<th style="text-align:right">Actions</th>' : '') + '</tr></thead>' +
+        '<tbody id="catDepotBody"></tbody></table></div></div>');
+    var n = document.getElementById('catNewDepot');
+    if (n) n.onclick = function () { catDepotModal(null, loadDepotBody); };
+    var t = document.getElementById('catDepotInactive');
+    if (t) t.onchange = loadDepotBody;
+    _catReload = loadDepotBody;
+    loadDepotBody();
+  }
+
+  function loadDepotBody() {
+    var cols = canManage ? 4 : 3;
+    setHTML('catDepotBody', loadingRow(cols));
+    var t = document.getElementById('catDepotInactive');
+    var params = {};
+    if (t && t.checked) params.is_active = false;
+    API.call('catalog', 'listDepots', params).then(function (rows) {
+      _catRows.depots = {};
+      (rows || []).forEach(function (r) { _catRows.depots[r.depot_id] = r; });
+      if (!rows || !rows.length) { setHTML('catDepotBody', emptyRow(cols, 'No depots.')); return; }
+      setHTML('catDepotBody', rows.map(function (r) {
+        var did    = esc(r.depot_id);
+        var active = !(r.is_active === 0 || String(r.is_active) === '0');
+        var acts   = canManage
+          ? '<td><div class="actions" style="justify-content:flex-end">' +
+              '<button class="btn btn-secondary btn-sm" onclick="catDepotEdit(\'' + did + '\')">Edit</button>' +
+              '<button class="btn btn-' + (active ? 'danger' : 'primary') + ' btn-sm" onclick="catDepotStatus(\'' + did + '\',' + (active ? 'false' : 'true') + ')">' +
+                (active ? 'Deactivate' : 'Activate') + '</button>' +
+            '</div></td>'
+          : '';
+        return '<tr><td>' + esc(r.depot_name || r.name) + '</td><td>' + esc(r.country_code || '-') + '</td>' +
+               '<td>' + statusBadge(active ? 'ACTIVE' : 'INACTIVE') + '</td>' + acts + '</tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('catDepotBody', errorRow(cols, e, loadDepotBody)); });
+  }
+
+  // ── Segments (read-only: no mutation action) ──────────────────────────────────
+  function showSegments() {
+    API.call('catalog', 'listSegments', {}).then(function (rows) {
+      setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+        '<thead><tr><th>Segment</th><th>Description</th></tr></thead><tbody>' +
+        (rows && rows.length ? rows.map(function (r) {
+          return '<tr><td>' + esc(r.segment_name || r.name) + '</td><td>' + esc(r.description || '-') + '</td></tr>';
+        }).join('') : emptyRow(2, 'No segments.')) +
+        '</tbody></table></div></div>');
+    }).catch(function (e) { setHTML('catContent', errorCard(e, showSegments)); });
+  }
+
   loadCat();
 });
+
+// ── Product create / edit ───────────────────────────────────────────────────
+var _COUNTRIES_CAT = ['KE', 'UG', 'TZ', 'RW', 'DRC', 'ZM', 'SS', 'MW'];
+
+function catProductEdit(id) {
+  var p = _catRows.products[id];
+  if (!p) { Toast.error('Product not in the current list. Refresh and try again.'); return; }
+  catProductModal(p, _catReload || function () {});
+}
+
+function catProductStatus(id, active) {
+  Modal.confirm((active ? 'Activate' : 'Deactivate') + ' this product?', function () {
+    API.call('catalog', 'setProductStatus', { productId: id, is_active: !!active })
+      .then(function () { Toast.success('Product ' + (active ? 'activated' : 'deactivated') + '.'); if (_catReload) _catReload(); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+
+function catProductModal(product, onSuccess) {
+  var isEdit = !!product;
+  product = product || {};
+  Modal.open({
+    title: isEdit ? 'Edit Product' : 'New Product',
+    body:
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Code</label>' +
+          '<input class="form-control" id="cpCode" value="' + esc(product.product_code || product.sku || '') + '" placeholder="PRD-0001"></div>' +
+        '<div class="form-group"><label class="form-label">Name</label>' +
+          '<input class="form-control" id="cpName" value="' + esc(product.name || '') + '"></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Category</label>' +
+          '<input class="form-control" id="cpCat" value="' + esc(product.category || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Unit of measure</label>' +
+          '<input class="form-control" id="cpUnit" value="' + esc(product.unit_of_measure || product.unit || '') + '" placeholder="L, KG, EA"></div>' +
+      '</div>' +
+      (isEdit
+        ? '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="cpActive"' +
+            (!(product.is_active === 0 || String(product.is_active) === '0') ? ' checked' : '') + '> Active</label>'
+        : '') +
+      '<div id="cpErr" style="color:var(--clr-danger);font-size:12px;margin-top:6px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="cpSave">' + (isEdit ? 'Save changes' : 'Create') + '</button>',
+    onOpen: function (bd) {
+      var saveBtn = bd.querySelector('#cpSave');
+      saveBtn.onclick = function () {
+        var name = bd.querySelector('#cpName').value.trim();
+        var err  = bd.querySelector('#cpErr');
+        err.textContent = '';
+        if (!name) { err.textContent = 'Name is required.'; return; }
+        var params = {
+          name: name,
+          product_code: bd.querySelector('#cpCode').value.trim(),
+          category: bd.querySelector('#cpCat').value.trim(),
+          unit_of_measure: bd.querySelector('#cpUnit').value.trim(),
+        };
+        if (isEdit) {
+          params.productId = product.product_id;
+          params.is_active = bd.querySelector('#cpActive').checked;
+        }
+        saveBtn.disabled = true;
+        API.call('catalog', isEdit ? 'updateProduct' : 'createProduct', params)
+          .then(function () { Modal.close(); Toast.success(isEdit ? 'Product updated.' : 'Product created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { saveBtn.disabled = false; err.textContent = e.message; });
+      };
+    },
+  });
+}
+
+// ── Depot create / edit ───────────────────────────────────────────────────────
+function catDepotEdit(id) {
+  var d = _catRows.depots[id];
+  if (!d) { Toast.error('Depot not in the current list. Refresh and try again.'); return; }
+  catDepotModal(d, _catReload || function () {});
+}
+
+function catDepotStatus(id, active) {
+  Modal.confirm((active ? 'Activate' : 'Deactivate') + ' this depot?', function () {
+    API.call('catalog', 'setDepotStatus', { depotId: id, is_active: !!active })
+      .then(function () { Toast.success('Depot ' + (active ? 'activated' : 'deactivated') + '.'); if (_catReload) _catReload(); })
+      .catch(function (e) { Toast.error(e.message); });
+  });
+}
+
+function catDepotModal(depot, onSuccess) {
+  var isEdit = !!depot;
+  depot = depot || {};
+  var curCC = String(depot.country_code || '');
+  var ccOpts = ['<option value="">(none)</option>'].concat(_COUNTRIES_CAT.map(function (c) {
+    return '<option' + (c === curCC ? ' selected' : '') + '>' + c + '</option>';
+  })).join('');
+  Modal.open({
+    title: isEdit ? 'Edit Depot' : 'New Depot',
+    body:
+      '<div class="form-group"><label class="form-label">Depot name</label>' +
+        '<input class="form-control" id="cdName" value="' + esc(depot.depot_name || depot.name || '') + '"></div>' +
+      '<div class="form-group"><label class="form-label">Country</label>' +
+        '<select class="form-control" id="cdCC">' + ccOpts + '</select></div>' +
+      (isEdit
+        ? '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="cdActive"' +
+            (!(depot.is_active === 0 || String(depot.is_active) === '0') ? ' checked' : '') + '> Active</label>'
+        : '') +
+      '<div id="cdErr" style="color:var(--clr-danger);font-size:12px;margin-top:6px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="cdSave">' + (isEdit ? 'Save changes' : 'Create') + '</button>',
+    onOpen: function (bd) {
+      var saveBtn = bd.querySelector('#cdSave');
+      saveBtn.onclick = function () {
+        var name = bd.querySelector('#cdName').value.trim();
+        var err  = bd.querySelector('#cdErr');
+        err.textContent = '';
+        if (!name) { err.textContent = 'Depot name is required.'; return; }
+        var params = { depot_name: name, country_code: bd.querySelector('#cdCC').value };
+        if (isEdit) {
+          params.depotId = depot.depot_id;
+          params.is_active = bd.querySelector('#cdActive').checked;
+        }
+        saveBtn.disabled = true;
+        API.call('catalog', isEdit ? 'updateDepot' : 'createDepot', params)
+          .then(function () { Modal.close(); Toast.success(isEdit ? 'Depot updated.' : 'Depot created.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { saveBtn.disabled = false; err.textContent = e.message; });
+      };
+    },
+  });
+}
 </script>

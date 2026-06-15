@@ -1,9 +1,10 @@
 <script>
 Router.register('sla', function (el) {
+  var canManage = can('order.manage');
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
       '<h2 style="font-size:16px;font-weight:600">SLA Configuration</h2>' +
-      '<button class="btn btn-primary btn-sm" id="slaSaveBtn">Save Changes</button>' +
+      (canManage ? '<button class="btn btn-primary btn-sm" id="slaSaveBtn">Save Changes</button>' : '') +
     '</div>' +
 
     '<div class="card" style="margin-bottom:16px">' +
@@ -63,7 +64,8 @@ Router.register('sla', function (el) {
     }).catch(function (e) { setHTML('slaBreachBody', errorRow(5, e, loadBreaches)); });
   }
 
-  document.getElementById('slaSaveBtn').onclick = function () {
+  var slaSaveBtn = document.getElementById('slaSaveBtn');
+  if (slaSaveBtn) slaSaveBtn.onclick = function () {
     var updates = {};
     priorities.forEach(function (p) {
       updates['sla_response_' + p.toLowerCase()] = document.getElementById('slaR_' + p).value;

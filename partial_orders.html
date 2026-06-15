@@ -12,7 +12,7 @@ Router.register('orders', function (el, routeParams) {
         ['DRAFT','SUBMITTED','APPROVED','DISPATCHED','DELIVERED','REJECTED','CANCELLED'].map(function(s){return '<option>'+s+'</option>';}).join('') +
       '</select>' +
       '<input class="form-control" id="ordCust" placeholder="Customer ID…" style="width:200px">' +
-      '<button class="btn btn-primary btn-sm" id="ordNewBtn">+ New Order</button>' +
+      (can('order.create') ? '<button class="btn btn-primary btn-sm" id="ordNewBtn">+ New Order</button>' : '') +
       '<span id="ordDrill"></span>' +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
@@ -41,7 +41,8 @@ Router.register('orders', function (el, routeParams) {
 
   document.getElementById('ordCust').oninput = function () { clearTimeout(this._t); this._t = setTimeout(load, 400); };
   document.getElementById('ordStatus').onchange = load;
-  document.getElementById('ordNewBtn').onclick = newOrderModal.bind(null, load);
+  var ordNewBtn = document.getElementById('ordNewBtn');
+  if (ordNewBtn) ordNewBtn.onclick = newOrderModal.bind(null, load);
   // Render the drill-down filter chip (dismissible). The page's own controls still
   // layer on top; clearing the chip drops the pre-applied filter and reloads.
   if (Object.keys(drill).length) {
@@ -68,7 +69,7 @@ function viewOrder(id) {
       body: '<p style="margin-bottom:8px">' + statusBadge(o.status) + ' &nbsp; ' + fmtDate(o.created_at) + '</p>' +
             '<table class="data-table" style="margin-bottom:14px"><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead><tbody>' + (lines || '<tr><td colspan="4" style="color:#9ca3af">No lines</td></tr>') + '</tbody></table>' +
             '<div style="text-align:right;font-weight:600">Total: ' + fmtMoney(o.total_amount, o.currency_code) + '</div>' +
-            (o.status === 'SUBMITTED'
+            (o.status === 'SUBMITTED' && can('order.approve_low')
               ? '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">' +
                 '<button class="btn btn-danger btn-sm" onclick="orderAction(\'' + id + '\',\'reject\',\'Reason?\')">Reject</button>' +
                 '<button class="btn btn-primary btn-sm" onclick="orderAction(\'' + id + '\',\'approve\',\'\')">Approve</button></div>'

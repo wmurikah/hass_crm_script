@@ -14,17 +14,18 @@ Router.register('payments', function (el) {
     // List from audit log events as proxy for payment upload listing.
     API.call('auditLog', 'list', { entity_type: 'payment_uploads', limit: 50 }).then(function (rows) {
       if (!rows.length) { setHTML('payBody', emptyRow(8, 'No payment records.')); return; }
+      var canReview = can('invoice.generate');
       setHTML('payBody', rows.map(function (r) {
         var after = {};
         try { after = JSON.parse(r.after_json || '{}'); } catch (_) {}
         return '<tr><td style="font-size:11px">' + esc(r.entity_id) + '</td>' +
-               '<td>' + esc(after.invoice_id || '—') + '</td>' +
+               '<td>' + esc(after.invoice_id || '-') + '</td>' +
                '<td>' + fmtMoney(after.amount) + '</td>' +
-               '<td>' + esc(after.payment_method || '—') + '</td>' +
-               '<td>—</td>' +
+               '<td>' + esc(after.payment_method || '-') + '</td>' +
+               '<td>-</td>' +
                '<td>' + statusBadge(after.status || r.action.replace('PAYMENT_','')) + '</td>' +
                '<td>' + fmtDate(r.created_at) + '</td>' +
-               '<td><button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button></td></tr>';
+               '<td>' + (canReview ? '<button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button>' : '') + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('payBody', errorRow(8, e, load)); });
   }

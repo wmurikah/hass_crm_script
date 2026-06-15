@@ -18,17 +18,17 @@ Router.register('documents', function (el) {
     if (c) params.customer_id = c;
     API.call('documents', 'list', params).then(function (rows) {
       if (!rows.length) { setHTML('docBody', emptyRow(6, 'No documents.')); return; }
+      var canVerify = can('customer.manage');
       setHTML('docBody', rows.map(function (r) {
-        var did = esc(r.document_id);
+        var did  = esc(r.document_id);
+        var acts = (r.status === 'PENDING' && canVerify)
+          ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'REJECT\')">Reject</button>' +
+            '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'APPROVE\')">Approve</button>'
+          : '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewDoc(\'' + did + '\')">View</button>';
         return '<tr style="cursor:pointer" onclick="viewDoc(\'' + did + '\')"><td>' + esc(r.document_type) + '</td><td>' + esc(r.customer_id) + '</td>' +
-               '<td>' + esc(r.country_code || '—') + '</td><td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + esc(r.country_code || '-') + '</td><td>' + statusBadge(r.status) + '</td>' +
                '<td>' + fmtDate(r.uploaded_at || r.created_at) + '</td>' +
-               '<td class="actions">' +
-               (r.status === 'PENDING'
-                 ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'REJECT\')">Reject</button>' +
-                   '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'APPROVE\')">Approve</button>'
-                 : '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewDoc(\'' + did + '\')">View</button>') +
-               '</td></tr>';
+               '<td class="actions">' + acts + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('docBody', errorRow(6, e, load)); });
   }
