@@ -23,6 +23,7 @@ var _MENU_ITEMS_ = [
   { id: 'invoices',    label: 'Invoices',        icon: 'file-text',    route: 'invoices',    permission: 'invoice.view',      group: 'finance' },
   { id: 'payments',    label: 'Payments',        icon: 'credit-card',  route: 'payments',    permission: 'invoice.view',      group: 'finance' },
   { id: 'approvals',   label: 'Approvals',       icon: 'check-circle', route: 'approvals',   permission: 'order.approve_low', group: 'ops' },
+  { id: 'approvaltiming', label: 'Approval Timing', icon: 'clock',    route: 'approvaltiming', permission: 'order.view',     group: 'ops' },
   { id: 'documents',   label: 'KYC Documents',   icon: 'file',         route: 'documents',   permission: 'customer.view',     group: 'ops' },
   { id: 'catalog',     label: 'Products',        icon: 'grid',         route: 'catalog',     permission: 'order.view',        group: 'catalog' },
   { id: 'pricing',     label: 'Price Lists',     icon: 'tag',          route: 'pricing',     permission: 'order.view',        group: 'catalog' },
