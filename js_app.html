@@ -489,19 +489,23 @@ var HassTable = (function () {
 window.HassTable = HassTable;
 
 /* ── Floating Assistant chat widget (proactive co-pilot) ──────────────
- * Opens on load with a role-aware greeting and clickable, page-aware prompt
- * starters (served by bot.suggestions) plus a free text box. Renders rich
- * responses: prose, data tables with Export CSV / Open in {section} / Email
- * to me, gated write proposals with Confirm/Cancel, and one-question clarify
- * chips. Auto-open is a user setting (localStorage); the collapsed state is
- * remembered for the session. Dockable and resizable; never overflows the
- * page. All data flows through API.call('bot', ...); no keys client-side. */
+ * Launcher-first: the assistant NEVER auto-opens. A small launcher bubble sits
+ * at the bottom right with a short invite ("Need assistance? Click here") and a
+ * subtle attention animation (a gentle gold pulse plus a soft bounce) that runs
+ * for a few cycles then settles on its own, inviting a click without nagging.
+ * The animation stops for the rest of the session the moment the user opens OR
+ * dismisses it; the launcher always stays present, just quiet (it collapses to a
+ * compact icon). Clicking it opens the panel with a role-aware greeting,
+ * clickable page-aware prompt starters (served by bot.suggestions) and a free
+ * text box. Renders rich responses: prose, data tables with Export CSV / Open in
+ * {section} / Email to me, gated write proposals with Confirm/Cancel, and
+ * one-question clarify chips. Dockable and resizable; never overflows the page.
+ * All data flows through API.call('bot', ...); no keys client-side. */
 var ChatWidget = (function () {
   'use strict';
   var HISTORY_TURNS = 6;
-  var AUTOOPEN_KEY  = 'hass_bot_autoopen';   // localStorage: '0' disables auto-open
-  var COLLAPSE_KEY  = 'hass_bot_collapsed';  // sessionStorage: '1' = collapsed this session
-  var SIZE_KEY      = 'hass_bot_size';       // sessionStorage: '{w,h}'
+  var SEEN_KEY      = 'hass_bot_seen';   // sessionStorage: '1' once opened or dismissed this session
+  var SIZE_KEY      = 'hass_bot_size';   // sessionStorage: '{w,h}'
 
   var _mounted = false, _open = false, _busy = false;
   var _history = [];
@@ -520,11 +524,24 @@ var ChatWidget = (function () {
   function _injectStyles() {
     if (document.getElementById('hassChatStyles')) return;
     var css =
-      '.hass-chat-launcher{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border-radius:50%;' +
-        'background:var(--clr-primary);color:var(--clr-gold);border:none;cursor:pointer;box-shadow:var(--shadow-md);' +
-        'display:flex;align-items:center;justify-content:center;z-index:800;transition:transform .15s ease, background .15s ease;}' +
+      '.hass-chat-launcher{position:fixed;right:24px;bottom:24px;display:flex;align-items:center;gap:9px;' +
+        'background:var(--clr-primary);color:#fff;border:none;cursor:pointer;box-shadow:var(--shadow-md);' +
+        'border-radius:999px;padding:11px 15px 11px 13px;max-width:calc(100vw - 32px);z-index:800;' +
+        'transition:transform .15s ease, background .15s ease, padding .2s ease, width .2s ease;}' +
       '.hass-chat-launcher:hover{background:var(--clr-primary-d);transform:translateY(-2px);}' +
-      '.hass-chat-launcher svg{width:26px;height:26px;}' +
+      '.hass-chat-launcher .lc-icon{display:flex;align-items:center;justify-content:center;color:var(--clr-gold);flex-shrink:0;}' +
+      '.hass-chat-launcher .lc-icon svg{width:26px;height:26px;display:block;}' +
+      '.hass-chat-launcher .lc-text{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.hass-chat-launcher .lc-x{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;' +
+        'color:rgba(255,255,255,.7);font-size:16px;line-height:1;flex-shrink:0;margin-left:1px;}' +
+      '.hass-chat-launcher .lc-x:hover{background:rgba(255,255,255,.16);color:#fff;}' +
+      '.hass-chat-launcher.quiet{padding:0;width:56px;height:56px;justify-content:center;border-radius:50%;}' +
+      '.hass-chat-launcher.quiet .lc-text,.hass-chat-launcher.quiet .lc-x{display:none;}' +
+      '.hass-chat-launcher.attn{animation:hassLaunchBounce 1.7s ease-in-out 3, hassLaunchPulse 1.7s ease-out 3;}' +
+      '@keyframes hassLaunchBounce{0%,30%,100%{transform:translateY(0);}12%{transform:translateY(-6px);}21%{transform:translateY(0);}}' +
+      '@keyframes hassLaunchPulse{0%{box-shadow:0 0 0 0 rgba(201,162,77,.55), var(--shadow-md);}' +
+        '70%{box-shadow:0 0 0 13px rgba(201,162,77,0), var(--shadow-md);}100%{box-shadow:0 0 0 0 rgba(201,162,77,0), var(--shadow-md);}}' +
+      '@media (prefers-reduced-motion: reduce){.hass-chat-launcher.attn{animation:none;}}' +
       '.hass-chat-panel{position:fixed;right:24px;bottom:92px;width:400px;height:560px;max-width:calc(100vw - 32px);' +
         'max-height:calc(100vh - 120px);background:var(--clr-surface);border:1px solid var(--clr-border);border-radius:12px;' +
         'box-shadow:var(--shadow-md);display:none;flex-direction:column;overflow:hidden;z-index:801;}' +
@@ -585,18 +602,22 @@ var ChatWidget = (function () {
     document.head.appendChild(s);
   }
 
+  var ICON_CHAT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
   var ICON_GEAR = '<svg class="hicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
   function _build() {
     _injectStyles();
 
+    // Launcher is an inviting pill (icon + short invite + dismiss); it collapses
+    // to a compact icon once the user has opened or dismissed the assistant.
     var launcher = document.createElement('button');
-    launcher.className = 'hass-chat-launcher';
+    launcher.className = 'hass-chat-launcher' + (_seen() ? ' quiet' : '');
     launcher.title = 'Hass Assistant';
-    launcher.setAttribute('aria-label', 'Open assistant');
+    launcher.setAttribute('aria-label', 'Open the Hass assistant');
     launcher.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+      '<span class="lc-icon">' + ICON_CHAT + '</span>' +
+      '<span class="lc-text">Need assistance? Click here</span>' +
+      '<span class="lc-x" role="button" title="Dismiss" aria-label="Dismiss the assistant invite">&times;</span>';
 
     var panel = document.createElement('div');
     panel.className = 'hass-chat-panel';
@@ -611,7 +632,6 @@ var ChatWidget = (function () {
         '</span>' +
       '</div>' +
       '<div class="hass-settings">' +
-        '<label><input type="checkbox" class="autoopen"> Open automatically on load</label>' +
         '<span class="lnk newchat">Start a new chat</span>' +
       '</div>' +
       '<div class="hass-chat-body"></div>' +
@@ -632,18 +652,19 @@ var ChatWidget = (function () {
     _els.dock     = panel.querySelector('.dock');
     _els.setBtn   = panel.querySelector('.set');
     _els.settings = panel.querySelector('.hass-settings');
-    _els.autoopen = panel.querySelector('.autoopen');
     _els.newchat  = panel.querySelector('.newchat');
     _els.resize   = panel.querySelector('.hass-chat-resize');
+    _els.dismiss  = launcher.querySelector('.lc-x');
 
+    // Clicking the pill toggles the panel; the dismiss x quietly settles the
+    // launcher without opening it. Both stop the attention animation.
     launcher.onclick   = toggle;
+    if (_els.dismiss) _els.dismiss.onclick = function (e) { e.stopPropagation(); _dismiss(); };
     _els.close.onclick = function () { setOpen(false); };
     _els.send.onclick  = _onSend;
     _els.dock.onclick  = _toggleDock;
     _els.setBtn.onclick = function (e) { e.stopPropagation(); _els.settings.classList.toggle('open'); };
     _els.newchat.onclick = function () { _history = []; _started = false; _els.settings.classList.remove('open'); _renderHome(); };
-    _els.autoopen.checked = (_getAutoOpen());
-    _els.autoopen.onchange = function () { _setAutoOpen(_els.autoopen.checked); };
     _els.input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _onSend(); }
     });
@@ -662,11 +683,25 @@ var ChatWidget = (function () {
     _renderHome();
   }
 
-  // ── Settings helpers ──────────────────────────────────────────────
-  function _getAutoOpen() { try { return localStorage.getItem(AUTOOPEN_KEY) !== '0'; } catch (e) { return true; } }
-  function _setAutoOpen(on) { try { localStorage.setItem(AUTOOPEN_KEY, on ? '1' : '0'); } catch (e) {} }
-  function _isCollapsedSession() { try { return sessionStorage.getItem(COLLAPSE_KEY) === '1'; } catch (e) { return false; } }
-  function _markCollapsed(c) { try { c ? sessionStorage.setItem(COLLAPSE_KEY, '1') : sessionStorage.removeItem(COLLAPSE_KEY); } catch (e) {} }
+  // ── Launcher state: attention animation + quiet settle ─────────────
+  // "Seen" (opened or dismissed) is per-session: once set, the launcher stops
+  // drawing attention and stays as a compact, quiet icon for the rest of the
+  // session so it never keeps flashing.
+  function _seen()     { try { return sessionStorage.getItem(SEEN_KEY) === '1'; } catch (e) { return false; } }
+  function _markSeen() { try { sessionStorage.setItem(SEEN_KEY, '1'); } catch (e) {} }
+  function _goQuiet() { if (_els.launcher) { _els.launcher.classList.remove('attn'); _els.launcher.classList.add('quiet'); } }
+  function _dismiss() { _goQuiet(); _markSeen(); }
+
+  // Draw a little attention for a few cycles, then let it settle. The CSS runs a
+  // finite iteration count; we clear the class when those cycles finish so a
+  // later hover transform is not overridden and the launcher rests quietly.
+  function _playAttention() {
+    if (_seen() || _open) return;
+    var el = _els.launcher;
+    if (!el) return;
+    el.classList.add('attn');
+    setTimeout(function () { if (el) el.classList.remove('attn'); }, 5300); // ~3 cycles of 1.7s
+  }
 
   // ── Resize + dock ─────────────────────────────────────────────────
   function _clampW(w) { return Math.max(320, Math.min(w, window.innerWidth - 32)); }
@@ -929,8 +964,8 @@ var ChatWidget = (function () {
   function setOpen(open) {
     _open = open;
     _els.panel.classList.toggle('open', open);
-    _markCollapsed(!open);
     if (open) {
+      _markSeen(); _goQuiet();            // opening settles the launcher for the session
       if (!_started) _renderHome();
       setTimeout(function () { _els.input.focus(); }, 50);
     } else {
@@ -945,10 +980,10 @@ var ChatWidget = (function () {
     _me = me || null;
     try { _route = (typeof Router !== 'undefined' && Router.current && Router.current()) || ''; } catch (e) {}
     _build();
-    // Auto-open on first load unless the user disabled it or collapsed it this session.
-    if (_getAutoOpen() && !_isCollapsedSession()) {
-      setTimeout(function () { setOpen(true); }, 400);
-    }
+    // Launcher-first: never auto-open. If the assistant has not been opened or
+    // dismissed yet this session, draw a little attention (a few cycles, then it
+    // settles on its own). Otherwise the launcher stays quiet.
+    if (!_seen()) setTimeout(_playAttention, 700);
   }
 
   return { mount: mount, open: function () { setOpen(true); }, close: function () { setOpen(false); } };
