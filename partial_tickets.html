@@ -1,8 +1,9 @@
 <script>
-Router.register('tickets', function (el) {
+Router.register('tickets', function (el, params) {
+  params = params || {};
   el.innerHTML =
     '<div class="filter-bar">' +
-      '<select class="form-control" id="tktStatus"><option value="">All statuses</option><option>NEW</option><option>OPEN</option><option>RESOLVED</option><option>CLOSED</option></select>' +
+      '<select class="form-control" id="tktStatus"><option value="">All statuses</option><option>NEW</option><option>OPEN</option><option>PENDING</option><option>RESOLVED</option><option>CLOSED</option></select>' +
       '<select class="form-control" id="tktPriority"><option value="">All priorities</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select>' +
       '<button class="btn btn-primary btn-sm" id="tktNewBtn">+ New Ticket</button>' +
     '</div>' +
@@ -33,6 +34,8 @@ Router.register('tickets', function (el) {
   document.getElementById('tktStatus').onchange = load;
   document.getElementById('tktPriority').onchange = load;
   document.getElementById('tktNewBtn').onclick = function () { newTicketModal(load); };
+  // Pre-apply a drill-down filter when arriving from a dashboard chart "View all".
+  if (params.status) { var _ts = document.getElementById('tktStatus'); if (_ts) _ts.value = params.status; }
   load();
 });
 

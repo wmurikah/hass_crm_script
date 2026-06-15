@@ -1,5 +1,11 @@
 <script>
-Router.register('orders', function (el) {
+Router.register('orders', function (el, routeParams) {
+  routeParams = routeParams || {};
+  // Drill-down filters pre-applied when arriving from a dashboard chart "View all".
+  var drill = {};
+  ['month', 'country_code', 'currency_code', 'exclude_statuses'].forEach(function (k) {
+    if (routeParams[k]) drill[k] = routeParams[k];
+  });
   el.innerHTML =
     '<div class="filter-bar">' +
       '<select class="form-control" id="ordStatus"><option value="">All statuses</option>' +
@@ -7,6 +13,7 @@ Router.register('orders', function (el) {
       '</select>' +
       '<input class="form-control" id="ordCust" placeholder="Customer ID…" style="width:200px">' +
       '<button class="btn btn-primary btn-sm" id="ordNewBtn">+ New Order</button>' +
+      '<span id="ordDrill"></span>' +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Order #</th><th>Customer</th><th>Country</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>' +
@@ -19,6 +26,7 @@ Router.register('orders', function (el) {
     var c = document.getElementById('ordCust').value.trim();
     if (s) params.status = s;
     if (c) params.customer_id = c;
+    Object.keys(drill).forEach(function (k) { params[k] = drill[k]; });
     API.call('orders', 'list', params).then(function (rows) {
       if (!rows.length) { setHTML('ordBody', emptyRow(7, 'No orders.')); return; }
       setHTML('ordBody', rows.map(function (r) {
@@ -34,6 +42,16 @@ Router.register('orders', function (el) {
   document.getElementById('ordCust').oninput = function () { clearTimeout(this._t); this._t = setTimeout(load, 400); };
   document.getElementById('ordStatus').onchange = load;
   document.getElementById('ordNewBtn').onclick = newOrderModal.bind(null, load);
+  // Render the drill-down filter chip (dismissible). The page's own controls still
+  // layer on top; clearing the chip drops the pre-applied filter and reloads.
+  if (Object.keys(drill).length) {
+    setHTML('ordDrill',
+      '<span class="badge badge-primary" style="gap:6px">' + esc(routeParams.drillLabel || 'Filtered') +
+      ' <button type="button" id="ordDrillClear" title="Clear filter" ' +
+      'style="background:none;border:none;cursor:pointer;color:inherit;font-size:14px;line-height:1;padding:0">&times;</button></span>');
+    var _clr = document.getElementById('ordDrillClear');
+    if (_clr) _clr.onclick = function () { drill = {}; setHTML('ordDrill', ''); load(); };
+  }
   load();
 });
 
