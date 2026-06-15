@@ -24,7 +24,7 @@ Router.register('documents', function (el) {
                '<td>' + esc(r.country_code || '—') + '</td><td>' + statusBadge(r.status) + '</td>' +
                '<td>' + fmtDate(r.uploaded_at || r.created_at) + '</td>' +
                '<td class="actions">' +
-               (r.status === 'PENDING'
+               (r.status === 'PENDING' && can('customer.manage')
                  ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'REJECT\')">Reject</button>' +
                    '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();verifyDoc(\'' + did + '\',\'APPROVE\')">Approve</button>'
                  : '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewDoc(\'' + did + '\')">View</button>') +

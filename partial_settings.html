@@ -27,10 +27,10 @@ Router.register('settings', function (el) {
           (rows.length ? rows.map(function (r) {
             return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
                    '<td>' + esc(r.country_code || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
-                   '<td><button class="btn btn-secondary btn-sm" onclick="editConfig(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(r.country_code||'') + '\')">Edit</button></td></tr>';
+                   '<td>' + (can('order.manage') ? '<button class="btn btn-secondary btn-sm" onclick="editConfig(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(r.country_code||'') + '\')">Edit</button>' : '') + '</td></tr>';
           }).join('') : emptyRow(5, 'No config keys.')) +
           '</tbody></table></div>' +
-          '<div style="padding:10px 16px"><button class="btn btn-primary btn-sm" onclick="newConfigKey()">+ Add Key</button></div></div>');
+          (can('order.manage') ? '<div style="padding:10px 16px"><button class="btn btn-primary btn-sm" onclick="newConfigKey()">+ Add Key</button></div>' : '') + '</div>');
       }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     } else if (_tab === 'branding') {
       API.call('branding', 'get', { scope_code: 'GLOBAL' }).then(function (b) {
@@ -39,7 +39,7 @@ Router.register('settings', function (el) {
           '<div class="form-group"><label class="form-label">App Name</label><input class="form-control" id="brAppName" value="' + esc(b.app_name || '') + '"></div>' +
           '<div class="form-group"><label class="form-label">Support Email</label><input class="form-control" id="brEmail" value="' + esc(b.support_email || '') + '"></div>' +
           '<div class="form-group"><label class="form-label">Primary Color</label><input class="form-control" id="brColor" value="' + esc(b.primary_color || '#1F2A44') + '"></div>' +
-          '<button class="btn btn-primary" onclick="saveBranding()">Save</button>' +
+          (can('order.manage') ? '<button class="btn btn-primary" onclick="saveBranding()">Save</button>' : '') +
           '</div>');
       }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     } else {

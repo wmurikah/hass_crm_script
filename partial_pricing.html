@@ -22,7 +22,7 @@ Router.register('pricing', function (el) {
         '<option value="segment">Segment</option>' +
         '<option value="customer">Customer</option>' +
       '</select>' +
-      '<button class="btn btn-primary btn-sm" id="plNewBtn">+ New Price List</button>' +
+      (can('invoice.generate') ? '<button class="btn btn-primary btn-sm" id="plNewBtn">+ New Price List</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Scope</th><th>Country</th><th>Currency</th>' +
@@ -32,7 +32,8 @@ Router.register('pricing', function (el) {
     '<div id="plPreview" style="margin-top:14px"></div>';
 
   window._pricingReload = loadLists;
-  document.getElementById('plNewBtn').onclick      = function () { pricingListModal(null); };
+  var plNewBtn = document.getElementById('plNewBtn');
+  if (plNewBtn) plNewBtn.onclick = function () { pricingListModal(null); };
   document.getElementById('plScopeFilter').onchange = loadLists;
 
   function loadLists() {
@@ -83,8 +84,8 @@ function pricingRowHtml(r) {
     '<td>' + statusBadge(status) + '</td>' +
     '<td class="actions">' +
       '<button class="btn btn-secondary btn-sm pl-items" data-id="' + id + '">Manage Items</button>' +
-      '<button class="btn btn-secondary btn-sm pl-edit"  data-id="' + id + '">Edit</button>' +
-      (status === 'ACTIVE'
+      (can('invoice.generate') ? '<button class="btn btn-secondary btn-sm pl-edit"  data-id="' + id + '">Edit</button>' : '') +
+      (status === 'ACTIVE' && can('invoice.generate')
         ? '<button class="btn btn-danger btn-sm pl-deact" data-id="' + id + '">Deactivate</button>'
         : '') +
     '</td></tr>';
@@ -300,13 +301,14 @@ function pricingManageItems(priceId, listName) {
   setHTML('plItems',
     '<div class="card"><div class="card-header">' +
       '<span class="card-title">Items: ' + esc(listName || r.list_name || 'Price List') + '</span>' +
-      '<button class="btn btn-primary btn-sm" id="plAddItemBtn">+ Add Item</button>' +
+      (can('invoice.generate') ? '<button class="btn btn-primary btn-sm" id="plAddItemBtn">+ Add Item</button>' : '') +
     '</div><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Product</th><th>Unit Price</th><th>Disc %</th><th>Tax %</th>' +
         '<th>Min Qty</th><th>Max Qty</th><th>Depot</th><th>Effective</th><th></th></tr></thead>' +
       '<tbody id="plItemBody">' + loadingRow(9) + '</tbody>' +
     '</table></div></div>');
-  document.getElementById('plAddItemBtn').onclick = function () { pricingItemModal(priceId, null); };
+  var plAddItemBtn = document.getElementById('plAddItemBtn');
+  if (plAddItemBtn) plAddItemBtn.onclick = function () { pricingItemModal(priceId, null); };
   pricingLoadItems(priceId);
   var panel = document.getElementById('plItems');
   if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -333,8 +335,8 @@ function pricingLoadItems(priceId) {
         '<td>' + esc(it.depot_name || (it.depot_id ? it.depot_id : 'All')) + '</td>' +
         '<td style="font-size:12px">' + esc(eff) + '</td>' +
         '<td class="actions">' +
-          '<button class="btn btn-secondary btn-sm pli-edit">Edit</button>' +
-          '<button class="btn btn-danger btn-sm pli-del">Delete</button>' +
+          (can('invoice.generate') ? '<button class="btn btn-secondary btn-sm pli-edit">Edit</button>' : '') +
+          (can('invoice.generate') ? '<button class="btn btn-danger btn-sm pli-del">Delete</button>' : '') +
         '</td></tr>';
     }).join(''));
     var edits = document.querySelectorAll('#plItemBody .pli-edit');

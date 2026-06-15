@@ -52,7 +52,20 @@ function viewInvoice(id) {
             '<h4 style="font-size:13px;font-weight:600;margin-bottom:6px">Payment history</h4>' +
             '<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead>' +
             '<tbody>' + (payments || '<tr><td colspan="5" style="color:#9ca3af">No payments.</td></tr>') + '</tbody></table>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              (inv.status === 'ISSUED' && can('invoice.cancel')
+                ? '<button class="btn btn-danger btn-sm" onclick="cancelInvoice(\'' + esc(inv.invoice_id) + '\')">Cancel Invoice</button>' : ''),
     });
   }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+// Cancel affordance, wired to the existing invoices.cancel action (gated
+// invoice.cancel server-side). A reason is required by the handler.
+function cancelInvoice(id) {
+  var reason = window.prompt('Reason for cancelling this invoice:');
+  if (!reason) return;
+  API.call('invoices', 'cancel', { invoiceId: id, reason: reason })
+    .then(function () { Modal.close(); Toast.success('Invoice cancelled.'); Router.navigate('invoices', {}); })
+    .catch(function (e) { Toast.error(e.message); });
 }
 </script>

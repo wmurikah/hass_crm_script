@@ -24,7 +24,7 @@ Router.register('approvals', function (el) {
                '<td>' + esc(r.country_code || '—') + '</td><td>' + esc(r.required_approver_role || '—') + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
                '<td class="actions">' +
-               (r.status === 'PENDING'
+               (r.status === 'PENDING' && can('order.approve_low')
                  ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'reject\')">Reject</button>' +
                    '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'approve\')">Approve</button>'
                  : '') +
@@ -53,7 +53,7 @@ function viewApproval(requestId) {
             '<dt style="color:#6b7280">Created</dt><dd>' + fmtDateTime(a.created_at) + '</dd>' +
             '</dl>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
-              (a.status === 'PENDING'
+              (a.status === 'PENDING' && can('order.approve_low')
                 ? '<button class="btn btn-danger btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'reject\')">Reject</button>' +
                   '<button class="btn btn-primary btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'approve\')">Approve</button>'
                 : ''),

@@ -10,7 +10,7 @@ Router.register('users', function (el) {
       '<select class="form-control" id="usrRole"><option value="">All roles</option>' +
         ['SUPER_ADMIN','CS_MANAGER','CS_AGENT','FINANCE_MANAGER','FINANCE_OFFICER','COUNTRY_MANAGER','BD_REP','VIEWER'].map(function(r){return '<option>'+r+'</option>';}).join('') +
       '</select>' +
-      '<button class="btn btn-primary btn-sm" id="usrNewBtn">+ New User</button>' +
+      (can('user.create') ? '<button class="btn btn-primary btn-sm" id="usrNewBtn">+ New User</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Country</th><th>Status</th><th>Last Login</th><th></th></tr></thead>' +
@@ -27,21 +27,23 @@ Router.register('users', function (el) {
       _usersById = {};
       rows.forEach(function (u) { _usersById[u.user_id] = u; });
       setHTML('usrBody', rows.map(function (u) {
+        var uid = esc(u.user_id);
+        var actions = '';
+        if (can('user.update'))         actions += '<button class="btn btn-secondary btn-sm" onclick="editUser(\'' + uid + '\')">Edit</button> ';
+        if (can('user.reset_password')) actions += '<button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + uid + '\')">Reset PW</button>';
         return '<tr><td>' + esc(u.first_name + ' ' + u.last_name) + '</td>' +
                '<td>' + esc(u.email) + '</td><td>' + esc(u.role || u.primary_role || '—') + '</td>' +
                '<td>' + esc(u.country_code || '—') + '</td><td>' + statusBadge(u.status) + '</td>' +
                '<td>' + fmtDate(u.last_login_at) + '</td>' +
-               '<td class="actions">' +
-                 '<button class="btn btn-secondary btn-sm" onclick="editUser(\'' + esc(u.user_id) + '\')">Edit</button>' +
-                 '<button class="btn btn-secondary btn-sm" onclick="resetUserPw(\'' + esc(u.user_id) + '\')">Reset PW</button>' +
-               '</td></tr>';
+               '<td class="actions">' + actions + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('usrBody', errorRow(7, e, load)); });
   }
 
   _usersReload = load;
   document.getElementById('usrRole').onchange = load;
-  document.getElementById('usrNewBtn').onclick = function () { newUserModal(load); };
+  var usrNewBtn = document.getElementById('usrNewBtn');
+  if (usrNewBtn) usrNewBtn.onclick = function () { newUserModal(load); };
   load();
 });
 
