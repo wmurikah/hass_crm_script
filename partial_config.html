@@ -1,8 +1,9 @@
 <script>
 Router.register('config', function (el) {
+  var canManage = can('order.manage');
   el.innerHTML =
     '<div class="filter-bar">' +
-      '<button class="btn btn-primary btn-sm" id="cfgAddBtn">+ Add Key</button>' +
+      (canManage ? '<button class="btn btn-primary btn-sm" id="cfgAddBtn">+ Add Key</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Key</th><th>Value</th><th>Country</th><th>Updated</th><th></th></tr></thead>' +
@@ -14,17 +15,19 @@ Router.register('config', function (el) {
       if (!rows.length) { setHTML('cfgBody', emptyRow(5, 'No config keys.')); return; }
       setHTML('cfgBody', rows.map(function (r) {
         var cc = r.country_code || '';
+        var acts = canManage
+          ? '<button class="btn btn-secondary btn-sm" onclick="cfgEditKey(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(cc) + '\')">Edit</button> ' +
+            '<button class="btn btn-danger btn-sm" onclick="cfgDeleteKey(\'' + esc(r.config_key) + '\',\'' + esc(cc) + '\')">Delete</button>'
+          : '';
         return '<tr><td>' + esc(r.config_key) + '</td><td>' + esc(r.config_value) + '</td>' +
-               '<td>' + esc(cc || '—') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
-               '<td class="actions">' +
-                 '<button class="btn btn-secondary btn-sm" onclick="cfgEditKey(\'' + esc(r.config_key) + '\',\'' + esc(r.config_value) + '\',\'' + esc(cc) + '\')">Edit</button> ' +
-                 '<button class="btn btn-danger btn-sm" onclick="cfgDeleteKey(\'' + esc(r.config_key) + '\',\'' + esc(cc) + '\')">Delete</button>' +
-               '</td></tr>';
+               '<td>' + esc(cc || '-') + '</td><td>' + fmtDate(r.updated_at) + '</td>' +
+               '<td class="actions">' + acts + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('cfgBody', errorRow(5, e, load)); });
   }
 
-  document.getElementById('cfgAddBtn').onclick = function () { cfgNewKey(); };
+  var cfgAddBtn = document.getElementById('cfgAddBtn');
+  if (cfgAddBtn) cfgAddBtn.onclick = function () { cfgNewKey(); };
   load();
 });
 

@@ -6,7 +6,7 @@ Router.register('customers', function (el) {
       '<div class="search-input"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
         '<input type="text" id="custSearch" placeholder="Search customers…"></div>' +
       '<select class="form-control" id="custStatus"><option value="">All statuses</option><option>ACTIVE</option><option>INACTIVE</option></select>' +
-      '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' +
+      (can('customers.create') ? '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Account</th><th>Company</th><th>Country</th><th>Type</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
@@ -21,19 +21,23 @@ Router.register('customers', function (el) {
     if (s) params.status = s;
     API.call('customers', 'list', params).then(function (rows) {
       if (!rows.length) { setHTML('custBody', emptyRow(7, 'No customers found.')); return; }
+      var canEdit = can('customers.edit');
       setHTML('custBody', rows.map(function (r) {
         var cid = esc(r.customer_id);
         return '<tr style="cursor:pointer" onclick="viewCustomer(\'' + cid + '\')"><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
                '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
-               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button></td></tr>';
+               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button>' +
+               (canEdit ? '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editCustomer(\'' + cid + '\')">Edit</button>' : '') +
+               '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('custSearch').oninput = function () { searchQ = this.value; load(); };
   document.getElementById('custStatus').onchange = load;
-  document.getElementById('custNewBtn').onclick = function () { newCustomerModal(load); };
+  var custNewBtn = document.getElementById('custNewBtn');
+  if (custNewBtn) custNewBtn.onclick = function () { newCustomerModal(load); };
   load();
 });
 
@@ -52,6 +56,7 @@ function viewCustomer(id) {
             '<dt style="color:#6b7280">Created</dt><dd>' + fmtDate(c.created_at) + '</dd>' +
             '</dl>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              (can('customers.edit') ? '<button class="btn btn-secondary btn-sm" onclick="Modal.close();editCustomer(\'' + esc(c.customer_id) + '\')">Edit</button>' : '') +
               '<button class="btn btn-primary btn-sm" onclick="Modal.close();goRoute(\'contacts\',{customerId:\'' + esc(c.customer_id) + '\'})">View Contacts</button>',
     });
   }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
@@ -82,6 +87,68 @@ function newCustomerModal(onSuccess) {
           customer_type: document.getElementById('ncType').value,
         }).then(function () { Modal.close(); Toast.success('Customer created.'); if (onSuccess) onSuccess(); })
           .catch(function (e) { document.getElementById('ncError').textContent = e.message; });
+      };
+    },
+  });
+}
+
+// Edit affordance, gated by customers.edit and wired to the existing
+// customers.update action. Fetches the full row first so trading name, currency
+// and payment terms can be prefilled, then sends only the fields the user changed.
+function editCustomer(id) {
+  var l = Loader.show();
+  API.call('customers', 'get', { customerId: id }).then(function (c) {
+    Loader.hide(l);
+    editCustomerModal(c, function () { if (Router.current() === 'customers') Router.navigate('customers', {}); });
+  }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+function editCustomerModal(c, onSuccess) {
+  var TYPES   = ['DIRECT', 'DEALER', 'CORPORATE'];
+  var curType = String(c.customer_type || '');
+  var typeArr = TYPES.slice();
+  if (curType && typeArr.indexOf(curType) === -1) typeArr.unshift(curType);
+  var typeOpts = typeArr.map(function (v) {
+    return '<option' + (v === curType ? ' selected' : '') + '>' + esc(v) + '</option>';
+  }).join('');
+
+  Modal.open({
+    title: 'Edit Customer',
+    body:
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Company Name</label><input class="form-control" id="ecName" value="' + esc(c.company_name || '') + '"></div>' +
+        '<div class="form-group"><label class="form-label">Trading Name</label><input class="form-control" id="ecTrade" value="' + esc(c.trading_name || '') + '"></div>' +
+      '</div>' +
+      '<div class="form-row">' +
+        '<div class="form-group"><label class="form-label">Type</label><select class="form-control" id="ecType">' + typeOpts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Currency</label><input class="form-control" id="ecCur" value="' + esc(c.currency_code || '') + '" placeholder="KES"></div>' +
+      '</div>' +
+      '<div class="form-group"><label class="form-label">Payment Terms</label><input class="form-control" id="ecTerms" value="' + esc(c.payment_terms || '') + '" placeholder="NET30"></div>' +
+      '<div id="ecErr" style="color:var(--clr-danger);font-size:12px"></div>',
+    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+            '<button class="btn btn-primary" id="ecSave">Save changes</button>',
+    onOpen: function (bd) {
+      var saveBtn = bd.querySelector('#ecSave');
+      saveBtn.onclick = function () {
+        var err  = bd.querySelector('#ecErr');
+        err.textContent = '';
+        var name = bd.querySelector('#ecName').value.trim();
+        if (!name) { err.textContent = 'Company name cannot be empty.'; return; }
+
+        var patch   = { customerId: c.customer_id };
+        var changed = false;
+        function add(k, v, cur) { if (String(v) !== String(cur == null ? '' : cur)) { patch[k] = v; changed = true; } }
+        add('company_name',  name,                                  c.company_name);
+        add('trading_name',  bd.querySelector('#ecTrade').value.trim(), c.trading_name);
+        add('customer_type', bd.querySelector('#ecType').value,        c.customer_type);
+        add('currency_code', bd.querySelector('#ecCur').value.trim(),  c.currency_code);
+        add('payment_terms', bd.querySelector('#ecTerms').value.trim(), c.payment_terms);
+        if (!changed) { Modal.close(); return; }
+
+        saveBtn.disabled = true;
+        API.call('customers', 'update', patch)
+          .then(function () { Modal.close(); Toast.success('Customer updated.'); if (onSuccess) onSuccess(); })
+          .catch(function (e) { saveBtn.disabled = false; err.textContent = e.message; });
       };
     },
   });

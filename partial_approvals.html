@@ -18,13 +18,14 @@ Router.register('approvals', function (el) {
     if (status) params.status = status;
     API.call('approvals', action, params).then(function (rows) {
       if (!rows.length) { setHTML('appBody', emptyRow(7, 'No approval requests.')); return; }
+      var canApprove = can('order.approve_low');
       setHTML('appBody', rows.map(function (r) {
         var rid = esc(r.request_id);
         return '<tr style="cursor:pointer" onclick="viewApproval(\'' + rid + '\')"><td style="font-size:11px">' + esc(r.entity_id) + '</td><td>' + esc(r.entity_type) + '</td>' +
-               '<td>' + esc(r.country_code || '—') + '</td><td>' + esc(r.required_approver_role || '—') + '</td>' +
+               '<td>' + esc(r.country_code || '-') + '</td><td>' + esc(r.required_approver_role || '-') + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
                '<td class="actions">' +
-               (r.status === 'PENDING'
+               (r.status === 'PENDING' && canApprove
                  ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'reject\')">Reject</button>' +
                    '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'approve\')">Approve</button>'
                  : '') +
@@ -46,14 +47,14 @@ function viewApproval(requestId) {
       title: 'Approval Request',
       body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
             '<dt style="color:#6b7280">Entity</dt><dd>' + esc(a.entity_type) + ' / ' + esc(a.entity_id) + '</dd>' +
-            '<dt style="color:#6b7280">Country</dt><dd>' + esc(a.country_code || '—') + '</dd>' +
-            '<dt style="color:#6b7280">Required Role</dt><dd>' + esc(a.required_approver_role || '—') + '</dd>' +
-            '<dt style="color:#6b7280">Workflow</dt><dd>' + esc(a.workflow_name || '—') + '</dd>' +
+            '<dt style="color:#6b7280">Country</dt><dd>' + esc(a.country_code || '-') + '</dd>' +
+            '<dt style="color:#6b7280">Required Role</dt><dd>' + esc(a.required_approver_role || '-') + '</dd>' +
+            '<dt style="color:#6b7280">Workflow</dt><dd>' + esc(a.workflow_name || '-') + '</dd>' +
             '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(a.status) + '</dd>' +
             '<dt style="color:#6b7280">Created</dt><dd>' + fmtDateTime(a.created_at) + '</dd>' +
             '</dl>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
-              (a.status === 'PENDING'
+              (a.status === 'PENDING' && can('order.approve_low')
                 ? '<button class="btn btn-danger btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'reject\')">Reject</button>' +
                   '<button class="btn btn-primary btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'approve\')">Approve</button>'
                 : ''),
