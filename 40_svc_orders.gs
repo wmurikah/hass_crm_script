@@ -103,6 +103,19 @@ var Orders = (function () {
     if (params.status)       { sql += ' AND o.status = ?';       args.push(params.status); }
     if (params.customer_id)  { sql += ' AND o.customer_id = ?';  args.push(params.customer_id); }
     if (params.country_code) { sql += ' AND o.country_code = ?'; args.push(params.country_code); }
+    // Chart drill-down filters. `month` and `currency_code` mirror, byte-for-byte,
+    // the predicates the dashboard.charts aggregation groups by, so a drill-down
+    // returns exactly the rows behind the clicked bar/point. `exclude_statuses`
+    // mirrors the revenue chart's confirmed-only filter (NOT IN draft/cancel/reject).
+    if (params.month)         { sql += " AND strftime('%Y-%m', o.created_at) = ?"; args.push(String(params.month)); }
+    if (params.currency_code) { sql += " AND UPPER(COALESCE(o.currency_code,'')) = ?"; args.push(String(params.currency_code).toUpperCase()); }
+    if (params.exclude_statuses) {
+      var ex = String(params.exclude_statuses).split(',').map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean);
+      if (ex.length) {
+        sql += ' AND UPPER(o.status) NOT IN (' + ex.map(function () { return '?'; }).join(',') + ')';
+        ex.forEach(function (s) { args.push(s); });
+      }
+    }
     if (params.from_date)    { sql += ' AND o.created_at >= ?';  args.push(params.from_date); }
     if (params.to_date)      { sql += ' AND o.created_at <= ?';  args.push(params.to_date); }
     sql += ' ORDER BY o.created_at DESC LIMIT ' + (parseInt(params.limit, 10) || 100);

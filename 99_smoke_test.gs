@@ -492,6 +492,7 @@ function smokeCrosscut() {
  *   8. Negative: submit already-SUBMITTED order → error
  *   9. Negative: no sessionToken → NO_SESSION
  *  10. Negative: TZ-scoped session on KE order → NOT_FOUND
+ *  11. Chart drill filters: month / currency_code / exclude_statuses on list
  */
 function smokeOrders() {
   var results = [];
@@ -703,6 +704,32 @@ function smokeOrders() {
     if (res.ok !== false)          throw new Error('Expected ok=false');
     var code = res.error && res.error.code;
     if (code !== 'NOT_FOUND')      throw new Error('Expected NOT_FOUND, got: ' + code);
+  });
+
+  // ── 11. Chart drill-down filters on orders.list ──────────────────────────
+  // month / currency_code / exclude_statuses are the predicates the dashboard
+  // chart drill-downs apply. orderId is a KES, KE, DELIVERED order created this
+  // month, so it must pass the same confirmed-revenue filter the revenue chart
+  // drills with, and be excluded by a non-matching month/currency/status.
+  check('11. orders.list drill filters (month, currency_code, exclude_statuses)', function () {
+    if (!orderId) throw new Error('orderId not set');
+    var now = new Date();
+    var ym  = now.getUTCFullYear() + '-' + ('0' + (now.getUTCMonth() + 1)).slice(-2);
+
+    function listIds(params) {
+      var r = processRequest({ service: 'orders', action: 'list', sessionToken: saToken, params: params });
+      if (!r.ok) throw new Error('list failed: ' + JSON.stringify(r.error));
+      return r.data.map(function (o) { return o.order_id; });
+    }
+    function has(ids) { return ids.indexOf(orderId) !== -1; }
+
+    if (!has(listIds({ month: ym })))                throw new Error('month filter dropped a current-month order');
+    if (has(listIds({ month: '1999-01' })))          throw new Error('month filter returned a wrong-month order');
+    if (!has(listIds({ currency_code: 'kes' })))     throw new Error('currency_code filter dropped a KES order (case-insensitive)');
+    if (has(listIds({ currency_code: 'ZZZ' })))      throw new Error('currency_code filter returned a wrong-currency order');
+    if (has(listIds({ exclude_statuses: 'DELIVERED' }))) throw new Error('exclude_statuses did not drop a DELIVERED order');
+    if (!has(listIds({ month: ym, currency_code: 'KES', exclude_statuses: 'DRAFT,CANCELLED,REJECTED' })))
+      throw new Error('confirmed-revenue drill dropped a DELIVERED order');
   });
 
   // ── Cleanup ────────────────────────────────────────────────────────────────

@@ -391,6 +391,127 @@ Router.register('dashboard', function (el) {
     }).join('') + '</div>';
   }
 
+  // ── Drill-down (every chart segment opens a scoped, paginated record list) ──
+  // Clicking a slice/bar/point captures the segment's dimension value and opens
+  // a modal that fetches the underlying records through the SAME existing list
+  // action the list pages use, with the filter applied and paginated SERVER-side
+  // (~25/row peek-ahead). Rows open the record's own detail view (chart -> list
+  // -> record); "View all" deep-links to the full list page with the filter
+  // pre-applied; "Close" dismisses. Scope/permissions are enforced by those list
+  // actions server-side; we also gate clickability client-side so a user who
+  // cannot view an entity type gets no drill-down into it.
+  var OVW_DRILL_PER = 25;
+
+  function _ovwCan(perm) { return !!(window.HassPerms && window.HassPerms.has(perm)); }
+
+  // Pointer cursor only while hovering a clickable segment.
+  function ovwPointer(evt, els) {
+    var t = evt && evt.native && evt.native.target;
+    if (t) t.style.cursor = (els && els.length) ? 'pointer' : 'default';
+  }
+  // Resolve the clicked category index. Bars/lines use index mode so a click
+  // anywhere in the band counts; doughnut callers pass intersect-only els.
+  function ovwIndexFromClick(evt, els, chart) {
+    if (els && els.length) return els[0].index;
+    try {
+      var alt = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
+      if (alt && alt.length) return alt[0].index;
+    } catch (e) {}
+    return -1;
+  }
+
+  function _ovwTicketRow(r) {
+    var id = esc(r.ticket_id);
+    return '<tr style="cursor:pointer" onclick="viewTicket(\'' + id + '\')">' +
+      '<td>' + esc(r.ticket_number || '') + '</td>' +
+      '<td>' + esc(r.subject || '') + '</td>' +
+      '<td>' + statusBadge(r.priority) + '</td>' +
+      '<td>' + fmtDate(r.created_at) + '</td></tr>';
+  }
+  function _ovwOrderRow(r) {
+    var id = esc(r.order_id);
+    return '<tr style="cursor:pointer" onclick="viewOrder(\'' + id + '\')">' +
+      '<td>' + esc(r.order_number || '') + '</td>' +
+      '<td>' + esc(r.company_name || r.customer_id || '') + '</td>' +
+      '<td style="text-align:right">' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
+      '<td>' + statusBadge(r.status) + '</td>' +
+      '<td>' + fmtDate(r.created_at) + '</td></tr>';
+  }
+
+  // spec = { perm, title, subtitle, service, action, filter, columns, rowHtml,
+  //          emptyMsg, viewAll:{route,params} }
+  function ovwOpenDrill(spec) {
+    if (spec.perm && !_ovwCan(spec.perm)) {
+      Toast.error('You do not have access to view these records.');
+      return;
+    }
+    var page = 0;
+    var uid  = '_ovd' + Math.random().toString(36).slice(2);
+
+    Modal.open({
+      title: spec.title,
+      body: '<div style="font-size:12.5px;color:var(--clr-text-light);margin:-6px 0 12px">' + esc(spec.subtitle || '') + '</div>' +
+            '<div id="' + uid + '">' + spinnerHTML(30) + '</div>',
+      footer: '<button class="btn btn-secondary" id="' + uid + '_close">Close</button>' +
+              '<button class="btn btn-primary" id="' + uid + '_all">View all</button>',
+      onOpen: function (bd) {
+        var modalEl = bd.querySelector('.modal');
+        if (modalEl) modalEl.style.width = '720px';
+        bd.querySelector('#' + uid + '_close').onclick = function () { Modal.close(); };
+        bd.querySelector('#' + uid + '_all').onclick = function () {
+          Modal.close();
+          goRoute(spec.viewAll.route, spec.viewAll.params || {});
+        };
+        fetchPage();
+      },
+    });
+
+    function fetchPage() {
+      var host = document.getElementById(uid);
+      if (!host) return;                       // modal dismissed mid-flight
+      host.innerHTML = spinnerHTML(30);
+      // Peek-ahead: ask for one more than a page so we know if a next page exists
+      // without a separate COUNT round-trip. Aggregation/scoping stay server-side.
+      var q = Object.assign({}, spec.filter, { limit: OVW_DRILL_PER + 1, offset: page * OVW_DRILL_PER });
+      API.call(spec.service, spec.action, q).then(function (rows) {
+        var h = document.getElementById(uid);
+        if (!h) return;
+        rows = rows || [];
+        var hasNext = rows.length > OVW_DRILL_PER;
+        if (hasNext) rows = rows.slice(0, OVW_DRILL_PER);
+        if (!rows.length) {
+          h.innerHTML = '<div class="empty-state" style="padding:32px 16px">' + esc(spec.emptyMsg || 'No records found.') + '</div>';
+          return;
+        }
+        var startN = page * OVW_DRILL_PER + 1;
+        var endN   = page * OVW_DRILL_PER + rows.length;
+        h.innerHTML =
+          '<div class="table-wrapper"><table class="data-table"><thead><tr>' +
+            spec.columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') +
+          '</tr></thead><tbody>' + rows.map(spec.rowHtml).join('') + '</tbody></table></div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">' +
+            '<span style="font-size:12px;color:var(--clr-text-light)">Showing ' + startN + ' to ' + endN + '</span>' +
+            '<span style="display:flex;gap:6px">' +
+              '<button class="page-btn" id="' + uid + '_prev"' + (page <= 0 ? ' disabled' : '') + '>« Prev</button>' +
+              '<button class="page-btn" id="' + uid + '_next"' + (hasNext ? '' : ' disabled') + '>Next »</button>' +
+            '</span></div>';
+        var pv = document.getElementById(uid + '_prev');
+        var nx = document.getElementById(uid + '_next');
+        if (pv && page > 0)  pv.onclick = function () { page--; fetchPage(); };
+        if (nx && hasNext)   nx.onclick = function () { page++; fetchPage(); };
+      }).catch(function (e) {
+        var h = document.getElementById(uid);
+        if (!h) return;
+        var rid = uid + '_retry';
+        h.innerHTML = '<div class="empty-state" style="padding:28px 16px">' +
+          '<p style="color:var(--clr-danger);margin:0 0 12px">' + esc(e && e.message ? e.message : 'Could not load records.') + '</p>' +
+          '<button class="btn btn-primary btn-sm" id="' + rid + '">Retry</button></div>';
+        var rb = document.getElementById(rid);
+        if (rb) rb.onclick = fetchPage;
+      });
+    }
+  }
+
   function loadCharts() {
     // First paint right after login is served from the auth.me init bundle.
     var pre = window._hassInitDash && window._hassInitDash.charts;
@@ -428,6 +549,11 @@ Router.register('dashboard', function (el) {
     var countryTotal = oc.reduce(function (s, r) { return s + (r.count || 0); }, 0);
     var ticketTotal  = ts.reduce(function (s, r) { return s + (r.count || 0); }, 0);
 
+    // Drill-down is gated by the same permission the target list action requires.
+    // order.view is implied (this whole panel needs it); ticket.view is separate,
+    // so the doughnut is only made clickable when the user can view tickets.
+    var canDrillTickets = _ovwCan('ticket.view');
+
     // Tear down any charts from a previous render in this mount before rebuilding.
     _ovwCharts.forEach(function (c) { try { c.destroy(); } catch (e) {} });
     _ovwCharts = [];
@@ -448,6 +574,23 @@ Router.register('dashboard', function (el) {
             borderWidth: 1, borderRadius: 4, maxBarThickness: 46 }] },
         options: {
           responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          interaction: { mode: 'index', intersect: false },
+          onHover: ovwPointer,
+          onClick: function (e, els, chart) {
+            var i = ovwIndexFromClick(e, els, chart);
+            var m = (rev.months || [])[i];
+            if (i < 0 || !m) return;
+            var ml = monthLong(m);
+            ovwOpenDrill({
+              perm: 'order.view', service: 'orders', action: 'list',
+              title: 'Revenue · ' + ml + ' (' + esc(ccy) + ')',
+              subtitle: 'Confirmed orders behind ' + ccy + ' revenue in ' + ml,
+              filter: { month: m, currency_code: ccy, exclude_statuses: 'DRAFT,CANCELLED,REJECTED' },
+              columns: ['Order #', 'Customer', 'Total', 'Status', 'Date'], rowHtml: _ovwOrderRow,
+              emptyMsg: 'No confirmed ' + ccy + ' orders in ' + ml + '.',
+              viewAll: { route: 'orders', params: { month: m, currency_code: ccy, exclude_statuses: 'DRAFT,CANCELLED,REJECTED', drillLabel: 'Revenue · ' + ml + ' · ' + ccy } },
+            });
+          },
           plugins: {
             legend: { display: false },
             tooltip: { intersect: false, mode: 'index', callbacks: {
@@ -513,6 +656,21 @@ Router.register('dashboard', function (el) {
             pointBackgroundColor: OVW_NAVY, pointBorderColor: '#fff', pointBorderWidth: 1 }] },
         options: {
           responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          interaction: { mode: 'index', intersect: false },
+          onHover: ovwPointer,
+          onClick: function (e, els, chart) {
+            var i = ovwIndexFromClick(e, els, chart);
+            if (i < 0 || !om[i]) return;
+            var ml = monthLong(om[i].month);
+            ovwOpenDrill({
+              perm: 'order.view', service: 'orders', action: 'list',
+              title: 'Orders · ' + ml, subtitle: 'Orders created in ' + ml,
+              filter: { month: om[i].month },
+              columns: ['Order #', 'Customer', 'Total', 'Status', 'Date'], rowHtml: _ovwOrderRow,
+              emptyMsg: 'No orders in ' + ml + '.',
+              viewAll: { route: 'orders', params: { month: om[i].month, drillLabel: 'Month · ' + ml } },
+            });
+          },
           plugins: {
             legend: { display: false },
             tooltip: { intersect: false, mode: 'index', callbacks: {
@@ -551,6 +709,22 @@ Router.register('dashboard', function (el) {
         options: {
           indexAxis: 'y',
           responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          interaction: { mode: 'index', intersect: false, axis: 'y' },
+          onHover: ovwPointer,
+          onClick: function (e, els, chart) {
+            var i = ovwIndexFromClick(e, els, chart);
+            var row = oc[i];
+            if (i < 0 || !row || !row.country) return;
+            ovwOpenDrill({
+              perm: 'order.view', service: 'orders', action: 'list',
+              title: 'Orders · ' + esc(row.label),
+              subtitle: 'Orders from ' + row.label + ' (' + row.country + ')',
+              filter: { country_code: row.country },
+              columns: ['Order #', 'Customer', 'Total', 'Status', 'Date'], rowHtml: _ovwOrderRow,
+              emptyMsg: 'No orders from ' + row.label + '.',
+              viewAll: { route: 'orders', params: { country_code: row.country, drillLabel: 'Country · ' + row.label } },
+            });
+          },
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: {
@@ -575,6 +749,22 @@ Router.register('dashboard', function (el) {
             backgroundColor: OVW_STATUS_COLORS, borderColor: '#fff', borderWidth: 2, hoverOffset: 6 }] },
         options: {
           responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, cutout: '60%',
+          onHover: canDrillTickets ? ovwPointer : undefined,
+          onClick: canDrillTickets ? function (e, els) {
+            if (!els || !els.length) return;       // ignore clicks in the centre hole
+            var i = els[0].index;
+            var st = ts[i] && ts[i].status;
+            if (!st) return;
+            var label = _cap(st);
+            ovwOpenDrill({
+              perm: 'ticket.view', service: 'tickets', action: 'list',
+              title: label + ' tickets', subtitle: 'Tickets currently in ' + label + ' status',
+              filter: { status: st },
+              columns: ['Ticket #', 'Subject', 'Priority', 'Created'], rowHtml: _ovwTicketRow,
+              emptyMsg: 'No ' + label.toLowerCase() + ' tickets.',
+              viewAll: { route: 'tickets', params: { status: st } },
+            });
+          } : undefined,
           plugins: {
             legend: { position: 'bottom', labels: { color: '#374151', boxWidth: 12, padding: 12, font: { size: 11.5 } } },
             tooltip: { callbacks: {
