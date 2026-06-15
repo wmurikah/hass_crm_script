@@ -304,10 +304,11 @@
     // ── Dashboard first-screen data ── hand the bundle's summary + SLA to the
     // dashboard route so it paints WITHOUT firing its own two calls. Consumed
     // once (see partial_dashboard.html); later visits fetch live data.
-    if (bundle.dashboardSummary || bundle.dashboardSla) {
+    if (bundle.dashboardSummary || bundle.dashboardSla || bundle.dashboardCharts) {
       window._hassInitDash = {
         summary: bundle.dashboardSummary || null,
         sla:     bundle.dashboardSla     || null,
+        charts:  bundle.dashboardCharts  || null,
       };
     }
 

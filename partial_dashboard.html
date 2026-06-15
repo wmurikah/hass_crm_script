@@ -34,6 +34,31 @@
 .sla-mini-bar       { width: 100%; background: var(--clr-danger); border-radius: 2px 2px 0 0; min-height: 2px; }
 .sla-comp-fb        { display: flex; flex-direction: column; gap: 10px; justify-content: center; height: 100%; font-size: 13px; color: var(--clr-text); }
 @media (max-width: 768px) { .sla-grid { grid-template-columns: 1fr; } }
+/* ── Business overview charts (navy/gold brand; 2x2 grid → 1 column on narrow) ── */
+.ovw-section        { margin-top: 24px; }
+.ovw-section-title  { font-size: 16px; font-weight: 700; color: var(--clr-primary); margin: 0 0 12px;
+                      display: flex; align-items: center; gap: 8px; }
+.ovw-section-title::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: var(--clr-gold); }
+.ovw-grid           { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ovw-card           { display: flex; flex-direction: column; }
+.ovw-card-head      { padding: 12px 14px 4px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ovw-card-titles    { min-width: 0; }
+.ovw-card-title     { display: block; font-size: 13.5px; font-weight: 600; color: var(--clr-text); }
+.ovw-card-sub       { display: block; font-size: 11.5px; color: var(--clr-text-light); margin-top: 2px; }
+.ovw-card-body      { position: relative; height: 240px; padding: 8px 14px 14px; }
+/* Calm empty state, mirrors the SLA card empty state (icon + short message). */
+.ovw-empty          { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                      gap: 8px; color: var(--clr-text-light); text-align: center; font-size: 13px; padding: 0 16px; }
+.ovw-empty svg      { opacity: .5; }
+/* Currency selector keeps a single currency on screen (revenue is never summed across currencies). */
+.ovw-ccy-sel        { flex-shrink: 0; font-size: 12px; padding: 4px 8px; border: 1px solid var(--clr-border);
+                      border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); max-width: 130px; }
+.ovw-ccy-sel:focus  { outline: none; border-color: var(--clr-primary); box-shadow: 0 0 0 3px rgba(31,42,68,.15); }
+/* Text fallback list if Chart.js cannot be fetched (offline / strict CSP). */
+.ovw-fb             { display: flex; flex-direction: column; gap: 6px; justify-content: center; height: 100%; font-size: 12.5px; color: var(--clr-text); }
+.ovw-fb-row         { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ovw-fb-row b       { font-variant-numeric: tabular-nums; }
+@media (max-width: 768px) { .ovw-grid { grid-template-columns: 1fr; } }
 /* ── Skeleton placeholders (instant first paint while data loads) ── */
 .skeleton        { position: relative; overflow: hidden; background: #eceff3; border-radius: 6px; }
 .skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
@@ -47,6 +72,11 @@
 Router.register('dashboard', function (el) {
   el.innerHTML =
     '<div class="stat-grid" id="dashStats">' + statSkeletons() + '</div>' +
+    // ── Business overview charts (below the KPIs, above SLA detail) ──
+    '<div class="ovw-section">' +
+      '<h2 class="ovw-section-title">Business overview</h2>' +
+      '<div class="ovw-grid" id="ovwGrid">' + ovwSkeletons() + '</div>' +
+    '</div>' +
     // ── SLA Performance section (below the KPI cards, scanning order preserved) ──
     '<div class="sla-section">' +
       '<h2 class="sla-section-title">SLA Performance</h2>' +
@@ -107,6 +137,17 @@ Router.register('dashboard', function (el) {
           '<span class="skeleton sk-line" style="width:72%;margin-top:6px"></span>' +
         '</div>' +
         '<div class="sla-card-body"><div class="skeleton" style="width:100%;height:100%"></div></div>' +
+      '</div>';
+    var out = ''; for (var i = 0; i < 4; i++) out += card; return out;
+  }
+  function ovwSkeletons() {
+    var card =
+      '<div class="card ovw-card">' +
+        '<div class="ovw-card-head"><div class="ovw-card-titles" style="flex:1">' +
+          '<span class="skeleton sk-line" style="width:46%"></span>' +
+          '<span class="skeleton sk-line" style="width:66%;margin-top:6px"></span>' +
+        '</div></div>' +
+        '<div class="ovw-card-body"><div class="skeleton" style="width:100%;height:100%"></div></div>' +
       '</div>';
     var out = ''; for (var i = 0; i < 4; i++) out += card; return out;
   }
@@ -295,7 +336,261 @@ Router.register('dashboard', function (el) {
   }
   function _cap(s) { s = String(s || ''); return s.charAt(0) + s.slice(1).toLowerCase(); }
 
+  // ── Business overview (four charts, one backend call: dashboard.charts) ──────
+  // Chart types chosen by what the data is, not by habit:
+  //   - Orders over time  -> LINE  (a time series belongs on a line)
+  //   - Revenue by month  -> vertical BAR (discrete period comparison; one
+  //                          currency at a time via a selector, never summed
+  //                          across currencies)
+  //   - Orders by country -> horizontal BAR (~8 categories read better than a pie)
+  //   - Tickets by status -> DOUGHNUT (the one true part-to-whole, 5 slices)
+  // Brand palette stays consistent: orders are navy everywhere, revenue is gold,
+  // ticket statuses use brand tints. Meaning never rides on colour alone (every
+  // chart keeps axis labels or a legend), and axis text is AA on white.
+  var OVW_NAVY = '#1F2D5C', OVW_NAVY_DEEP = '#0B1733', OVW_NAVY_TINT = '#3E63A8',
+      OVW_GOLD = '#C9A227', OVW_GOLD_DK = '#A07E1C', OVW_ORANGE = '#E06820', OVW_SLATE = '#7E8AA6';
+  // NEW, OPEN, PENDING, RESOLVED, CLOSED (order matches the server series).
+  var OVW_STATUS_COLORS = [OVW_NAVY, OVW_NAVY_TINT, OVW_GOLD, OVW_ORANGE, OVW_SLATE];
+  var OVW_GRIDLINE = '#eef1f5', OVW_AXIS = '#4b5563';     // #4b5563 clears WCAG AA on white
+  var _ovwCharts = [];     // count/category charts created this mount (destroyed on re-render)
+  var _ovwRevChart = null; // revenue chart, recreated when the currency selector changes
+
+  function _axisTicks(extra) { return Object.assign({ color: OVW_AXIS, font: { size: 11 } }, extra || {}); }
+  function _fmtInt(n) { n = Number(n) || 0; return Math.round(n).toLocaleString(); }
+  function _fmtCompact(n) {
+    n = Number(n) || 0; var a = Math.abs(n);
+    if (a >= 1e9) return (n / 1e9).toFixed(a >= 1e10 ? 0 : 1).replace(/\.0$/, '') + 'B';
+    if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+    if (a >= 1e3) return (n / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+    return _fmtInt(n);
+  }
+  var _MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _MON_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function _ymParts(ym) { var p = String(ym || '').split('-'); return { y: parseInt(p[0], 10) || 0, m: (parseInt(p[1], 10) || 1) - 1 }; }
+  function monthShort(ym) { var o = _ymParts(ym); return _MON_ABBR[o.m] || ym; }
+  function monthLong(ym)  { var o = _ymParts(ym); return (_MON_FULL[o.m] || '') + ' ' + o.y; }
+
+  function ovwPanel(title, sub, bodyHtml, headExtra) {
+    return '<div class="card ovw-card">' +
+      '<div class="ovw-card-head"><div class="ovw-card-titles">' +
+        '<span class="ovw-card-title">' + esc(title) + '</span>' +
+        '<span class="ovw-card-sub">' + esc(sub) + '</span>' +
+      '</div>' + (headExtra || '') + '</div>' +
+      '<div class="ovw-card-body">' + bodyHtml + '</div></div>';
+  }
+  function ovwCalm(msg) {
+    return '<div class="ovw-empty">' +
+      '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+      '<line x1="3" y1="20" x2="21" y2="20"/><rect x="5" y="11" width="3.4" height="7"/><rect x="10.3" y="7" width="3.4" height="11"/><rect x="15.6" y="13" width="3.4" height="5"/></svg>' +
+      '<span>' + esc(msg) + '</span></div>';
+  }
+  // Text list fallback when Chart.js cannot be fetched (offline / strict CSP).
+  function ovwFallback(rows, fmt) {
+    return '<div class="ovw-fb">' + rows.map(function (r) {
+      return '<div class="ovw-fb-row"><span>' + esc(r.label) + '</span><b>' + esc(fmt ? fmt(r.val) : _fmtInt(r.val)) + '</b></div>';
+    }).join('') + '</div>';
+  }
+
+  function loadCharts() {
+    // First paint right after login is served from the auth.me init bundle.
+    var pre = window._hassInitDash && window._hassInitDash.charts;
+    if (pre) {
+      window._hassInitDash.charts = null;
+      ensureChart(function (chartOk) {
+        if (Router.current() !== 'dashboard') return;
+        renderCharts(pre, chartOk);
+      });
+      return;
+    }
+    setHTML('ovwGrid', ovwSkeletons());
+    API.call('dashboard', 'charts', {}).then(function (d) {
+      if (Router.current() !== 'dashboard') return;
+      ensureChart(function (chartOk) {
+        if (Router.current() !== 'dashboard') return;
+        renderCharts(d, chartOk);
+      });
+    }).catch(function (e) {
+      setHTML('ovwGrid', '<div style="grid-column:1/-1">' + errorCard(e, loadCharts) + '</div>');
+    });
+  }
+
+  function renderCharts(d, chartOk) {
+    if (Router.current() !== 'dashboard') return;
+    d = d || {};
+    var om  = d.ordersByMonth   || [];
+    var rev = d.revenueByMonth  || { months: [], currencies: [], series: {} };
+    var oc  = d.ordersByCountry || [];
+    var ts  = d.ticketsByStatus || [];
+
+    var ordersTotal  = om.reduce(function (s, r) { return s + (r.count || 0); }, 0);
+    var ccyList      = rev.currencies || [];
+    var hasRevenue   = ccyList.length > 0;
+    var countryTotal = oc.reduce(function (s, r) { return s + (r.count || 0); }, 0);
+    var ticketTotal  = ts.reduce(function (s, r) { return s + (r.count || 0); }, 0);
+
+    // Tear down any charts from a previous render in this mount before rebuilding.
+    _ovwCharts.forEach(function (c) { try { c.destroy(); } catch (e) {} });
+    _ovwCharts = [];
+    if (_ovwRevChart) { try { _ovwRevChart.destroy(); } catch (e) {} _ovwRevChart = null; }
+
+    // Recreate the revenue bar for one currency. Kept inline so it closes over
+    // `rev`; the selector calls it again with a different currency.
+    function drawRevenue(ccy) {
+      var cv = document.getElementById('ovwRevenueCv');
+      if (!cv) return;
+      if (_ovwRevChart) { try { _ovwRevChart.destroy(); } catch (e) {} _ovwRevChart = null; }
+      var vals = (rev.series && rev.series[ccy]) ? rev.series[ccy] : [];
+      _ovwRevChart = new Chart(cv, {
+        type: 'bar',
+        data: { labels: (rev.months || []).map(monthShort),
+          datasets: [{ label: ccy + ' revenue', data: vals,
+            backgroundColor: OVW_GOLD, hoverBackgroundColor: OVW_GOLD_DK, borderColor: OVW_GOLD_DK,
+            borderWidth: 1, borderRadius: 4, maxBarThickness: 46 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: {
+            legend: { display: false },
+            tooltip: { intersect: false, mode: 'index', callbacks: {
+              title: function (it) { return it.length ? monthLong((rev.months || [])[it[0].dataIndex]) : ''; },
+              label: function (ctx) { return fmtMoney(ctx.parsed.y, ccy); } } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: _axisTicks({ maxRotation: 0 }) },
+            y: { beginAtZero: true, grid: { color: OVW_GRIDLINE }, border: { display: false },
+                 ticks: _axisTicks({ maxTicksLimit: 5, callback: function (v) { return _fmtCompact(v); } }) },
+          },
+        },
+      });
+    }
+
+    // ── Panel bodies (canvas when Chart.js is ready, calm/fallback otherwise) ──
+    var ordersBody = ordersTotal === 0
+      ? ovwCalm('No orders in the last 6 months yet.')
+      : (chartOk ? '<canvas id="ovwOrdersCv"></canvas>'
+                 : ovwFallback(om.map(function (r) { return { label: monthShort(r.month), val: r.count }; })));
+
+    var defCcy  = hasRevenue ? ccyList[0] : '';
+    var revHead = hasRevenue
+      ? '<select class="ovw-ccy-sel" id="ovwCcySel" aria-label="Revenue currency">' +
+          ccyList.map(function (c) { return '<option value="' + esc(c) + '"' + (c === defCcy ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') +
+        '</select>'
+      : '';
+    var revBody = !hasRevenue
+      ? ovwCalm('No revenue in the last 6 months yet.')
+      : (chartOk ? '<canvas id="ovwRevenueCv"></canvas>'
+                 : ovwFallback((rev.months || []).map(function (m, i) { return { label: monthShort(m), val: (rev.series[defCcy] || [])[i] || 0 }; }),
+                               function (v) { return fmtMoney(v, defCcy); }));
+
+    var countryBody = countryTotal === 0
+      ? ovwCalm('No orders by country yet.')
+      : (chartOk ? '<canvas id="ovwCountryCv"></canvas>'
+                 : ovwFallback(oc.map(function (r) { return { label: r.label, val: r.count }; })));
+
+    var ticketsBody = ticketTotal === 0
+      ? ovwCalm('No tickets yet.')
+      : (chartOk ? '<canvas id="ovwTicketsCv"></canvas>'
+                 : ovwFallback(ts.map(function (r) { return { label: _cap(r.status), val: r.count }; })));
+
+    var revSub = hasRevenue ? ('Confirmed order value per month, ' + defCcy) : 'Confirmed order value per month';
+
+    setHTML('ovwGrid',
+      ovwPanel('Orders over time', 'Orders created per month, last 6 months', ordersBody) +
+      ovwPanel('Revenue by month', revSub, revBody, revHead) +
+      ovwPanel('Orders by country', 'Active countries by order count', countryBody) +
+      ovwPanel('Tickets by status', 'Spread across the five lifecycle statuses', ticketsBody)
+    );
+
+    if (!chartOk) return;   // fallbacks already rendered; nothing to instantiate
+
+    // ── 1. Orders over time (line) ──
+    if (ordersTotal > 0) {
+      _ovwCharts.push(new Chart(document.getElementById('ovwOrdersCv'), {
+        type: 'line',
+        data: { labels: om.map(function (r) { return monthShort(r.month); }),
+          datasets: [{ label: 'Orders', data: om.map(function (r) { return r.count; }),
+            borderColor: OVW_NAVY, backgroundColor: 'rgba(31,45,92,.10)', fill: true,
+            tension: .3, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+            pointBackgroundColor: OVW_NAVY, pointBorderColor: '#fff', pointBorderWidth: 1 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: {
+            legend: { display: false },
+            tooltip: { intersect: false, mode: 'index', callbacks: {
+              title: function (it) { return it.length ? monthLong(om[it[0].dataIndex].month) : ''; },
+              label: function (ctx) { return 'Orders: ' + _fmtInt(ctx.parsed.y); } } },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: _axisTicks({ maxRotation: 0 }) },
+            y: { beginAtZero: true, grid: { color: OVW_GRIDLINE }, border: { display: false },
+                 ticks: _axisTicks({ precision: 0, maxTicksLimit: 5, callback: function (v) { return _fmtInt(v); } }) },
+          },
+        },
+      }));
+    }
+
+    // ── 2. Revenue by month (bar) + currency selector ──
+    if (hasRevenue) {
+      drawRevenue(defCcy);
+      var sel = document.getElementById('ovwCcySel');
+      if (sel) sel.addEventListener('change', function () {
+        var c = this.value;
+        drawRevenue(c);
+        var card = this.closest && this.closest('.ovw-card');
+        var subEl = card && card.querySelector('.ovw-card-sub');
+        if (subEl) subEl.textContent = 'Confirmed order value per month, ' + c;
+      });
+    }
+
+    // ── 3. Orders by country (horizontal bar) ──
+    if (countryTotal > 0) {
+      _ovwCharts.push(new Chart(document.getElementById('ovwCountryCv'), {
+        type: 'bar',
+        data: { labels: oc.map(function (r) { return r.label; }),
+          datasets: [{ label: 'Orders', data: oc.map(function (r) { return r.count; }),
+            backgroundColor: OVW_NAVY, hoverBackgroundColor: OVW_NAVY_DEEP, borderRadius: 4, maxBarThickness: 26 }] },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              title: function (it) { return it.length ? (oc[it[0].dataIndex].label + ' (' + oc[it[0].dataIndex].country + ')') : ''; },
+              label: function (ctx) { return 'Orders: ' + _fmtInt(ctx.parsed.x); } } },
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: OVW_GRIDLINE }, border: { display: false },
+                 ticks: _axisTicks({ precision: 0, maxTicksLimit: 6, callback: function (v) { return _fmtInt(v); } }) },
+            y: { grid: { display: false }, ticks: _axisTicks() },
+          },
+        },
+      }));
+    }
+
+    // ── 4. Tickets by status (doughnut) ──
+    if (ticketTotal > 0) {
+      _ovwCharts.push(new Chart(document.getElementById('ovwTicketsCv'), {
+        type: 'doughnut',
+        data: { labels: ts.map(function (r) { return _cap(r.status); }),
+          datasets: [{ data: ts.map(function (r) { return r.count; }),
+            backgroundColor: OVW_STATUS_COLORS, borderColor: '#fff', borderWidth: 2, hoverOffset: 6 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 300 }, cutout: '60%',
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#374151', boxWidth: 12, padding: 12, font: { size: 11.5 } } },
+            tooltip: { callbacks: {
+              label: function (ctx) {
+                var total = ctx.dataset.data.reduce(function (s, v) { return s + (v || 0); }, 0);
+                var pct = total ? Math.round(ctx.parsed * 100 / total) : 0;
+                return ctx.label + ': ' + _fmtInt(ctx.parsed) + ' (' + pct + '%)';
+              } } },
+          },
+        },
+      }));
+    }
+  }
+
   loadStats();
+  loadCharts();
   loadSla();
 });
 </script>

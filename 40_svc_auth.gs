@@ -459,6 +459,7 @@ function _authMeStaffBundle_(session) {
   try { bundle.botAdmin         = !!Rbac.userHasPermission(session.userId, BOT_ADMIN_PERMISSION); } catch (e) { bundle.botAdmin = false; }
   try { bundle.dashboardSummary = _dashSummary_(ctx, {}); }                       catch (e) {}
   try { bundle.dashboardSla     = _dashSlaMetrics_(ctx, {}); }                    catch (e) {}
+  try { bundle.dashboardCharts  = _dashCharts_(ctx, {}); }                        catch (e) {}
   return bundle;
 }
 
