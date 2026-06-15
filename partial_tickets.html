@@ -5,7 +5,7 @@ Router.register('tickets', function (el, params) {
     '<div class="filter-bar">' +
       '<select class="form-control" id="tktStatus"><option value="">All statuses</option><option>NEW</option><option>OPEN</option><option>PENDING</option><option>RESOLVED</option><option>CLOSED</option></select>' +
       '<select class="form-control" id="tktPriority"><option value="">All priorities</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select>' +
-      '<button class="btn btn-primary btn-sm" id="tktNewBtn">+ New Ticket</button>' +
+      (can('ticket.create') ? '<button class="btn btn-primary btn-sm" id="tktNewBtn">+ New Ticket</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Ticket #</th><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
@@ -33,7 +33,8 @@ Router.register('tickets', function (el, params) {
 
   document.getElementById('tktStatus').onchange = load;
   document.getElementById('tktPriority').onchange = load;
-  document.getElementById('tktNewBtn').onclick = function () { newTicketModal(load); };
+  var tktNewBtn = document.getElementById('tktNewBtn');
+  if (tktNewBtn) tktNewBtn.onclick = function () { newTicketModal(load); };
   // Pre-apply a drill-down filter when arriving from a dashboard chart "View all".
   if (params.status) { var _ts = document.getElementById('tktStatus'); if (_ts) _ts.value = params.status; }
   load();
@@ -55,8 +56,8 @@ function viewTicket(id) {
             '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px">' + (comments || '<p style="color:#9ca3af;font-size:12px">No comments.</p>') + '</div>' +
             '<textarea class="form-control" id="tktComment" rows="3" placeholder="Add a comment…"></textarea>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
-              '<button class="btn btn-primary btn-sm" onclick="addTicketComment(\'' + id + '\')">Add Comment</button>' +
-              (t.status !== 'RESOLVED' && t.status !== 'CLOSED'
+              (can('ticket.view') ? '<button class="btn btn-primary btn-sm" onclick="addTicketComment(\'' + id + '\')">Add Comment</button>' : '') +
+              (t.status !== 'RESOLVED' && t.status !== 'CLOSED' && can('ticket.close')
                 ? '<button class="btn btn-secondary btn-sm" onclick="resolveTicket(\'' + id + '\')">Resolve</button>' : ''),
     });
   }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });

@@ -6,7 +6,7 @@ Router.register('customers', function (el) {
       '<div class="search-input"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
         '<input type="text" id="custSearch" placeholder="Search customers…"></div>' +
       '<select class="form-control" id="custStatus"><option value="">All statuses</option><option>ACTIVE</option><option>INACTIVE</option></select>' +
-      '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' +
+      (can('customers.create') ? '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' : '') +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Account</th><th>Company</th><th>Country</th><th>Type</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
@@ -23,17 +23,22 @@ Router.register('customers', function (el) {
       if (!rows.length) { setHTML('custBody', emptyRow(7, 'No customers found.')); return; }
       setHTML('custBody', rows.map(function (r) {
         var cid = esc(r.customer_id);
+        var actions = '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button>';
+        if (can('customers.edit'))       actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editCustomer(\'' + cid + '\')">Edit</button>';
+        if (can('customers.set_credit')) actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();customerCreditModal(\'' + cid + '\')">Credit</button>';
         return '<tr style="cursor:pointer" onclick="viewCustomer(\'' + cid + '\')"><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
                '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
                '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
-               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button></td></tr>';
+               '<td class="actions">' + actions + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
   }
 
   document.getElementById('custSearch').oninput = function () { searchQ = this.value; load(); };
   document.getElementById('custStatus').onchange = load;
-  document.getElementById('custNewBtn').onclick = function () { newCustomerModal(load); };
+  var custNewBtn = document.getElementById('custNewBtn');
+  if (custNewBtn) custNewBtn.onclick = function () { newCustomerModal(load); };
+  window._custReload = load;
   load();
 });
 
@@ -85,5 +90,88 @@ function newCustomerModal(onSuccess) {
       };
     },
   });
+}
+
+// Edit affordance, wired to the existing customers.update action (gated
+// customers.edit server-side). Fetches the row, then writes back ONLY the
+// fields the user changed so an untouched value is never re-submitted.
+function editCustomer(id) {
+  var loader = Loader.show();
+  API.call('customers', 'get', { customerId: id }).then(function (c) {
+    Loader.hide(loader);
+    var types = ['DIRECT', 'DEALER', 'CORPORATE'];
+    var curType = String(c.customer_type || '');
+    function typeOptions() {
+      var arr = types.slice();
+      if (curType && arr.indexOf(curType) === -1) arr.unshift(curType);
+      return arr.map(function (t) {
+        return '<option' + (t === curType ? ' selected' : '') + '>' + esc(t) + '</option>';
+      }).join('');
+    }
+    Modal.open({
+      title: 'Edit Customer',
+      body: '<div class="form-row"><div class="form-group"><label class="form-label">Company Name</label>' +
+            '<input class="form-control" id="ecName" value="' + esc(c.company_name || '') + '"></div>' +
+            '<div class="form-group"><label class="form-label">Trading Name</label>' +
+            '<input class="form-control" id="ecTrade" value="' + esc(c.trading_name || '') + '"></div></div>' +
+            '<div class="form-row"><div class="form-group"><label class="form-label">Type</label>' +
+            '<select class="form-control" id="ecType">' + typeOptions() + '</select></div>' +
+            '<div class="form-group"><label class="form-label">Currency</label>' +
+            '<input class="form-control" id="ecCcy" value="' + esc(c.currency_code || '') + '"></div></div>' +
+            '<div class="form-group"><label class="form-label">Payment Terms</label>' +
+            '<input class="form-control" id="ecTerms" value="' + esc(c.payment_terms || '') + '"></div>' +
+            '<div id="ecErr" style="color:#dc2626;font-size:12px"></div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+              '<button class="btn btn-primary" id="ecSave">Save changes</button>',
+      onOpen: function () {
+        document.getElementById('ecSave').onclick = function () {
+          var patch = { customerId: id };
+          var changed = false;
+          function diff(elId, field, orig) {
+            var v = document.getElementById(elId).value.trim();
+            if (v !== String(orig == null ? '' : orig)) { patch[field] = v; changed = true; }
+          }
+          diff('ecName',  'company_name',  c.company_name);
+          diff('ecTrade', 'trading_name',  c.trading_name);
+          diff('ecType',  'customer_type', c.customer_type);
+          diff('ecCcy',   'currency_code', c.currency_code);
+          diff('ecTerms', 'payment_terms', c.payment_terms);
+          if (!changed) { Modal.close(); return; }
+          API.call('customers', 'update', patch)
+            .then(function () { Modal.close(); Toast.success('Customer updated.'); if (window._custReload) window._custReload(); })
+            .catch(function (e) { document.getElementById('ecErr').textContent = e.message; });
+        };
+      },
+    });
+  }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
+}
+
+// Credit-limit affordance, wired to the existing customers.setCredit action
+// (gated customers.set_credit server-side).
+function customerCreditModal(id) {
+  var loader = Loader.show();
+  API.call('customers', 'get', { customerId: id }).then(function (c) {
+    Loader.hide(loader);
+    Modal.open({
+      title: 'Set Credit Limit',
+      body: '<p style="font-size:13px;margin:0 0 12px">' + esc(c.company_name || id) + '</p>' +
+            '<div class="form-group"><label class="form-label">Credit Limit (' + esc(c.currency_code || 'KES') + ')</label>' +
+            '<input class="form-control" id="ccLimit" type="number" min="0" step="0.01" value="' + esc(String(c.credit_limit || 0)) + '"></div>' +
+            '<div id="ccErr" style="color:#dc2626;font-size:12px"></div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+              '<button class="btn btn-primary" id="ccSave">Save</button>',
+      onOpen: function () {
+        document.getElementById('ccSave').onclick = function () {
+          var v = document.getElementById('ccLimit').value;
+          if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) {
+            document.getElementById('ccErr').textContent = 'Enter a non-negative number.'; return;
+          }
+          API.call('customers', 'setCredit', { customerId: id, credit_limit: parseFloat(v) })
+            .then(function () { Modal.close(); Toast.success('Credit limit updated.'); if (window._custReload) window._custReload(); })
+            .catch(function (e) { document.getElementById('ccErr').textContent = e.message; });
+        };
+      },
+    });
+  }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
 }
 </script>

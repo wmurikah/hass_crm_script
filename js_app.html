@@ -82,6 +82,20 @@ var Perms = (function () {
 })();
 window.HassPerms = Perms;
 
+/* ── can(code): permission-driven affordance gate ────────────────────
+ * Thin convenience over Perms.has, used by every section to decide whether
+ * to RENDER an action affordance (create, edit, delete, status change,
+ * assign). The delivered set comes from auth.me; the SUPER_ADMIN wildcard
+ * '*' grants all, so a super admin sees every management control across
+ * every entity while other roles see only the actions their permissions
+ * allow. This is presentation only: the dispatcher and Rbac still enforce
+ * the same code server-side on every call, so hiding a button is never the
+ * security boundary. Gate each affordance on the SAME permission code its
+ * server action is registered with, so what shows always matches what the
+ * server will accept. */
+function can(code) { return !!(window.HassPerms && window.HassPerms.has(code)); }
+window.can = can;
+
 /* ── Toast ─────────────────────────────────────────────────────── */
 var Toast = (function () {
   var _container;

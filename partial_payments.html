@@ -24,7 +24,7 @@ Router.register('payments', function (el) {
                '<td>—</td>' +
                '<td>' + statusBadge(after.status || r.action.replace('PAYMENT_','')) + '</td>' +
                '<td>' + fmtDate(r.created_at) + '</td>' +
-               '<td><button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button></td></tr>';
+               '<td>' + (can('invoice.generate') ? '<button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button>' : '') + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('payBody', errorRow(8, e, load)); });
   }
