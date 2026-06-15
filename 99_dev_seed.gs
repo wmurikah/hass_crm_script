@@ -272,26 +272,27 @@ function reproRbac() {
 }
 
 /**
- * reproBot()  —  Manual verification harness for the Phase-2 read-only assistant
- * (run from the Apps Script IDE; NEVER auto-invoked — temporary, safe to remove).
+ * reproBot()  -  Manual verification harness for the assistant config + chat path
+ * (run from the Apps Script IDE; NEVER auto-invoked; safe to remove). For the
+ * full proactive/report/write-proposal coverage see reproBotV2().
  *
  * It proves the bot.chat path end-to-end WITHOUT spending LLM tokens:
  *   1. Mints a real SUPER_ADMIN session.
- *   2. Seeds bot_tools (idempotent) and asserts every row is is_write = 0.
- *   3. Saves a test bot_llm_configs row with NO key (must succeed — regression
+ *   2. Seeds bot_tools (idempotent): read/report tools are is_write = 0 and the
+ *      deliberate write tools are is_write = 1 (proposed, never auto-run).
+ *   3. Saves a test bot_llm_configs row with NO key (must succeed; regression
  *      guard for the api_key_property NOT NULL bug; has_key=false), activates it,
  *      then saves a DUMMY key and confirms has_key flips to true. The dummy-key
- *      provider call is expected to fail gracefully on auth — proving the request
- *      path without burning tokens. If BOT_ANTHROPIC_KEY is set in Script
- *      Properties you may point the config at it for a real call instead.
+ *      provider call is expected to fail gracefully on auth, proving the request
+ *      path without burning tokens.
  *   4. Calls bot.chat('How many unpaid invoices are there?') and logs the
  *      answer + toolsUsed, then confirms the turn was written to
  *      bot_conversations.
  *   5. Calls bot.chat with a message trying to CANCEL an order and confirms
- *      toolsUsed contains no write action.
- *   6. Directly exercises the HARD WRITE GUARD: temporarily inserts a write
- *      bot_tools row (is_write = 1), calls _botExecuteTool_ on it, asserts it is
- *      REFUSED and never executed, then removes the temp row.
+ *      toolsUsed contains no executed write action.
+ *   6. Exercises the WRITE PROPOSAL path: temporarily inserts a write bot_tools
+ *      row (is_write = 1), calls _botExecuteTool_ on it, asserts it is PROPOSED
+ *      and never executed, then removes the temp row.
  */
 function reproBot() {
   var sa = TursoClient.select(
@@ -309,12 +310,11 @@ function reproBot() {
     catch (e) { return { ok: false, error: { message: 'threw: ' + e.message } }; }
   }
 
-  // ── 2. Seed read-only tools and assert is_write = 0 everywhere ─────────────
+  // ── 2. Seed tools: read/report is_write = 0; deliberate writes is_write = 1 ──
   var seedRes = seedBotTools();
   var writeRows = TursoClient.select('SELECT service, action FROM bot_tools WHERE is_write != 0', []);
   out.seed = { seedRes: seedRes, writeToolRows: writeRows.length };
-  Logger.log('reproBot seed: ' + JSON.stringify(out.seed) +
-             (writeRows.length ? ' ❌ WRITE TOOL PRESENT' : ' ✅ all read-only'));
+  Logger.log('reproBot seed: ' + JSON.stringify(out.seed) + ' (write tools are proposed, never auto-run)');
 
   // ── 3a. Save a config with NO key — must SUCCEED (regression: the NOT NULL
   //        constraint on api_key_property used to make this fail). has_key=false.
@@ -392,8 +392,8 @@ function reproBot() {
   Logger.log('reproBot chat(cancel): ' + JSON.stringify(out.chatCancel) +
              (ranWrite ? ' ❌ WRITE EXECUTED' : ' ✅ no write executed'));
 
-  // ── 6. Directly prove the HARD WRITE GUARD refuses an is_write = 1 tool ────
-  var guardRefused = false, guardExecuted = true;
+  // ── 6. Prove a write tool is PROPOSED (never auto-executed) by the executor ──
+  var guardProposed = false, guardExecuted = true;
   try {
     TursoClient.write(
       'INSERT INTO bot_tools (tool_id, service, action, description, params_schema_json, is_write, required_permission, is_enabled, created_at) ' +
@@ -401,30 +401,157 @@ function reproBot() {
       [genId('BTOOL'), '__repro', 'writeProbe', 'temp write probe',
        '{"type":"object","properties":{}}', 1, null, 1, nowIso()]
     );
-    var guard = _botExecuteTool_('__repro' + BOT_TOOL_SEP + 'writeProbe', {}, token);
-    guardRefused  = !!guard.refused;
+    var guard = _botExecuteTool_('__repro' + BOT_TOOL_SEP + 'writeProbe', {},
+      { sessionToken: token, session: Session.validate(token) });
+    guardProposed = !!guard.proposed;
     guardExecuted = !!guard.executed;
   } catch (e) {
     out.guardError = e.message;
   } finally {
     try { TursoClient.write("DELETE FROM bot_tools WHERE service = '__repro' AND action = 'writeProbe'", []); } catch (_) {}
   }
-  out.writeGuard = { refused: guardRefused, executed: guardExecuted };
-  Logger.log('reproBot write guard: ' + JSON.stringify(out.writeGuard) +
-             (guardRefused && !guardExecuted ? ' ✅ guard refused write' : ' ❌ guard FAILED'));
+  out.writeGuard = { proposed: guardProposed, executed: guardExecuted };
+  Logger.log('reproBot write proposal: ' + JSON.stringify(out.writeGuard) +
+             (guardProposed && !guardExecuted ? ' proposed, not executed' : ' GUARD FAILED'));
 
   try { Session.invalidate(token); } catch (_) {}
 
-  var pass = out.seed.writeToolRows === 0 &&
+  var pass = out.seed.writeToolRows >= 1 &&
              out.saveNoKey.has_key === false &&
              out.getNoKey.has_key === false && out.getNoKey.exposesRawKey === false &&
              out.saveConfig.has_key === true &&
              out.turnLogged.found === true &&
              out.chatCancel.ranWriteAction === false &&
-             out.writeGuard.refused === true && out.writeGuard.executed === false &&
+             out.writeGuard.proposed === true && out.writeGuard.executed === false &&
              out.keyNeverReturned.exposesRawKey === false;
   Logger.log('reproBot results: ' + JSON.stringify(out, null, 2));
   Logger.log('reproBot: ' + (pass ? 'ALL CHECKS PASS ✅' : 'SOME CHECKS FAILED ❌'));
+  return { pass: pass, results: out };
+}
+
+/**
+ * reproBotV2()  -  Manual verification harness for the proactive, action-capable
+ * assistant (run from the Apps Script IDE; NEVER auto-invoked; safe to leave).
+ *
+ * Proves the new server paths WITHOUT spending LLM tokens (the chat path needs a
+ * provider key; everything below is keyless):
+ *   1. Mints a real SUPER_ADMIN session.
+ *   2. seedBotTools() upsert: read/report tools are is_write = 0; the deliberate
+ *      write tools (tickets.create/assign/addComment, invoices.generate) are
+ *      is_write = 1.
+ *   3. bot.suggestions returns grouped, non-empty starters for a route.
+ *   4. Every report action runs via processRequest and returns the standard
+ *      shape (columns + rows + totals). Money reports expose by_currency totals
+ *      and NEVER a single cross-currency sum.
+ *   5. The write-proposal guard: _botExecuteTool_ on a write tool returns a
+ *      proposal and does NOT execute it.
+ *   6. bot.confirmAction refuses a READ tool (only writes are confirmable).
+ *   7. reports.catalog returns permitted entries.
+ */
+function reproBotV2() {
+  var sa = TursoClient.select(
+    "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
+  );
+  if (!sa.length) { Logger.log('reproBotV2: no SUPER_ADMIN seeded - run seedAll() first'); return; }
+
+  var sess  = Session.create(sa[0].user_id, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'reproBotV2', 'KE');
+  var token = sess.token;
+  var session = Session.validate(token);
+  var out = {};
+
+  function call(service, action, params) {
+    var p = params || {}; p.sessionToken = token;
+    try { return processRequest({ service: service, action: action, params: p }); }
+    catch (e) { return { ok: false, error: { message: 'threw: ' + e.message } }; }
+  }
+
+  // ── 2. Seed + is_write split ───────────────────────────────────────────────
+  var seedRes = seedBotTools();
+  function isWrite(s, a) {
+    var r = TursoClient.select('SELECT is_write FROM bot_tools WHERE service = ? AND action = ? LIMIT 1', [s, a]);
+    return r.length ? String(r[0].is_write) : 'missing';
+  }
+  out.seed = {
+    seedRes: seedRes,
+    write_tickets_create: isWrite('tickets', 'create'),     // expect 1
+    write_invoices_generate: isWrite('invoices', 'generate'),// expect 1
+    read_reports_receivables: isWrite('reports', 'receivablesAging'), // expect 0
+    read_invoices_list: isWrite('invoices', 'list'),        // expect 0
+  };
+  Logger.log('reproBotV2 seed: ' + JSON.stringify(out.seed));
+
+  // ── 3. Suggestions ─────────────────────────────────────────────────────────
+  var sug = call('bot', 'suggestions', { route: 'invoices' });
+  out.suggestions = sug.ok
+    ? { groups: (sug.data.groups || []).length, headers: (sug.data.groups || []).map(function (g) { return g.header; }), hasGreeting: !!sug.data.greeting }
+    : { error: sug.error };
+  Logger.log('reproBotV2 suggestions: ' + JSON.stringify(out.suggestions));
+
+  // ── 4. Reports (shape + currency rule) ─────────────────────────────────────
+  var reportCalls = [
+    { id: 'kyc', params: {} },
+    { id: 'ordersByCriteria', params: {} },
+    { id: 'receivablesAging', params: {} },
+    { id: 'salesRevenue', params: { group_by: 'month' } },
+    { id: 'ticketSla', params: { group_by: 'status' } },
+    { id: 'approvals', params: {} },
+    { id: 'payments', params: {} },
+    { id: 'creditExposure', params: {} },
+    { id: 'retentionChurn', params: {} },
+    { id: 'pricing', params: {} },
+  ];
+  out.reports = {};
+  var reportsOk = true;
+  reportCalls.forEach(function (rc) {
+    var resp = call('reports', rc.id, rc.params);
+    if (resp.ok && resp.data && Array.isArray(resp.data.columns) && Array.isArray(resp.data.rows)) {
+      out.reports[rc.id] = { ok: true, cols: resp.data.columns.length, rows: resp.data.rows.length,
+                             hasByCurrency: !!(resp.data.totals && resp.data.totals.by_currency) };
+    } else {
+      reportsOk = false;
+      out.reports[rc.id] = { ok: false, error: resp.error || 'bad shape' };
+    }
+  });
+  // Money reports must report per currency (by_currency), never a single summed figure.
+  var moneyReports = ['receivablesAging', 'salesRevenue', 'payments'];
+  out.currencyRuleOk = moneyReports.every(function (id) { return out.reports[id] && out.reports[id].hasByCurrency; });
+  Logger.log('reproBotV2 reports: ' + JSON.stringify(out.reports));
+  Logger.log('reproBotV2 currency rule (money reports keep by_currency): ' + out.currencyRuleOk);
+
+  // ── 5. Write-proposal guard (no execution) ─────────────────────────────────
+  var auth = { sessionToken: token, session: session };
+  var proposeOut = _botExecuteTool_('tickets' + BOT_TOOL_SEP + 'create',
+    { customer_id: 'PROBE', subject: 'probe ticket', category: 'GENERAL' }, auth);
+  out.writeProposal = { proposed: !!proposeOut.proposed, executed: !!proposeOut.executed,
+                        hasPreview: !!(proposeOut.action_proposal && proposeOut.action_proposal.preview) };
+  Logger.log('reproBotV2 write proposal: ' + JSON.stringify(out.writeProposal) +
+             (proposeOut.proposed && !proposeOut.executed ? ' (proposed, not executed)' : ' FAILED'));
+
+  // ── 6. confirmAction refuses a read tool ───────────────────────────────────
+  var confRead = call('bot', 'confirmAction', { tool: 'customers' + BOT_TOOL_SEP + 'list', params: {} });
+  out.confirmReadRefused = !confRead.ok;
+  Logger.log('reproBotV2 confirmAction(read tool) refused: ' + out.confirmReadRefused);
+
+  // ── 7. Catalog ─────────────────────────────────────────────────────────────
+  var cat = call('reports', 'catalog', {});
+  out.catalog = cat.ok ? { count: (cat.data || []).length } : { error: cat.error };
+  Logger.log('reproBotV2 catalog: ' + JSON.stringify(out.catalog));
+
+  try { Session.invalidate(token); } catch (_) {}
+
+  var pass =
+    out.seed.write_tickets_create === '1' &&
+    out.seed.write_invoices_generate === '1' &&
+    out.seed.read_reports_receivables === '0' &&
+    out.seed.read_invoices_list === '0' &&
+    out.suggestions.groups > 0 && out.suggestions.hasGreeting === true &&
+    reportsOk && out.currencyRuleOk === true &&
+    out.writeProposal.proposed === true && out.writeProposal.executed === false &&
+    out.confirmReadRefused === true &&
+    (out.catalog.count || 0) > 0;
+
+  Logger.log('reproBotV2 results: ' + JSON.stringify(out, null, 2));
+  Logger.log('reproBotV2: ' + (pass ? 'ALL CHECKS PASS' : 'SOME CHECKS FAILED'));
   return { pass: pass, results: out };
 }
 

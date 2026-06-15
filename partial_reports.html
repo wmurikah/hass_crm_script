@@ -1,22 +1,47 @@
 <script>
+// ─────────────────────────────────────────────────────────────────
+//  partial_reports.html  - Reports page
+//  Headline summary stats + a Report Catalog runner that drives the
+//  same curated, parameterised report actions the assistant uses
+//  (reports.*). Renders a titled table, a totals line and CSV export
+//  via the shared HassTable helper. Every action is RBAC-gated and
+//  country-scoped server-side.
+// ─────────────────────────────────────────────────────────────────
 Router.register('reports', function (el) {
+  var SECTION_LABEL = {
+    invoices: 'Invoices', orders: 'Orders', tickets: 'Tickets', customers: 'Customers',
+    payments: 'Payments', approvals: 'Approvals', documents: 'KYC Documents', pricing: 'Price Lists',
+    catalog: 'Products', knowledge: 'Knowledge Base', users: 'Users', dashboard: 'Dashboard',
+  };
+
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
       '<h2 style="font-size:16px;font-weight:600">Reports</h2>' +
     '</div>' +
     '<div class="stat-grid" id="repStats">' +
-      '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1">' +
-        '<span class="spinner dark"></span></div>' +
-    '</div>';
+      '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1"><span class="spinner dark"></span></div>' +
+    '</div>' +
+    '<div class="card" style="margin-top:18px"><div class="card-body">' +
+      '<h3 style="font-size:14px;font-weight:600;margin:0 0 4px">Report catalog</h3>' +
+      '<p style="margin:0 0 12px;color:var(--clr-text-light);font-size:13px">Pick a report, set the criteria, and run. Money is reported per currency and never summed across currencies.</p>' +
+      '<div class="filter-bar" style="gap:10px;flex-wrap:wrap;align-items:flex-end">' +
+        '<div class="form-group" style="margin:0;min-width:220px">' +
+          '<label class="form-label">Report</label>' +
+          '<select class="form-control" id="repSelect"><option value="">Loading...</option></select>' +
+        '</div>' +
+        '<div id="repCriteria" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"></div>' +
+        '<button class="btn btn-primary btn-sm" id="repRunBtn" disabled>Run report</button>' +
+      '</div>' +
+      '<div id="repResult" style="margin-top:14px"></div>' +
+    '</div></div>';
 
   function stat(label, val, cls) {
     return '<div class="stat-card ' + cls + '"><div class="stat-label">' + esc(label) +
            '</div><div class="stat-value">' + (val || 0) + '</div></div>';
   }
 
-  function load() {
-    setHTML('repStats', '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1">' +
-      '<span class="spinner dark"></span></div>');
+  function loadSummary() {
+    setHTML('repStats', '<div style="display:flex;justify-content:center;padding:40px;grid-column:1/-1"><span class="spinner dark"></span></div>');
     API.call('reports', 'summary', {}).then(function (d) {
       setHTML('repStats',
         stat('Customers',         d.customers,         'success') +
@@ -25,9 +50,127 @@ Router.register('reports', function (el) {
         stat('Unpaid Invoices',   d.unpaid_invoices,   'danger')  +
         stat('Pending Payments',  d.pending_payments,  'primary'));
     }).catch(function (e) {
-      setHTML('repStats', '<div style="grid-column:1/-1">' + errorCard(e, load) + '</div>');
+      setHTML('repStats', '<div style="grid-column:1/-1">' + errorCard(e, loadSummary) + '</div>');
     });
   }
-  load();
+
+  var _catalog = [];
+  function loadCatalog() {
+    API.call('reports', 'catalog', {}).then(function (rows) {
+      _catalog = rows || [];
+      var sel = document.getElementById('repSelect');
+      if (!_catalog.length) { sel.innerHTML = '<option value="">No reports available</option>'; return; }
+      sel.innerHTML = '<option value="">Select a report...</option>' + _catalog.map(function (r) {
+        return '<option value="' + esc(r.id) + '">' + esc(r.title) + '</option>';
+      }).join('');
+      sel.onchange = renderCriteria;
+    }).catch(function () {
+      document.getElementById('repSelect').innerHTML = '<option value="">Could not load catalog</option>';
+    });
+  }
+
+  function currentReport() {
+    var id = document.getElementById('repSelect').value;
+    for (var i = 0; i < _catalog.length; i++) if (_catalog[i].id === id) return _catalog[i];
+    return null;
+  }
+
+  function renderCriteria() {
+    var rep = currentReport();
+    var box = document.getElementById('repCriteria');
+    document.getElementById('repResult').innerHTML = '';
+    if (!rep) { box.innerHTML = ''; document.getElementById('repRunBtn').disabled = true; return; }
+    box.innerHTML = (rep.params || []).map(function (p) {
+      var input;
+      if (p.type === 'select') {
+        input = '<select class="form-control" data-key="' + esc(p.key) + '">' +
+          (p.options || []).map(function (o) { return '<option value="' + esc(o) + '">' + esc(o) + '</option>'; }).join('') + '</select>';
+      } else {
+        var t = (p.type === 'date') ? 'date' : (p.type === 'number') ? 'number' : 'text';
+        input = '<input class="form-control" type="' + t + '" data-key="' + esc(p.key) + '" placeholder="' + esc(p.label) + '">';
+      }
+      return '<div class="form-group" style="margin:0;min-width:130px"><label class="form-label">' + esc(p.label) +
+             (p.required ? ' *' : '') + '</label>' + input + '</div>';
+    }).join('');
+    document.getElementById('repRunBtn').disabled = false;
+  }
+
+  function gatherParams() {
+    var params = {};
+    document.querySelectorAll('#repCriteria [data-key]').forEach(function (inp) {
+      var v = (inp.value || '').trim();
+      if (v !== '') params[inp.getAttribute('data-key')] = v;
+    });
+    return params;
+  }
+
+  function runReport() {
+    var rep = currentReport();
+    if (!rep) return;
+    var params = gatherParams();
+    // Required-field guard.
+    var missing = (rep.params || []).filter(function (p) { return p.required && !params[p.key]; });
+    if (missing.length) { Toast.error('Please fill: ' + missing.map(function (p) { return p.label; }).join(', ')); return; }
+
+    var box = document.getElementById('repResult');
+    box.innerHTML = spinnerHTML(30);
+    var btn = document.getElementById('repRunBtn');
+    btn.disabled = true;
+    API.call('reports', rep.id, params).then(function (res) {
+      btn.disabled = false;
+      renderResult(res);
+    }).catch(function (e) {
+      btn.disabled = false;
+      box.innerHTML = errorCard(e, runReport);
+    });
+  }
+
+  function renderResult(res) {
+    var box = document.getElementById('repResult');
+    var cols = res.columns || [], rows = res.rows || [];
+    var html = '<div style="font-weight:600;color:var(--clr-primary-d);margin-bottom:2px">' + esc(res.title || 'Result') + '</div>';
+    if (res.summary) html += '<div style="color:var(--clr-text-light);font-size:13px;margin-bottom:10px">' + esc(res.summary) + '</div>';
+    if (cols.length && rows.length) {
+      html += HassTable.tableHTML(cols, rows, { maxRows: 200 });
+      html += HassTable.totalsHTML(res.totals);
+    } else {
+      html += '<div class="empty-state">No rows for these criteria.</div>';
+    }
+    if (res.currency_note) html += '<div style="font-size:11px;color:var(--clr-text-light);margin-top:6px">' + esc(res.currency_note) + '</div>';
+    html += '<div class="hass-btnrow" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"></div>';
+    box.innerHTML = html;
+
+    var row = box.querySelector('.hass-btnrow');
+    if (cols.length && rows.length) {
+      var csv = document.createElement('button');
+      csv.className = 'btn btn-secondary btn-sm'; csv.textContent = 'Export CSV';
+      csv.onclick = function () {
+        var name = String(res.title || 'report').replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.csv';
+        if (!HassTable.download(name, HassTable.toCSV(cols, rows))) Toast.error('Could not export. Try Email to me.');
+      };
+      row.appendChild(csv);
+
+      var mail = document.createElement('button');
+      mail.className = 'btn btn-secondary btn-sm'; mail.textContent = 'Email to me';
+      mail.onclick = function () {
+        mail.disabled = true; mail.textContent = 'Sending...';
+        API.call('bot', 'emailResult', { title: res.title, summary: res.summary, columns: cols, rows: rows }, { retries: 0 })
+          .then(function (r) { mail.textContent = 'Emailed'; Toast.success('Emailed to ' + (r && r.to ? r.to : 'you') + '.'); })
+          .catch(function (e) { mail.disabled = false; mail.textContent = 'Email to me'; Toast.error((e && e.message) || 'Could not email.'); });
+      };
+      row.appendChild(mail);
+    }
+    if (res.deepLink && res.deepLink.route) {
+      var label = SECTION_LABEL[res.deepLink.route] || res.deepLink.route;
+      var open = document.createElement('button');
+      open.className = 'btn btn-primary btn-sm'; open.textContent = 'Open in ' + label;
+      open.onclick = function () { goRoute(res.deepLink.route, res.deepLink.params || {}); };
+      row.appendChild(open);
+    }
+  }
+
+  document.getElementById('repRunBtn').onclick = runReport;
+  loadSummary();
+  loadCatalog();
 });
 </script>
