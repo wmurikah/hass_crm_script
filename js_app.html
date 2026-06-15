@@ -266,6 +266,8 @@ var Router = (function () {
         _content.innerHTML = errorCard(e, function () { navigate(id, params || {}); });
       }
     }
+    // Notify listeners (e.g. the assistant) so page-aware features can react.
+    try { window.dispatchEvent(new CustomEvent('hass:route', { detail: { route: id, params: params || {} } })); } catch (_) {}
   }
 
   return { init: init, register: register, navigate: navigate, current: function () { return _active; } };
@@ -392,65 +394,198 @@ function applyBranding(b) {
 }
 window.applyBranding = applyBranding;
 
-/* ── Floating Assistant chat widget ──────────────────────────────────
- * Fixed bottom-right launcher → toggles a chat panel. Talks to
- * bot.chat with the user's session (RBAC + read-only guards stay
- * server-side; no keys client-side). Keeps the last ~6 turns of history
- * client-side for context. Renders navigate:{route,params} as an
- * "Open <route>" button via Router.navigate. */
+/* ── HassTable: shared result-table helpers (assistant + Reports page) ──
+ * Formats cells by column type, renders a capped HTML table with a totals
+ * line, builds CSV and triggers a client-side download. No server round-trip
+ * for export. Used by the assistant's rich responses and the Reports runner. */
+var HassTable = (function () {
+  'use strict';
+
+  function fmtCell(v, type) {
+    if (v === null || v === undefined || v === '') return '-';
+    if (type === 'money') {
+      var n = parseFloat(v); if (isNaN(n)) return esc(v);
+      return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    if (type === 'percent') { var p = parseFloat(v); return isNaN(p) ? esc(v) : (p + '%'); }
+    if (type === 'number')  { var i = Number(v); return isNaN(i) ? esc(v) : i.toLocaleString(); }
+    if (type === 'date')    { return esc(fmtDate(v)); }
+    return esc(v);
+  }
+
+  function tableHTML(columns, rows, opts) {
+    opts = opts || {};
+    var maxRows = opts.maxRows || 50;
+    var total = rows.length;
+    var show  = rows.slice(0, maxRows);
+    var th = columns.map(function (c) { return '<th>' + esc(c.label || c.key) + '</th>'; }).join('');
+    var body = show.map(function (row) {
+      return '<tr>' + columns.map(function (c) {
+        var t = c.type || 'text';
+        var cls = (t === 'money' || t === 'number' || t === 'percent') ? ' class="num"' : '';
+        return '<td' + cls + '>' + fmtCell(row[c.key], t) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var note = total > show.length
+      ? '<div class="hass-tbl-note">Showing ' + show.length + ' of ' + total + ' rows. Export CSV for the full set.</div>'
+      : '';
+    return '<div class="hass-table-wrap"><table class="hass-rtable"><thead><tr>' + th +
+           '</tr></thead><tbody>' + body + '</tbody></table></div>' + note;
+  }
+
+  function totalsHTML(totals) {
+    if (!totals || typeof totals !== 'object') return '';
+    var chips = [];
+    Object.keys(totals).forEach(function (k) {
+      var v = totals[k];
+      if (k === 'by_currency' && v && typeof v === 'object') {
+        Object.keys(v).forEach(function (ccy) {
+          var m = v[ccy];
+          if (m && typeof m === 'object') {
+            var parts = Object.keys(m).map(function (mk) {
+              var num = parseFloat(m[mk]);
+              return mk.replace(/_/g, ' ') + ' ' + (isNaN(num) ? m[mk] : num.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+            });
+            chips.push('<span class="hass-chip-total">' + esc(ccy) + ': ' + esc(parts.join(', ')) + '</span>');
+          } else {
+            chips.push('<span class="hass-chip-total">' + esc(ccy) + ': ' + esc(String(v[ccy])) + '</span>');
+          }
+        });
+      } else if (k === 'by_tier' && v && typeof v === 'object') {
+        Object.keys(v).forEach(function (tk) { chips.push('<span class="hass-chip-total">' + esc(tk) + ': ' + esc(String(v[tk])) + '</span>'); });
+      } else if (v === null || typeof v !== 'object') {
+        chips.push('<span class="hass-chip-total">' + esc(k.replace(/_/g, ' ')) + ': ' + esc(String(v)) + '</span>');
+      }
+    });
+    return chips.length ? '<div class="hass-totals">' + chips.join('') + '</div>' : '';
+  }
+
+  function toCSV(columns, rows) {
+    function cell(v) {
+      var s = (v === null || v === undefined) ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+    var head = columns.map(function (c) { return cell(c.label || c.key); }).join(',');
+    var body = rows.map(function (row) {
+      return columns.map(function (c) { return cell(row[c.key]); }).join(',');
+    }).join('\n');
+    return head + '\n' + body;
+  }
+
+  function download(filename, text) {
+    try {
+      var blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  return { fmtCell: fmtCell, tableHTML: tableHTML, totalsHTML: totalsHTML, toCSV: toCSV, download: download };
+})();
+window.HassTable = HassTable;
+
+/* ── Floating Assistant chat widget (proactive co-pilot) ──────────────
+ * Opens on load with a role-aware greeting and clickable, page-aware prompt
+ * starters (served by bot.suggestions) plus a free text box. Renders rich
+ * responses: prose, data tables with Export CSV / Open in {section} / Email
+ * to me, gated write proposals with Confirm/Cancel, and one-question clarify
+ * chips. Auto-open is a user setting (localStorage); the collapsed state is
+ * remembered for the session. Dockable and resizable; never overflows the
+ * page. All data flows through API.call('bot', ...); no keys client-side. */
 var ChatWidget = (function () {
   'use strict';
-  var HISTORY_TURNS = 6;          // turns (user+assistant) kept for context
-  var _mounted = false;
-  var _open    = false;
-  var _busy    = false;
-  var _history = [];              // [{role:'user'|'assistant', content}]
-  var _els     = {};
+  var HISTORY_TURNS = 6;
+  var AUTOOPEN_KEY  = 'hass_bot_autoopen';   // localStorage: '0' disables auto-open
+  var COLLAPSE_KEY  = 'hass_bot_collapsed';  // sessionStorage: '1' = collapsed this session
+  var SIZE_KEY      = 'hass_bot_size';       // sessionStorage: '{w,h}'
+
+  var _mounted = false, _open = false, _busy = false;
+  var _history = [];
+  var _route   = '';
+  var _me      = null;
+  var _started = false;            // a message has been sent this session
+  var _suggestCache = {};
+  var _els = {};
+
+  var SECTION_LABEL = {
+    invoices: 'Invoices', orders: 'Orders', tickets: 'Tickets', customers: 'Customers',
+    payments: 'Payments', approvals: 'Approvals', documents: 'Documents', pricing: 'Pricing',
+    catalog: 'Products', knowledge: 'Knowledge Base', reports: 'Reports', users: 'Users', dashboard: 'Dashboard',
+  };
 
   function _injectStyles() {
     if (document.getElementById('hassChatStyles')) return;
     var css =
-      '.hass-chat-launcher{position:fixed;right:24px;bottom:24px;width:56px;height:56px;' +
-        'border-radius:50%;background:var(--clr-primary);color:var(--clr-gold);border:none;cursor:pointer;' +
-        'box-shadow:var(--shadow-md);display:flex;align-items:center;justify-content:center;z-index:800;' +
-        'transition:transform .15s ease, background .15s ease;}' +
+      '.hass-chat-launcher{position:fixed;right:24px;bottom:24px;width:56px;height:56px;border-radius:50%;' +
+        'background:var(--clr-primary);color:var(--clr-gold);border:none;cursor:pointer;box-shadow:var(--shadow-md);' +
+        'display:flex;align-items:center;justify-content:center;z-index:800;transition:transform .15s ease, background .15s ease;}' +
       '.hass-chat-launcher:hover{background:var(--clr-primary-d);transform:translateY(-2px);}' +
       '.hass-chat-launcher svg{width:26px;height:26px;}' +
-      '.hass-chat-panel{position:fixed;right:24px;bottom:92px;width:360px;height:520px;max-width:calc(100vw - 32px);' +
-        'max-height:calc(100vh - 120px);background:var(--clr-surface);border:1px solid var(--clr-border);' +
-        'border-radius:12px;box-shadow:var(--shadow-md);display:none;flex-direction:column;overflow:hidden;z-index:800;}' +
+      '.hass-chat-panel{position:fixed;right:24px;bottom:92px;width:400px;height:560px;max-width:calc(100vw - 32px);' +
+        'max-height:calc(100vh - 120px);background:var(--clr-surface);border:1px solid var(--clr-border);border-radius:12px;' +
+        'box-shadow:var(--shadow-md);display:none;flex-direction:column;overflow:hidden;z-index:801;}' +
       '.hass-chat-panel.open{display:flex;animation:hassChatIn .18s ease;}' +
       '@keyframes hassChatIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}' +
-      '.hass-chat-head{background:var(--clr-primary);color:#fff;padding:12px 14px;display:flex;align-items:center;' +
-        'justify-content:space-between;flex-shrink:0;}' +
-      '.hass-chat-head .ttl{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;}' +
-      '.hass-chat-head .ttl .dot{width:8px;height:8px;border-radius:50%;background:var(--clr-gold);}' +
-      '.hass-chat-head button{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:20px;line-height:1;}' +
-      '.hass-chat-head button:hover{color:#fff;}' +
-      '.hass-chat-body{flex:1;overflow-y:auto;padding:14px;background:var(--clr-bg);display:flex;flex-direction:column;gap:10px;}' +
-      '.hass-msg{max-width:82%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;}' +
+      '.hass-chat-resize{position:absolute;top:0;left:0;width:18px;height:18px;cursor:nwse-resize;z-index:3;}' +
+      '.hass-chat-resize::before{content:"";position:absolute;top:6px;left:6px;width:7px;height:7px;border-top:2px solid var(--clr-gold);border-left:2px solid var(--clr-gold);opacity:.7;}' +
+      '.hass-chat-head{background:var(--clr-primary);color:#fff;padding:11px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;}' +
+      '.hass-chat-head .ttl{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0;}' +
+      '.hass-chat-head .ttl .dot{width:8px;height:8px;border-radius:50%;background:var(--clr-gold);flex-shrink:0;}' +
+      '.hass-chat-head .hbtns{display:flex;align-items:center;gap:2px;}' +
+      '.hass-chat-head button{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:18px;line-height:1;padding:4px 6px;border-radius:6px;}' +
+      '.hass-chat-head button:hover{color:#fff;background:rgba(255,255,255,.12);}' +
+      '.hass-chat-head .hicon{width:18px;height:18px;display:block;}' +
+      '.hass-settings{position:absolute;top:46px;right:10px;background:var(--clr-surface);border:1px solid var(--clr-border);' +
+        'border-radius:8px;box-shadow:var(--shadow-md);padding:10px 12px;z-index:5;display:none;font-size:13px;min-width:210px;color:var(--clr-text);}' +
+      '.hass-settings.open{display:block;}' +
+      '.hass-settings label{display:flex;align-items:center;gap:8px;cursor:pointer;}' +
+      '.hass-settings .lnk{display:block;margin-top:8px;color:var(--clr-primary);cursor:pointer;font-weight:500;}' +
+      '.hass-chat-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px;background:var(--clr-bg);display:flex;flex-direction:column;gap:10px;}' +
+      '.hass-msg{max-width:88%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;}' +
       '.hass-msg.user{align-self:flex-end;background:var(--clr-primary);color:#fff;border-bottom-right-radius:3px;}' +
       '.hass-msg.bot{align-self:flex-start;background:var(--clr-surface);border:1px solid var(--clr-border);color:var(--clr-text);border-bottom-left-radius:3px;}' +
       '.hass-msg.err{align-self:flex-start;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;}' +
-      '.hass-msg .nav-btn{margin-top:8px;}' +
-      '.hass-msg .retry-btn{margin-top:8px;}' +
-      '.hass-typing{align-self:flex-start;display:flex;gap:4px;padding:10px 12px;background:var(--clr-surface);' +
-        'border:1px solid var(--clr-border);border-radius:12px;border-bottom-left-radius:3px;}' +
-      '.hass-typing span{width:6px;height:6px;border-radius:50%;background:var(--clr-muted);opacity:.5;' +
-        'animation:hassBlink 1.2s infinite;}' +
+      '.hass-card{align-self:stretch;background:var(--clr-surface);border:1px solid var(--clr-border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--clr-text);}' +
+      '.hass-card .ctitle{font-weight:600;color:var(--clr-primary-d);margin-bottom:2px;}' +
+      '.hass-card .csum{color:var(--clr-text-light);font-size:12px;margin-bottom:8px;}' +
+      '.hass-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--clr-border);border-radius:8px;}' +
+      '.hass-rtable{border-collapse:collapse;width:100%;font-size:12px;}' +
+      '.hass-rtable th{text-align:left;padding:6px 9px;background:#f3f4f6;border-bottom:2px solid var(--clr-primary);white-space:nowrap;}' +
+      '.hass-rtable td{padding:5px 9px;border-bottom:1px solid var(--clr-border);white-space:nowrap;}' +
+      '.hass-rtable td.num,.hass-rtable th.num{text-align:right;}' +
+      '.hass-tbl-note{font-size:11px;color:var(--clr-text-light);margin-top:6px;}' +
+      '.hass-totals{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}' +
+      '.hass-chip-total{background:var(--clr-bg);border:1px solid var(--clr-border);border-radius:999px;padding:3px 9px;font-size:11px;color:var(--clr-text);}' +
+      '.hass-btnrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}' +
+      '.hass-btnrow .btn{font-size:12px;padding:5px 10px;}' +
+      '.hass-action{align-self:stretch;background:#fffdf5;border:1px solid var(--clr-gold);border-radius:10px;padding:10px 12px;font-size:13px;}' +
+      '.hass-action .alabel{font-weight:600;color:var(--clr-primary-d);margin-bottom:4px;}' +
+      '.hass-starters{display:flex;flex-direction:column;gap:14px;}' +
+      '.hass-greet{font-size:13px;color:var(--clr-text);line-height:1.5;}' +
+      '.hass-sgroup h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--clr-text-light);font-weight:700;}' +
+      '.hass-sgroup .schips{display:flex;flex-wrap:wrap;gap:6px;}' +
+      '.hass-starter{background:var(--clr-surface);border:1px solid var(--clr-border);border-radius:999px;padding:6px 11px;font-size:12px;color:var(--clr-text);cursor:pointer;text-align:left;transition:border-color .12s,background .12s;}' +
+      '.hass-starter:hover{border-color:var(--clr-primary);background:var(--clr-bg);}' +
+      '.hass-clarify{align-self:flex-start;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}' +
+      '.hass-clarify .hass-starter{border-color:var(--clr-gold);}' +
+      '.hass-typing{align-self:flex-start;display:flex;gap:4px;padding:10px 12px;background:var(--clr-surface);border:1px solid var(--clr-border);border-radius:12px;border-bottom-left-radius:3px;}' +
+      '.hass-typing span{width:6px;height:6px;border-radius:50%;background:var(--clr-muted, #9ca3af);opacity:.5;animation:hassBlink 1.2s infinite;}' +
       '.hass-typing span:nth-child(2){animation-delay:.2s;}.hass-typing span:nth-child(3){animation-delay:.4s;}' +
       '@keyframes hassBlink{0%,80%,100%{opacity:.3;}40%{opacity:1;}}' +
       '.hass-chat-foot{flex-shrink:0;border-top:1px solid var(--clr-border);padding:10px;display:flex;gap:8px;background:var(--clr-surface);}' +
-      '.hass-chat-foot textarea{flex:1;resize:none;border:1px solid var(--clr-border);border-radius:var(--radius);' +
-        'padding:8px 10px;font-family:var(--font);font-size:13px;max-height:90px;line-height:1.4;}' +
+      '.hass-chat-foot textarea{flex:1;resize:none;border:1px solid var(--clr-border);border-radius:var(--radius);padding:8px 10px;font-family:var(--font);font-size:13px;max-height:90px;line-height:1.4;}' +
       '.hass-chat-foot textarea:focus{outline:none;border-color:var(--clr-primary);box-shadow:0 0 0 3px rgba(31,42,68,.15);}' +
-      '.hass-chat-foot button{flex-shrink:0;}' +
-      '.hass-chat-empty{margin:auto;text-align:center;color:var(--clr-text-light);font-size:13px;padding:0 18px;}';
+      '@media (max-width:520px){.hass-chat-panel{right:8px;left:8px;width:auto;bottom:84px;}}';
     var s = document.createElement('style');
-    s.id = 'hassChatStyles';
-    s.textContent = css;
+    s.id = 'hassChatStyles'; s.textContent = css;
     document.head.appendChild(s);
   }
+
+  var ICON_GEAR = '<svg class="hicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
   function _build() {
     _injectStyles();
@@ -466,14 +601,23 @@ var ChatWidget = (function () {
     var panel = document.createElement('div');
     panel.className = 'hass-chat-panel';
     panel.innerHTML =
+      '<div class="hass-chat-resize" title="Drag to resize"></div>' +
       '<div class="hass-chat-head">' +
         '<span class="ttl"><span class="dot"></span>Hass Assistant</span>' +
-        '<button type="button" title="Close" aria-label="Close">&times;</button>' +
+        '<span class="hbtns">' +
+          '<button type="button" class="set" title="Settings" aria-label="Settings">' + ICON_GEAR + '</button>' +
+          '<button type="button" class="dock" title="Expand or shrink" aria-label="Expand">&#9633;</button>' +
+          '<button type="button" class="cls" title="Close" aria-label="Close">&times;</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="hass-settings">' +
+        '<label><input type="checkbox" class="autoopen"> Open automatically on load</label>' +
+        '<span class="lnk newchat">Start a new chat</span>' +
       '</div>' +
       '<div class="hass-chat-body"></div>' +
       '<div class="hass-chat-foot">' +
-        '<textarea rows="1" placeholder="Ask me anything…"></textarea>' +
-        '<button class="btn btn-primary btn-sm">Send</button>' +
+        '<textarea rows="1" placeholder="Ask me anything..."></textarea>' +
+        '<button class="btn btn-primary btn-sm send">Send</button>' +
       '</div>';
 
     document.body.appendChild(launcher);
@@ -483,135 +627,328 @@ var ChatWidget = (function () {
     _els.panel    = panel;
     _els.body     = panel.querySelector('.hass-chat-body');
     _els.input    = panel.querySelector('textarea');
-    _els.send     = panel.querySelector('.hass-chat-foot button');
-    _els.close    = panel.querySelector('.hass-chat-head button');
+    _els.send     = panel.querySelector('.send');
+    _els.close    = panel.querySelector('.cls');
+    _els.dock     = panel.querySelector('.dock');
+    _els.setBtn   = panel.querySelector('.set');
+    _els.settings = panel.querySelector('.hass-settings');
+    _els.autoopen = panel.querySelector('.autoopen');
+    _els.newchat  = panel.querySelector('.newchat');
+    _els.resize   = panel.querySelector('.hass-chat-resize');
 
-    launcher.onclick  = toggle;
+    launcher.onclick   = toggle;
     _els.close.onclick = function () { setOpen(false); };
     _els.send.onclick  = _onSend;
+    _els.dock.onclick  = _toggleDock;
+    _els.setBtn.onclick = function (e) { e.stopPropagation(); _els.settings.classList.toggle('open'); };
+    _els.newchat.onclick = function () { _history = []; _started = false; _els.settings.classList.remove('open'); _renderHome(); };
+    _els.autoopen.checked = (_getAutoOpen());
+    _els.autoopen.onchange = function () { _setAutoOpen(_els.autoopen.checked); };
     _els.input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _onSend(); }
     });
+    panel.addEventListener('click', function () { _els.settings.classList.remove('open'); });
+    _els.settings.addEventListener('click', function (e) { e.stopPropagation(); });
 
-    _renderEmpty();
+    _restoreSize();
+    _wireResize();
+
+    // React to page changes so starters stay context-aware.
+    window.addEventListener('hass:route', function (e) {
+      _route = (e && e.detail && e.detail.route) || _route;
+      if (_open && !_started) _renderHome();
+    });
+
+    _renderHome();
   }
 
-  function _renderEmpty() {
-    _els.body.innerHTML =
-      '<div class="hass-chat-empty">Hi! I can look up customers, orders, invoices and more — ' +
-      'all read-only and scoped to your access. What do you need?</div>';
+  // ── Settings helpers ──────────────────────────────────────────────
+  function _getAutoOpen() { try { return localStorage.getItem(AUTOOPEN_KEY) !== '0'; } catch (e) { return true; } }
+  function _setAutoOpen(on) { try { localStorage.setItem(AUTOOPEN_KEY, on ? '1' : '0'); } catch (e) {} }
+  function _isCollapsedSession() { try { return sessionStorage.getItem(COLLAPSE_KEY) === '1'; } catch (e) { return false; } }
+  function _markCollapsed(c) { try { c ? sessionStorage.setItem(COLLAPSE_KEY, '1') : sessionStorage.removeItem(COLLAPSE_KEY); } catch (e) {} }
+
+  // ── Resize + dock ─────────────────────────────────────────────────
+  function _clampW(w) { return Math.max(320, Math.min(w, window.innerWidth - 32)); }
+  function _clampH(h) { return Math.max(360, Math.min(h, window.innerHeight - 120)); }
+  function _applySize(w, h) { _els.panel.style.width = _clampW(w) + 'px'; _els.panel.style.height = _clampH(h) + 'px'; }
+  function _persistSize() {
+    try { sessionStorage.setItem(SIZE_KEY, JSON.stringify({ w: parseInt(_els.panel.style.width, 10), h: parseInt(_els.panel.style.height, 10) })); } catch (e) {}
+  }
+  function _restoreSize() {
+    try {
+      var s = JSON.parse(sessionStorage.getItem(SIZE_KEY) || 'null');
+      if (s && s.w && s.h) _applySize(s.w, s.h);
+    } catch (e) {}
+  }
+  function _toggleDock() {
+    var wide = _els.panel.clientWidth > 520;
+    if (wide) { _applySize(400, 560); } else { _applySize(window.innerWidth - 32, window.innerHeight - 120); }
+    _persistSize();
+  }
+  function _wireResize() {
+    var grip = _els.resize, startX, startY, startW, startH, dragging = false;
+    function down(e) {
+      dragging = true;
+      var p = (e.touches && e.touches[0]) || e;
+      startX = p.clientX; startY = p.clientY;
+      startW = _els.panel.clientWidth; startH = _els.panel.clientHeight;
+      document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+      document.addEventListener('touchmove', move, { passive: false }); document.addEventListener('touchend', up);
+      e.preventDefault();
+    }
+    function move(e) {
+      if (!dragging) return;
+      var p = (e.touches && e.touches[0]) || e;
+      _applySize(startW + (startX - p.clientX), startH + (startY - p.clientY));
+      if (e.cancelable) e.preventDefault();
+    }
+    function up() {
+      dragging = false; _persistSize();
+      document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+      document.removeEventListener('touchmove', move); document.removeEventListener('touchend', up);
+    }
+    if (grip) { grip.addEventListener('mousedown', down); grip.addEventListener('touchstart', down, { passive: false }); }
   }
 
-  function _scroll() { _els.body.scrollTop = _els.body.scrollHeight; }
-
-  function _addBubble(cls, text) {
-    var d = document.createElement('div');
-    d.className = 'hass-msg ' + cls;
-    d.textContent = text;
-    _els.body.appendChild(d);
-    _scroll();
-    return d;
+  // ── Home view: greeting + starters ────────────────────────────────
+  function _renderHome() {
+    _started = false;
+    _els.body.innerHTML = '<div class="hass-starters"><div style="display:flex;justify-content:center;padding:24px"><span class="spinner dark"></span></div></div>';
+    _loadSuggestions(_route, function (data) {
+      if (_started) return; // a message was sent while loading
+      var html = '<div class="hass-starters">';
+      html += '<div class="hass-greet">' + esc((data && data.greeting) || 'Hi. How can I help?') + '</div>';
+      (data && data.groups || []).forEach(function (g) {
+        html += '<div class="hass-sgroup"><h4>' + esc(g.header) + '</h4><div class="schips">';
+        (g.items || []).forEach(function (it) {
+          html += '<button type="button" class="hass-starter" data-prompt="' + esc(it.prompt || it.label) + '">' + esc(it.label) + '</button>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+      _els.body.innerHTML = html;
+      _els.body.querySelectorAll('.hass-starter').forEach(function (b) {
+        b.onclick = function () { _sendUser(b.getAttribute('data-prompt')); };
+      });
+    });
   }
 
-  function _showTyping() {
-    var t = document.createElement('div');
-    t.className = 'hass-typing';
-    t.innerHTML = '<span></span><span></span><span></span>';
-    _els.body.appendChild(t);
-    _scroll();
-    return t;
-  }
-
-  function _onSend() {
-    if (_busy) return;
-    var msg = (_els.input.value || '').trim();
-    if (!msg) return;
-
-    // Clear the intro on first message.
-    if (_els.body.querySelector('.hass-chat-empty')) _els.body.innerHTML = '';
-
-    _els.input.value = '';
-    _addBubble('user', msg);
-    _send(msg);
-  }
-
-  function _send(msg) {
-    _busy = true;
-    _els.send.disabled = true;
-    var typing = _showTyping();
-    var historySnapshot = _history.slice(-HISTORY_TURNS * 2);
-
-    API.call('bot', 'chat', { message: msg, history: historySnapshot }, { retries: 1 })
-      .then(function (res) {
-        if (typing.parentNode) typing.remove();
-        _busy = false; _els.send.disabled = false;
-        _renderAnswer(msg, res);
-      })
-      .catch(function (err) {
-        if (typing.parentNode) typing.remove();
-        _busy = false; _els.send.disabled = false;
-        _renderError(msg, err);
+  function _loadSuggestions(route, cb) {
+    var key = route || '_';
+    if (_suggestCache[key]) { cb(_suggestCache[key]); return; }
+    API.call('bot', 'suggestions', { route: route }, { retries: 1 })
+      .then(function (data) { _suggestCache[key] = data; cb(data); })
+      .catch(function () {
+        cb({ greeting: (_me && _me.first_name ? 'Hi ' + _me.first_name + '. ' : 'Hi. ') +
+             'Ask me to run a report, look something up, or draft a message.', groups: [] });
       });
   }
 
-  function _renderAnswer(userMsg, res) {
-    var answer = (res && res.answer) ? res.answer : 'I could not produce an answer.';
+  // ── Bubbles / typing ──────────────────────────────────────────────
+  function _scroll() { _els.body.scrollTop = _els.body.scrollHeight; }
+  function _addBubble(cls, text) {
+    var d = document.createElement('div');
+    d.className = 'hass-msg ' + cls; d.textContent = text;
+    _els.body.appendChild(d); _scroll(); return d;
+  }
+  function _addNode(node) { _els.body.appendChild(node); _scroll(); return node; }
+  function _showTyping() {
+    var t = document.createElement('div');
+    t.className = 'hass-typing'; t.innerHTML = '<span></span><span></span><span></span>';
+    _els.body.appendChild(t); _scroll(); return t;
+  }
 
-    // Graceful "not configured" state with a hint for admins.
-    if (res && res.turnId == null && /not configured/i.test(answer)) {
+  // ── Send pipeline ─────────────────────────────────────────────────
+  function _onSend() {
+    var msg = (_els.input.value || '').trim();
+    if (!msg) return;
+    _els.input.value = '';
+    _sendUser(msg);
+  }
+  function _sendUser(msg) {
+    if (_busy || !msg) return;
+    if (!_started) { _started = true; _els.body.innerHTML = ''; }
+    _addBubble('user', msg);
+    _send(msg);
+  }
+  function _send(msg) {
+    _busy = true; _els.send.disabled = true;
+    var typing = _showTyping();
+    var snapshot = _history.slice(-HISTORY_TURNS * 2);
+    API.call('bot', 'chat', { message: msg, history: snapshot, route: _route }, { retries: 1 })
+      .then(function (res) { if (typing.parentNode) typing.remove(); _busy = false; _els.send.disabled = false; _renderTurn(msg, res); })
+      .catch(function (err) { if (typing.parentNode) typing.remove(); _busy = false; _els.send.disabled = false; _renderError(msg, err); });
+  }
+
+  function _renderTurn(userMsg, res) {
+    var answer = (res && res.answer) || '';
+
+    if (res && res.turnId == null && /not configured|not permitted/i.test(answer)) {
       var b = _addBubble('bot', answer);
-      var hint = document.createElement('div');
-      hint.style.cssText = 'margin-top:6px;font-size:12px;color:var(--clr-text-light)';
-      hint.textContent = 'Admins can set this up under Admin → Bot Assistant.';
-      b.appendChild(hint);
-      return; // do not record an un-answered turn in history
+      if (/not configured/i.test(answer)) {
+        var hint = document.createElement('div');
+        hint.style.cssText = 'margin-top:6px;font-size:12px;color:var(--clr-text-light)';
+        hint.textContent = 'Admins can set this up under Admin then Bot Assistant.';
+        b.appendChild(hint);
+      }
+      return;
     }
 
-    var bubble = _addBubble('bot', answer);
+    if (answer) _addBubble('bot', answer);
+    if (res && res.result) _renderResult(res.result);
+    if (res && res.actions && res.actions.length) res.actions.forEach(_renderAction);
+    if (res && res.clarify) _renderClarify(res.clarify);
+    if (res && res.navigate && res.navigate.route) _renderNavigate(res.navigate);
 
-    // Navigation directive → "Open <route>" button.
-    var nav = res && res.navigate;
-    if (nav && nav.route) {
-      var btn = document.createElement('button');
-      btn.className = 'btn btn-secondary btn-sm nav-btn';
-      btn.textContent = 'Open ' + nav.route;
-      btn.onclick = function () {
-        try {
-          if (typeof goRoute === 'function') goRoute(nav.route, nav.params || {});
-          else Router.navigate(nav.route, nav.params || {});
-        } catch (e) { Toast && Toast.error('Could not open ' + nav.route); }
-        setOpen(false);
-      };
-      bubble.appendChild(btn);
-    }
-
-    // Record the turn for follow-up context.
     _history.push({ role: 'user', content: userMsg });
-    _history.push({ role: 'assistant', content: answer });
+    _history.push({ role: 'assistant', content: answer || '(showed a result)' });
     if (_history.length > HISTORY_TURNS * 2) _history = _history.slice(-HISTORY_TURNS * 2);
+  }
+
+  function _renderResult(result) {
+    var card = document.createElement('div');
+    card.className = 'hass-card';
+    var cols = result.columns || [], rows = result.rows || [];
+    var html = '<div class="ctitle">' + esc(result.title || 'Result') + '</div>';
+    if (result.summary) html += '<div class="csum">' + esc(result.summary) + '</div>';
+    if (cols.length && rows.length) {
+      html += HassTable.tableHTML(cols, rows, { maxRows: 50 });
+      html += HassTable.totalsHTML(result.totals);
+    } else {
+      html += '<div class="csum">No rows.</div>';
+    }
+    if (result.currencyNote) html += '<div class="hass-tbl-note">' + esc(result.currencyNote) + '</div>';
+    html += '<div class="hass-btnrow"></div>';
+    card.innerHTML = html;
+
+    var row = card.querySelector('.hass-btnrow');
+    if (cols.length && rows.length) {
+      var csvBtn = _mkBtn('btn-secondary', 'Export CSV');
+      csvBtn.onclick = function () {
+        var name = String(result.title || 'report').replace(/[^a-z0-9]+/gi, '_').toLowerCase() + '.csv';
+        if (!HassTable.download(name, HassTable.toCSV(cols, rows))) Toast.error('Could not export. Try Email to me.');
+      };
+      row.appendChild(csvBtn);
+
+      var mailBtn = _mkBtn('btn-secondary', 'Email to me');
+      mailBtn.onclick = function () {
+        mailBtn.disabled = true; mailBtn.textContent = 'Sending...';
+        API.call('bot', 'emailResult', { title: result.title, summary: result.summary, columns: cols, rows: rows }, { retries: 0 })
+          .then(function (r) { mailBtn.textContent = 'Emailed'; Toast.success('Emailed to ' + (r && r.to ? r.to : 'you') + '.'); })
+          .catch(function (e) { mailBtn.disabled = false; mailBtn.textContent = 'Email to me'; Toast.error((e && e.message) || 'Could not email.'); });
+      };
+      row.appendChild(mailBtn);
+    }
+    if (result.deepLink && result.deepLink.route) {
+      var label = SECTION_LABEL[result.deepLink.route] || result.deepLink.route;
+      var openBtn = _mkBtn('btn-primary', 'Open in ' + label);
+      openBtn.onclick = function () { _openRoute(result.deepLink); };
+      row.appendChild(openBtn);
+    }
+    _addNode(card);
+  }
+
+  function _renderAction(action) {
+    var card = document.createElement('div');
+    card.className = 'hass-action';
+    card.innerHTML = '<div class="alabel">Confirm to proceed</div>' +
+      '<div>' + esc(action.preview || ('Run ' + action.service + '.' + action.action)) + '</div>' +
+      '<div class="hass-btnrow"></div>';
+    var row = card.querySelector('.hass-btnrow');
+    var yes = _mkBtn('btn-primary', 'Confirm');
+    var no  = _mkBtn('btn-secondary', 'Cancel');
+    yes.onclick = function () {
+      yes.disabled = true; no.disabled = true; yes.textContent = 'Working...';
+      API.call('bot', 'confirmAction', { tool: action.tool, params: action.params }, { retries: 0 })
+        .then(function (r) {
+          card.innerHTML = '<div class="alabel">Done</div><div>' + esc((r && r.message) || 'Action completed.') + '</div>';
+          Toast.success((r && r.message) || 'Action completed.');
+        })
+        .catch(function (e) {
+          yes.disabled = false; no.disabled = false; yes.textContent = 'Confirm';
+          Toast.error((e && e.message) || 'Could not complete the action.');
+        });
+    };
+    no.onclick = function () { card.innerHTML = '<div class="alabel">Cancelled</div><div>No changes were made.</div>'; };
+    row.appendChild(yes); row.appendChild(no);
+    _addNode(card);
+  }
+
+  function _renderClarify(clarify) {
+    if (clarify.question) _addBubble('bot', clarify.question);
+    var chips = clarify.chips || [];
+    if (!chips.length) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'hass-clarify';
+    chips.forEach(function (c) {
+      var label = (c && c.label) ? c.label : c;
+      var value = (c && c.value) ? c.value : c;
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'hass-starter'; b.textContent = String(label);
+      b.onclick = function () { _sendUser(String(value)); };
+      wrap.appendChild(b);
+    });
+    _addNode(wrap);
+  }
+
+  function _renderNavigate(nav) {
+    var wrap = document.createElement('div');
+    wrap.className = 'hass-btnrow'; wrap.style.alignSelf = 'flex-start';
+    var label = SECTION_LABEL[nav.route] || nav.route;
+    var btn = _mkBtn('btn-secondary', 'Open ' + label);
+    btn.onclick = function () { _openRoute(nav); };
+    wrap.appendChild(btn);
+    _addNode(wrap);
+  }
+
+  function _openRoute(nav) {
+    try {
+      if (typeof goRoute === 'function') goRoute(nav.route, nav.params || {});
+      else Router.navigate(nav.route, nav.params || {});
+    } catch (e) { if (typeof Toast !== 'undefined') Toast.error('Could not open ' + nav.route); }
+    setOpen(false);
   }
 
   function _renderError(userMsg, err) {
     var msg = (err && err.message) ? err.message : 'Something went wrong. Please try again.';
     var bubble = _addBubble('err', msg);
-    var retry = document.createElement('button');
-    retry.className = 'btn btn-secondary btn-sm retry-btn';
-    retry.textContent = 'Retry';
+    var retry = _mkBtn('btn-secondary', 'Retry');
+    retry.style.marginTop = '8px';
     retry.onclick = function () { bubble.remove(); _send(userMsg); };
     bubble.appendChild(retry);
   }
 
+  function _mkBtn(variant, text) {
+    var b = document.createElement('button');
+    b.className = 'btn ' + variant + ' btn-sm'; b.type = 'button'; b.textContent = text;
+    return b;
+  }
+
+  // ── Open / close ──────────────────────────────────────────────────
   function setOpen(open) {
     _open = open;
     _els.panel.classList.toggle('open', open);
-    if (open) setTimeout(function () { _els.input.focus(); }, 50);
+    _markCollapsed(!open);
+    if (open) {
+      if (!_started) _renderHome();
+      setTimeout(function () { _els.input.focus(); }, 50);
+    } else {
+      _els.settings.classList.remove('open');
+    }
   }
   function toggle() { setOpen(!_open); }
 
-  function mount() {
+  function mount(me) {
     if (_mounted) return;
     _mounted = true;
+    _me = me || null;
+    try { _route = (typeof Router !== 'undefined' && Router.current && Router.current()) || ''; } catch (e) {}
     _build();
+    // Auto-open on first load unless the user disabled it or collapsed it this session.
+    if (_getAutoOpen() && !_isCollapsedSession()) {
+      setTimeout(function () { setOpen(true); }, 400);
+    }
   }
 
   return { mount: mount, open: function () { setOpen(true); }, close: function () { setOpen(false); } };
