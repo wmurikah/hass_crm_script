@@ -6,6 +6,11 @@
                      display: flex; align-items: center; gap: 8px; }
 .apx-title::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: var(--clr-gold); }
 .apx-actions       { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.apx-tgt           { display: inline-flex; align-items: flex-end; gap: 8px; padding: 5px 9px; border: 1px solid var(--clr-border); border-radius: 8px; background: var(--clr-surface); }
+.apx-tgt-f         { display: inline-flex; flex-direction: column; gap: 2px; }
+.apx-tgt-f label   { font-size: 10px; font-weight: 600; color: var(--clr-text-light); text-transform: uppercase; letter-spacing: .03em; }
+.apx-tgt-f input   { width: 78px; font-size: 12px; padding: 4px 6px; border: 1px solid var(--clr-border); border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); }
+.apx-tgt-f input:focus { outline: none; border-color: var(--clr-primary); box-shadow: 0 0 0 3px rgba(31,42,68,.15); }
 .apx-grid          { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
 .apx-grid:last-child { margin-bottom: 0; }
 .apx-card          { display: flex; flex-direction: column; min-width: 0; }
@@ -139,6 +144,15 @@ var ApprovalsUI = (function () {
         '<h2 class="apx-title">Approvals (PO / SO)</h2>' +
         '<div class="apx-actions">' +
           '<button class="btn btn-secondary btn-sm" id="apxRefresh">Refresh</button>' +
+          (can('order.manage')
+            ? '<span class="apx-tgt" title="On-time threshold the leaderboards measure each approver against. Leave a field blank to keep its current value.">' +
+                '<span class="apx-tgt-f"><label for="apxPoTarget">PO target (minutes)</label>' +
+                  '<input type="number" min="0" step="1" id="apxPoTarget" placeholder="e.g. 240"></span>' +
+                '<span class="apx-tgt-f"><label for="apxSoTarget">SO target (minutes)</label>' +
+                  '<input type="number" min="0" step="1" id="apxSoTarget" placeholder="e.g. 240"></span>' +
+                '<button class="btn btn-primary btn-sm" id="apxTargetSave">Save</button>' +
+              '</span>'
+            : '') +
           (can('order.manage') ? '<button class="btn btn-secondary btn-sm" id="apxTargets">Edit targets</button>' : '') +
         '</div>' +
       '</div>' +
@@ -149,6 +163,9 @@ var ApprovalsUI = (function () {
     if (rf) rf.onclick = function () { _dashStage = ''; loadCharts(); loadLeaderboards(); };
     var tb = document.getElementById('apxTargets');
     if (tb) tb.onclick = openTargets;
+    var ts = document.getElementById('apxTargetSave');
+    if (ts) ts.onclick = saveQuickTargets;
+    prefillQuickTargets();
 
     loadCharts();
     loadLeaderboards();
@@ -478,6 +495,50 @@ var ApprovalsUI = (function () {
   }
   // editTarget/removeTarget run from inside the open targets modal; reopen to refresh it.
   function reopenTargets() { Modal.close(); openTargets(); }
+
+  // Quick PO/SO target setter shown inline in the dashboard Approvals header.
+  // Writes the per-doc-type "APPROVAL" catch-all target (the step-type fallback
+  // _targetFor_ already reads), so every approval stage without its own per-stage
+  // override is measured against it. Per-stage targets set via "Edit targets"
+  // are left untouched.
+  function prefillQuickTargets() {
+    var poEl = document.getElementById('apxPoTarget');
+    var soEl = document.getElementById('apxSoTarget');
+    if (!poEl && !soEl) return;
+    API.call('approvals', 'getTargets', {}).then(function (d) {
+      var t = (d && d.targets) || {};
+      if (poEl && t.PO && t.PO.APPROVAL != null) poEl.value = t.PO.APPROVAL;
+      if (soEl && t.SO && t.SO.APPROVAL != null) soEl.value = t.SO.APPROVAL;
+    }).catch(function () {});
+  }
+  function saveQuickTargets() {
+    var btn = document.getElementById('apxTargetSave');
+    if (!btn) return;
+    var jobs = [];
+    try {
+      [['apxPoTarget', 'PO'], ['apxSoTarget', 'SO']].forEach(function (p) {
+        var el = document.getElementById(p[0]);
+        if (!el) return;
+        var v = (el.value || '').trim();
+        if (v === '') return;                       // blank = leave this doc type's target as-is
+        var n = Number(v);
+        if (isNaN(n) || n < 0) throw new Error(p[1] + ' target must be a non-negative number of minutes.');
+        jobs.push({ doc_type: p[1], stage: 'APPROVAL', target_minutes: n });
+      });
+    } catch (e) { Toast.warning(e.message); return; }
+    if (!jobs.length) { Toast.warning('Enter a PO or SO target first.'); return; }
+    btn.disabled = true; btn.textContent = 'Saving...';
+    // saveTargets upserts one (doc_type, stage) per call; chain so both land.
+    jobs.reduce(function (chain, job) {
+      return chain.then(function () { return API.call('approvals', 'saveTargets', job, { retries: 0 }); });
+    }, Promise.resolve())
+      .then(function () {
+        btn.disabled = false; btn.textContent = 'Save';
+        Toast.success('On-time target' + (jobs.length > 1 ? 's' : '') + ' saved.');
+        loadLeaderboards();
+      })
+      .catch(function (e) { btn.disabled = false; btn.textContent = 'Save'; Toast.error(e && e.message ? e.message : 'Could not save targets.'); });
+  }
 
   // ════════════════════════════════════════════════════════════════════════
   //  Settings panel: Upload + Integration tabs (the ingestion surface).
