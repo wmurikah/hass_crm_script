@@ -24,11 +24,15 @@ var Jobs = (function () {
   // ── Trigger management ──────────────────────────────────────────────────────
 
   var _TRIGGERS_ = [
-    { fn: 'runJobs',             type: 'minutes', value: 5   },
-    { fn: 'runDailyMaintenance', type: 'hour',    value: 2   },
-    { fn: 'runHourlyApproval',   type: 'minutes', value: 60  },
-    { fn: 'runSlaBreachSweep',   type: 'minutes', value: 15  },
-    { fn: 'keepWarm',            type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
+    { fn: 'runJobs',                 type: 'minutes', value: 5   },
+    { fn: 'runDailyMaintenance',     type: 'hour',    value: 2   },
+    { fn: 'runHourlyApproval',       type: 'minutes', value: 60  },
+    { fn: 'runSlaBreachSweep',       type: 'minutes', value: 15  },
+    // Near-real-time Oracle approvals pull. Apps Script has no push, so a short
+    // interval scheduled pull is the closest equivalent; it no-ops silently
+    // unless the integration is enabled and configured (see runOracleApprovalsSync).
+    { fn: 'runOracleApprovalsSync',  type: 'minutes', value: 10  },
+    { fn: 'keepWarm',                type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
   ];
 
   function installAllTriggers() {
@@ -123,6 +127,7 @@ var Jobs = (function () {
 
     switch (job.type) {
       case 'ORACLE_SYNC':           return _handleOracleSync_(payload);
+      case 'ORACLE_APPROVALS_SYNC': return _handleOracleApprovalsSync_(payload);
       case 'MPESA_RECON':           return _handleMpesaRecon_(payload);
       case 'ETIMS_SUBMIT':          return _handleEtimsSubmit_(payload);
       case 'DOC_EXPIRY_ALERT':      return _handleDocExpiryAlert_(payload);
@@ -140,6 +145,11 @@ var Jobs = (function () {
 
   function _handleOracleSync_(payload) {
     OracleInteg.sync();
+  }
+
+  function _handleOracleApprovalsSync_(payload) {
+    // Runs the SAME shared loader the upload path uses, tagged INTEGRATION.
+    OracleApprovalsLoader.syncFromIntegration('SYSTEM');
   }
 
   function _handleMpesaRecon_(payload) {
@@ -260,6 +270,29 @@ var Jobs = (function () {
 function runJobs()              { Jobs.runJobs(); }
 function runSlaBreachSweep()    { Jobs.runJobs(); }  // same runner, SLA jobs inserted separately
 function runHourlyApproval()    { Jobs.runJobs(); }
+
+/**
+ * runOracleApprovalsSync - short-interval pull for the Oracle PO/SO/LA timing
+ * feature (the near-real-time refresh). It is a no-op unless the integration is
+ * both enabled and fully configured, so leaving it installed while the Oracle
+ * connector is not yet wired is harmless and silent. When the connector is not
+ * connected the loader throws; that is caught and logged, never surfaced to a
+ * user (the upload path is unaffected).
+ */
+function runOracleApprovalsSync() {
+  try {
+    if (typeof OracleApprovalsConnector === 'undefined') return;
+    if (!OracleApprovalsConnector.isConfigured()) return;   // not enabled / not configured
+    OracleApprovalsLoader.syncFromIntegration('SYSTEM');
+  } catch (e) {
+    try {
+      TursoClient.write(
+        'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'oracle_approvals', 'sync', 'FAILED', 'scheduled pull', '', String(e && e.message ? e.message : e).substring(0, 300), nowIso()]
+      );
+    } catch (_) {}
+  }
+}
 
 function runDailyMaintenance() {
   // Enqueue maintenance jobs if not already pending.

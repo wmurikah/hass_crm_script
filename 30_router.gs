@@ -70,6 +70,28 @@ function doGet(e) {
 // ── doPost ────────────────────────────────────────────────────────────────────
 
 function doPost(e) {
+  // ── Optional inbound integration webhook (Oracle PO/SO/LA only) ──────────────
+  // The ONE deliberate doPost data path, gated by a shared secret. It activates
+  // ONLY when the request explicitly carries hook=oracle_approvals (query param
+  // or body field) and writes solely to the oracle_approval* tables. Every other
+  // request falls straight through to the unchanged processRequest path, so app
+  // traffic and dispatcher gating are completely unaffected.
+  try {
+    var rawBody = e && e.postData ? e.postData.contents : '';
+    var hookParam = (e && e.parameter && e.parameter.hook) || '';
+    var bodyObj = null;
+    if (rawBody) { try { bodyObj = JSON.parse(rawBody); } catch (_) {} }
+    var isHook = (hookParam === 'oracle_approvals') || (bodyObj && bodyObj.hook === 'oracle_approvals');
+    if (isHook && typeof OracleApprovalsConnector !== 'undefined') {
+      var hookResult = OracleApprovalsConnector.ingestWebhook(bodyObj || {});
+      return ContentService.createTextOutput(JSON.stringify(hookResult)).setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (hookErr) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: { code: 'WEBHOOK_ERROR', message: hookErr.message } }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   var result = processRequest(e && e.postData ? e.postData.contents : '{}');
   return ContentService
     .createTextOutput(JSON.stringify(result))
