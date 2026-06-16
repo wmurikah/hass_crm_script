@@ -151,11 +151,11 @@ Because GAS loads files in filename order and `40_svc_auth.gs` loads after `30_d
 | `customers.setCredit` | `customers.set_credit` | `orders.cancel` | `order.cancel` |
 | `catalog.listProducts` | `order.view` | `orders.dispatch` | `order.dispatch` |
 | `catalog.getProduct` | `order.view` | `orders.confirmDelivery` | `order.confirm_delivery` |
-| `catalog.listDepots` | `order.view` | `approvals.inbox` | `order.approve_low` |
-| `catalog.listPriceLists` | `order.view` | `approvals.list` | `order.view` |
-| `catalog.getPriceListItems` | `order.view` | `approvals.get` | `order.view` |
-| `catalog.listSegments` | `customer.view` | `approvals.approve` | `order.approve_low` |
-| `pricing.listLists` | `order.view` | `approvals.reject` | `order.approve_low` |
+| `catalog.listDepots` | `order.view` | `approvalRequests.inbox` | `order.approve_low` |
+| `catalog.listPriceLists` | `order.view` | `approvalRequests.list` | `order.view` |
+| `catalog.getPriceListItems` | `order.view` | `approvalRequests.get` | `order.view` |
+| `catalog.listSegments` | `customer.view` | `approvalRequests.approve` | `order.approve_low` |
+| `pricing.listLists` | `order.view` | `approvalRequests.reject` | `order.approve_low` |
 | `pricing.getPriceListItems` | `order.view` | `invoices.list` | `invoice.view` |
 | `pricing.createList` | `invoice.generate` | `invoices.get` | `invoice.view` |
 | `pricing.upsertItem` | `invoice.generate` | `invoices.generate` | `invoice.generate` |
@@ -170,6 +170,8 @@ Because GAS loads files in filename order and `40_svc_auth.gs` loads after `30_d
 | `delivery_locations.softDelete` | `customer.manage` | | |
 
 > `payments.*` is split across two files: `upload/approve/reject` in `40_svc_invoices.gs:298-300`, `list` in `40_svc_payments.gs:58`. `pricing.getPriceListItems` reuses the catalog handler `_catalogGetPriceListItems_`.
+
+> **Approvals analytics (`40_svc_oracle_approvals.gs`, service `approvals.*`).** The PO/SO approval-timing feature. Reads are gated `order.view` (`charts`, `leaderboard`, `list`, `getDoc`, `getTargets`); mutations `order.manage` (`upload`, `addComment`, `saveTargets`, `getIntegrationConfig`, `saveIntegrationConfig`, `syncNow`). All aggregation is server-side: PO per-approver time is the per-step delta of the cumulative `*_approvals_variance` columns (`variance(k) - variance(k-1)`); SO is document-deduped (line-level table collapsed to one row per `document_number`) before `finance_variance` is attributed per approver. The dashboard renders two charts (PO/SO) and two leaderboards from `charts`/`leaderboard`; drill-down uses `list` then `getDoc`. Loading-authority columns are loaded but never surfaced. On-time targets live as a JSON value in the `config` table (`APPROVALS.ONTIME_TARGETS`). The older approval-inbox feature was moved to `approvalRequests.*` to free this namespace (client route id unchanged). Ingestion (CSV native; xlsx/xls via a temporary Google Sheet through the Drive API) and the pluggable, non-faked Oracle connector live in `60_integ_oracle_approvals.gs`; the optional inbound webhook is the one deliberate `doPost` data path, gated by a shared secret and writing only `po_approvals`/`so_approvals`.
 
 > **Tiered pricing (`40_svc_pricing.gs`).** Price lists carry exactly one scope dimension (XOR, enforced in `_normalizeScope_`): a Default list (`is_default = 1`), a Segment list (`segment_id`), or a Customer list (`customer_id`), each keyed to a `country_code` + `currency_code`. `Pricing.resolve(customerId, productId, asOf, depotId, quantity)` walks the tiers **customer -> segment -> default** and returns the rate from the most specific tier that has an item for the product (item-level partial override), or `null` when none does; it never crosses currencies. Order lines (`40_svc_orders.gs` `_resolveLinePricing_`) and invoice amounts (`40_svc_invoices.gs` via `Pricing.sumOrderLineTotals`) both source their rates from the resolver; a product with no covering list blocks the line rather than pricing at zero. `orders.price_list_id` is set to the most specific in-scope list for reference only (`Pricing.mostSpecificListId`); the per-line stored rate is authoritative. The live DB enforces one active default per country+currency via the partial unique index `ux_price_list_default`, which create/update translate into a clear validation message.
 

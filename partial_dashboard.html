@@ -1,39 +1,6 @@
 <style>
-/* ── SLA Performance section (navy/gold chrome; alert palette = breach only) ── */
-.sla-section        { margin-top: 24px; }
-.sla-section-title  { font-size: 16px; font-weight: 700; color: var(--clr-primary); margin: 0 0 12px;
-                      display: flex; align-items: center; gap: 8px; }
-.sla-section-title::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: var(--clr-gold); }
-.sla-grid           { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.sla-card           { display: flex; flex-direction: column; }
-.sla-card-head      { padding: 12px 14px 4px; }
-.sla-card-title     { display: block; font-size: 13.5px; font-weight: 600; color: var(--clr-text); }
-.sla-card-take      { display: block; font-size: 11.5px; color: var(--clr-text-light); margin-top: 2px; }
-.sla-card-body      { position: relative; height: 180px; padding: 8px 14px 14px; }
-/* Approaching breach = the action item: amber accent, scrollable list. */
-.sla-alert          { border-top: 3px solid var(--clr-warning); }
-.sla-alert .sla-card-title { color: var(--clr-warning); }
-.sla-alert .sla-card-body  { overflow-y: auto; }
-.sla-approach       { width: 100%; font-size: 12px; }
-.sla-approach td    { padding: 6px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
-.sla-approach tr:last-child td { border-bottom: none; }
-.sla-ap-sub         { width: 100%; }
-.sla-ap-num         { font-weight: 600; color: var(--clr-text); }
-.sla-ap-title       { color: var(--clr-text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.sla-ap-due         { white-space: nowrap; font-weight: 600; color: var(--clr-warning); text-align: right; }
-.sla-pr             { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .03em; padding: 2px 6px; border-radius: 4px; }
-.sla-pr-hi          { background: #fee2e2; color: #b91c1c; }
-.sla-pr-mid         { background: #fef3c7; color: #92400e; }
-.sla-pr-lo          { background: #f3f4f6; color: #6b7280; }
-.sla-empty          { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                      gap: 8px; color: var(--clr-success); text-align: center; font-size: 13px; padding: 0 16px; }
-.sla-empty svg      { opacity: .85; }
-/* Chart.js-unavailable fallbacks */
-.sla-mini           { display: flex; align-items: flex-end; gap: 3px; height: 100%; }
-.sla-mini-col       { flex: 1; height: 100%; display: flex; align-items: flex-end; }
-.sla-mini-bar       { width: 100%; background: var(--clr-danger); border-radius: 2px 2px 0 0; min-height: 2px; }
-.sla-comp-fb        { display: flex; flex-direction: column; gap: 10px; justify-content: center; height: 100%; font-size: 13px; color: var(--clr-text); }
-@media (max-width: 768px) { .sla-grid { grid-template-columns: 1fr; } }
+/* The Approvals (PO / SO) section that replaced the old SLA Performance block is
+   styled and rendered by the shared ApprovalsUI module (partial_approval_timing.html). */
 /* ── Business overview charts (navy/gold brand; 2x2 grid → 1 column on narrow) ── */
 .ovw-section        { margin-top: 24px; }
 .ovw-section-title  { font-size: 16px; font-weight: 700; color: var(--clr-primary); margin: 0 0 12px;
@@ -77,11 +44,9 @@ Router.register('dashboard', function (el) {
       '<h2 class="ovw-section-title">Business overview</h2>' +
       '<div class="ovw-grid" id="ovwGrid">' + ovwSkeletons() + '</div>' +
     '</div>' +
-    // ── SLA Performance section (below the KPI cards, scanning order preserved) ──
-    '<div class="sla-section">' +
-      '<h2 class="sla-section-title">SLA Performance</h2>' +
-      '<div class="sla-grid" id="slaGrid">' + slaSkeletons() + '</div>' +
-    '</div>';
+    // ── Approvals (PO / SO) section (replaces the old SLA Performance block):
+    //    two charts on top, two leaderboards below. Rendered by ApprovalsUI. ──
+    '<div class="apx-section" id="apxSection"></div>';
 
   // Each loader uses setHTML so a stale callback (user navigated away before
   // the API resolved) no-ops instead of throwing "Cannot set properties of
@@ -129,17 +94,6 @@ Router.register('dashboard', function (el) {
       '</div>';
     var out = ''; for (var i = 0; i < 6; i++) out += card; return out;
   }
-  function slaSkeletons() {
-    var card =
-      '<div class="card sla-card">' +
-        '<div class="sla-card-head">' +
-          '<span class="skeleton sk-line" style="width:52%"></span>' +
-          '<span class="skeleton sk-line" style="width:72%;margin-top:6px"></span>' +
-        '</div>' +
-        '<div class="sla-card-body"><div class="skeleton" style="width:100%;height:100%"></div></div>' +
-      '</div>';
-    var out = ''; for (var i = 0; i < 4; i++) out += card; return out;
-  }
   function ovwSkeletons() {
     var card =
       '<div class="card ovw-card">' +
@@ -152,15 +106,9 @@ Router.register('dashboard', function (el) {
     var out = ''; for (var i = 0; i < 4; i++) out += card; return out;
   }
 
-  // ── SLA Performance ──────────────────────────────────────────────────
-  // One backend call (dashboard.slaMetrics) feeds four panels. Charts use
-  // the rolled-back navy/gold chrome; only breach semantics use the alert
-  // palette (red = breached, amber = at-risk, green = met). Each panel has a
-  // plain-language title + single takeaway, and a calm empty state.
-  var SLA_RED = '#dc2626', SLA_AMBER = '#d97706', SLA_GREEN = '#16a34a', SLA_GRID = '#f1f3f5';
-
   // Lazy-load Chart.js (the page shell does not bundle it). cb(true) when the
   // global is ready; cb(false) if it could not load (we degrade gracefully).
+  // Shared by the business-overview charts below.
   function ensureChart(cb) {
     if (window.Chart) { cb(true); return; }
     if (window._slaChartCbs) { window._slaChartCbs.push(cb); return; }
@@ -176,164 +124,6 @@ Router.register('dashboard', function (el) {
     document.head.appendChild(s);
   }
 
-  function loadSla() {
-    // First paint right after login is served from the auth.me init bundle.
-    var pre = window._hassInitDash && window._hassInitDash.sla;
-    if (pre) {
-      window._hassInitDash.sla = null;
-      ensureChart(function (chartOk) {
-        if (Router.current() !== 'dashboard') return;
-        renderSla(pre, chartOk);
-      });
-      return;
-    }
-    setHTML('slaGrid', slaSkeletons());
-    API.call('dashboard', 'slaMetrics', {}).then(function (d) {
-      if (Router.current() !== 'dashboard') return;
-      ensureChart(function (chartOk) {
-        if (Router.current() !== 'dashboard') return;
-        renderSla(d, chartOk);
-      });
-    }).catch(function (e) {
-      setHTML('slaGrid', '<div style="grid-column:1/-1">' + errorCard(e, loadSla) + '</div>');
-    });
-  }
-
-  // Panel shell: title + one-line takeaway + body. `flag` adds the amber
-  // action-item accent (used by the "approaching breach" panel).
-  function slaPanel(title, takeaway, bodyHtml, flag) {
-    return '<div class="card sla-card' + (flag ? ' sla-alert' : '') + '">' +
-      '<div class="sla-card-head"><span class="sla-card-title">' + esc(title) + '</span>' +
-      '<span class="sla-card-take">' + esc(takeaway) + '</span></div>' +
-      '<div class="sla-card-body">' + bodyHtml + '</div></div>';
-  }
-  function slaCalm(msg) {
-    return '<div class="sla-empty">' +
-      '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' +
-      '<span>' + esc(msg) + '</span></div>';
-  }
-  function prBadge(p) {
-    var u = String(p || '').toUpperCase();
-    var cls = (u === 'CRITICAL' || u === 'HIGH') ? 'hi' : (u === 'MEDIUM' ? 'mid' : 'lo');
-    return '<span class="sla-pr sla-pr-' + cls + '">' + esc(u || '—') + '</span>';
-  }
-  function dueIn(iso) {
-    var ms = new Date(iso).getTime() - Date.now();
-    if (isNaN(ms)) return '—';
-    if (ms <= 0) return 'due now';
-    var h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000);
-    return h > 0 ? ('in ' + h + 'h' + (m ? ' ' + m + 'm' : '')) : ('in ' + m + 'm');
-  }
-
-  var _baseOpts = {
-    responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
-    plugins: { legend: { display: false }, tooltip: { intersect: false, mode: 'index' } },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
-      y: { beginAtZero: true, grid: { color: SLA_GRID }, border: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 }, precision: 0, maxTicksLimit: 5 } },
-    },
-  };
-
-  function renderSla(d, chartOk) {
-    d = d || {};
-    var trend     = d.breachTrend || [];
-    var byPrio    = d.breachesByPriority || [];
-    var comp      = d.compliance || { responseMet: 0, responseBreached: 0, resolveMet: 0, resolveBreached: 0 };
-    var approach  = d.approaching || [];
-
-    var trendTotal = trend.reduce(function (s, r) { return s + (r.count || 0); }, 0);
-    var prioTotal  = byPrio.reduce(function (s, r) { return s + (r.count || 0); }, 0);
-    var compTotal  = comp.responseMet + comp.responseBreached + comp.resolveMet + comp.resolveBreached;
-
-    // ── Panel bodies (canvas when Chart.js is ready, calm/fallback otherwise) ──
-    var trendBody = trendTotal === 0
-      ? slaCalm('No SLA breaches in the last 30 days.')
-      : (chartOk ? '<canvas id="slaTrendCv"></canvas>' : _miniBars(trend.map(function (t) { return { label: t.date.slice(5), val: t.count }; })));
-
-    var prioBody = prioTotal === 0
-      ? slaCalm('No breaches by priority.')
-      : (chartOk ? '<canvas id="slaPrioCv"></canvas>' : _miniBars(byPrio.map(function (p) { return { label: p.priority, val: p.count }; })));
-
-    var respPct = (comp.responseMet + comp.responseBreached) ? Math.round(comp.responseMet * 100 / (comp.responseMet + comp.responseBreached)) : null;
-    var resoPct = (comp.resolveMet + comp.resolveBreached) ? Math.round(comp.resolveMet * 100 / (comp.resolveMet + comp.resolveBreached)) : null;
-    var compTake = (respPct == null && resoPct == null) ? 'No SLA-tracked tickets yet'
-      : ((respPct == null ? '—' : respPct + '%') + ' response · ' + (resoPct == null ? '—' : resoPct + '%') + ' resolve met');
-    var compBody = compTotal === 0
-      ? slaCalm('No SLA-tracked tickets yet.')
-      : (chartOk ? '<canvas id="slaCompCv"></canvas>' : _compFallback(comp));
-
-    var approachBody = approach.length === 0
-      ? slaCalm('No tickets approaching breach.')
-      : '<table class="sla-approach"><tbody>' + approach.map(function (t) {
-          return '<tr>' +
-            '<td>' + prBadge(t.priority) + '</td>' +
-            '<td class="sla-ap-sub"><div class="sla-ap-num">' + esc(t.ticket_number || '') + '</div>' +
-              '<div class="sla-ap-title" title="' + esc(t.subject || '') + '">' + esc(t.subject || '') + '</div></td>' +
-            '<td class="sla-ap-due">' + esc(dueIn(t.due_at)) + '</td></tr>';
-        }).join('') + '</tbody></table>';
-
-    // Order: trend (top-left), APPROACHING (top-right, the action item),
-    // breaches by priority (bottom-left), compliance (bottom-right).
-    setHTML('slaGrid',
-      slaPanel('Breach rate trend', 'Daily breaches, last 30 days', trendBody) +
-      slaPanel('Approaching breach', approach.length ? approach.length + ' open ticket' + (approach.length > 1 ? 's' : '') + ' due within 24h' : 'Open tickets due within 24h', approachBody, true) +
-      slaPanel('Breaches by priority', 'Where breaches concentrate', prioBody) +
-      slaPanel('Response vs resolve compliance', compTake, compBody)
-    );
-
-    if (!chartOk) return; // fallbacks already rendered; nothing to instantiate
-
-    // ── Instantiate charts ──
-    if (trendTotal > 0) {
-      new Chart(document.getElementById('slaTrendCv'), {
-        type: 'line',
-        data: { labels: trend.map(function (t) { return t.date.slice(5); }),
-          datasets: [{ data: trend.map(function (t) { return t.count; }),
-            borderColor: SLA_RED, backgroundColor: 'rgba(220,38,38,.08)', fill: true,
-            tension: .3, pointRadius: 0, borderWidth: 2 }] },
-        options: _baseOpts,
-      });
-    }
-    if (prioTotal > 0) {
-      new Chart(document.getElementById('slaPrioCv'), {
-        type: 'bar',
-        data: { labels: byPrio.map(function (p) { return _cap(p.priority); }),
-          datasets: [{ data: byPrio.map(function (p) { return p.count; }),
-            backgroundColor: SLA_RED, borderRadius: 3, maxBarThickness: 46 }] },
-        options: _baseOpts,
-      });
-    }
-    if (compTotal > 0) {
-      new Chart(document.getElementById('slaCompCv'), {
-        type: 'bar',
-        data: { labels: ['Response', 'Resolve'],
-          datasets: [
-            { label: 'Met',      data: [comp.responseMet, comp.resolveMet],           backgroundColor: SLA_GREEN, borderRadius: 3, maxBarThickness: 46 },
-            { label: 'Breached', data: [comp.responseBreached, comp.resolveBreached], backgroundColor: SLA_RED,   borderRadius: 3, maxBarThickness: 46 },
-          ] },
-        options: Object.assign({}, _baseOpts, {
-          plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 11 }, color: '#6b7280' } },
-                     tooltip: { intersect: false, mode: 'index' } },
-        }),
-      });
-    }
-  }
-
-  // Tiny CSS-bar fallback if Chart.js cannot be fetched (offline / strict CSP).
-  function _miniBars(rows) {
-    var max = rows.reduce(function (m, r) { return Math.max(m, r.val); }, 1);
-    return '<div class="sla-mini">' + rows.map(function (r) {
-      var h = Math.max(2, Math.round((r.val / max) * 100));
-      return '<div class="sla-mini-col" title="' + esc(r.label) + ': ' + r.val + '">' +
-        '<div class="sla-mini-bar" style="height:' + h + '%"></div></div>';
-    }).join('') + '</div>';
-  }
-  function _compFallback(c) {
-    return '<div class="sla-comp-fb">' +
-      '<div>Response — <b>' + c.responseMet + '</b> met / <b style="color:' + SLA_RED + '">' + c.responseBreached + '</b> breached</div>' +
-      '<div>Resolve — <b>' + c.resolveMet + '</b> met / <b style="color:' + SLA_RED + '">' + c.resolveBreached + '</b> breached</div>' +
-      '</div>';
-  }
   function _cap(s) { s = String(s || ''); return s.charAt(0) + s.slice(1).toLowerCase(); }
 
   // ── Business overview (four charts, one backend call: dashboard.charts) ──────
@@ -779,8 +569,22 @@ Router.register('dashboard', function (el) {
     }
   }
 
+  // ── Approvals (PO / SO) section ── two charts + two leaderboards, rendered by
+  // the shared ApprovalsUI module. Recomputed from the latest data on each mount;
+  // a Refresh control re-pulls without a page reload. Guarded so a missing module
+  // (load-order edge case) degrades to a retry card instead of throwing.
+  function mountApprovals() {
+    var host = document.getElementById('apxSection');
+    if (!host) return;
+    if (window.ApprovalsUI && typeof ApprovalsUI.mountDashboard === 'function') {
+      ApprovalsUI.mountDashboard(host);
+    } else {
+      host.innerHTML = '<div style="margin-top:24px">' + errorCard(new Error('Approvals module not ready.'), mountApprovals) + '</div>';
+    }
+  }
+
   loadStats();
   loadCharts();
-  loadSla();
+  mountApprovals();
 });
 </script>

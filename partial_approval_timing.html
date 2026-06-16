@@ -1,68 +1,89 @@
 <style>
-/* ── Approval Timing (Oracle PO / SO / LA) ── navy/gold brand, responsive ── */
-.oat-tabs        { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.oat-sub         { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
-.oat-note        { font-size: 12px; color: var(--clr-text-light); margin: 0 0 14px; line-height: 1.5; }
-.oat-note b      { color: var(--clr-primary); }
-.oat-section-title { font-size: 16px; font-weight: 700; color: var(--clr-primary); margin: 0 0 12px;
+/* ── Approvals (PO / SO) analytics ── navy/gold brand, responsive, no overflow ── */
+.apx-section       { margin-top: 24px; }
+.apx-head          { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.apx-title         { font-size: 16px; font-weight: 700; color: var(--clr-primary); margin: 0;
                      display: flex; align-items: center; gap: 8px; }
-.oat-section-title::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: var(--clr-gold); }
-.oat-grid        { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.oat-card        { display: flex; flex-direction: column; }
-.oat-card-head   { padding: 12px 14px 4px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.oat-card-titles { min-width: 0; }
-.oat-card-title  { display: block; font-size: 13.5px; font-weight: 600; color: var(--clr-text); }
-.oat-card-sub    { display: block; font-size: 11.5px; color: var(--clr-text-light); margin-top: 2px; }
-.oat-card-body   { position: relative; height: 260px; padding: 8px 14px 14px; }
-.oat-card-body.tall { height: 320px; }
-.oat-empty       { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-                   gap: 8px; color: var(--clr-text-light); text-align: center; font-size: 13px; padding: 0 16px; }
-.oat-sel         { flex-shrink: 0; font-size: 12px; padding: 4px 8px; border: 1px solid var(--clr-border);
-                   border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); max-width: 180px; }
-.oat-sel:focus   { outline: none; border-color: var(--clr-primary); box-shadow: 0 0 0 3px rgba(31,42,68,.15); }
-.oat-tiles       { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 16px; }
-.oat-tile        { background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--radius);
-                   padding: 14px 16px; border-left: 4px solid var(--clr-gold); }
-.oat-tile-label  { font-size: 12px; color: var(--clr-text-light); margin-bottom: 6px; }
-.oat-tile-value  { font-size: 24px; font-weight: 700; color: var(--clr-primary-d); }
-.oat-medal       { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
-                   border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; background: var(--clr-text-light); }
-.oat-medal.g1    { background: var(--clr-gold); color: var(--clr-navy-900); }
-.oat-medal.g2    { background: #9aa3b2; }
-.oat-medal.g3    { background: #c08457; }
-.oat-rate        { font-weight: 600; }
-.oat-rate.good   { color: var(--clr-success); }
-.oat-rate.mid    { color: var(--clr-warning); }
-.oat-rate.bad    { color: var(--clr-danger); }
-.oat-timeline    { list-style: none; margin: 0; padding: 0; }
-.oat-tl-item     { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--clr-border); }
-.oat-tl-item:last-child { border-bottom: none; }
-.oat-tl-dot      { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px;
-                   background: var(--clr-success); }
-.oat-tl-dot.pending { background: var(--clr-warning); }
-.oat-tl-main     { flex: 1; min-width: 0; }
-.oat-tl-stage    { font-weight: 600; font-size: 13px; }
-.oat-tl-meta     { font-size: 12px; color: var(--clr-text-light); margin-top: 2px; }
-.oat-tl-dur      { white-space: nowrap; font-weight: 600; color: var(--clr-primary); font-variant-numeric: tabular-nums; }
-.oat-stuck       { border-left: 4px solid var(--clr-warning); }
-.oat-uploadbox   { border: 2px dashed var(--clr-border); border-radius: var(--radius); padding: 22px; text-align: center; }
-.oat-comment     { padding: 10px 0; border-bottom: 1px solid var(--clr-border); font-size: 13px; }
-.oat-comment:last-child { border-bottom: none; }
-.oat-comment-meta{ font-size: 11px; color: var(--clr-text-light); margin-top: 3px; }
-@media (max-width: 900px) { .oat-grid { grid-template-columns: 1fr; } }
+.apx-title::before { content: ''; width: 4px; height: 16px; border-radius: 2px; background: var(--clr-gold); }
+.apx-actions       { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.apx-grid          { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.apx-grid:last-child { margin-bottom: 0; }
+.apx-card          { display: flex; flex-direction: column; min-width: 0; }
+.apx-card-head     { padding: 12px 14px 4px; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.apx-card-titles   { min-width: 0; }
+.apx-card-title    { display: block; font-size: 13.5px; font-weight: 600; color: var(--clr-text); }
+.apx-card-sub      { display: block; font-size: 11.5px; color: var(--clr-text-light); margin-top: 2px; }
+.apx-card-body     { position: relative; height: 300px; padding: 8px 14px 14px; }
+.apx-card-body.lb  { height: auto; min-height: 120px; max-height: 360px; overflow-y: auto; padding: 4px 6px 8px; }
+.apx-empty         { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                     gap: 8px; color: var(--clr-text-light); text-align: center; font-size: 13px; padding: 24px 16px; }
+.apx-empty svg     { opacity: .5; }
+.apx-sel           { flex-shrink: 0; font-size: 12px; padding: 4px 8px; border: 1px solid var(--clr-border);
+                     border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); max-width: 170px; }
+.apx-sel:focus     { outline: none; border-color: var(--clr-primary); box-shadow: 0 0 0 3px rgba(31,42,68,.15); }
+.apx-lb            { width: 100%; font-size: 12.5px; border-collapse: collapse; }
+.apx-lb th         { text-align: left; padding: 7px 8px; font-size: 11px; font-weight: 600; color: var(--clr-text-light);
+                     border-bottom: 2px solid var(--clr-border); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; position: sticky; top: 0; background: var(--clr-surface); }
+.apx-lb td         { padding: 7px 8px; border-bottom: 1px solid var(--clr-border); vertical-align: middle; }
+.apx-lb tr:last-child td { border-bottom: none; }
+.apx-lb tbody tr   { cursor: pointer; }
+.apx-lb tbody tr:hover { background: #f8fafc; }
+.apx-num           { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.apx-medal         { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+                     border-radius: 50%; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--clr-text-light); }
+.apx-medal.g1      { background: var(--clr-gold); color: var(--clr-navy-900); }
+.apx-medal.g2      { background: #9aa3b2; }
+.apx-medal.g3      { background: #c08457; }
+.apx-rate          { font-weight: 600; }
+.apx-rate.good     { color: var(--clr-success); }
+.apx-rate.mid      { color: var(--clr-warning); }
+.apx-rate.bad      { color: var(--clr-danger); }
+.apx-rate.none     { color: var(--clr-text-light); font-weight: 400; font-style: italic; }
+/* Doc-detail timeline (shared by the drill-down modal) */
+.apx-timeline      { list-style: none; margin: 0; padding: 0; }
+.apx-tl-item       { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--clr-border); }
+.apx-tl-item:last-child { border-bottom: none; }
+.apx-tl-dot        { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; background: var(--clr-success); }
+.apx-tl-dot.pending { background: var(--clr-warning); }
+.apx-tl-main       { flex: 1; min-width: 0; }
+.apx-tl-stage      { font-weight: 600; font-size: 13px; }
+.apx-tl-meta       { font-size: 12px; color: var(--clr-text-light); margin-top: 2px; }
+.apx-tl-dur        { white-space: nowrap; font-weight: 600; color: var(--clr-primary); font-variant-numeric: tabular-nums; }
+.apx-stuck         { border-left: 4px solid var(--clr-warning); }
+.apx-uploadbox     { border: 2px dashed var(--clr-border); border-radius: var(--radius); padding: 22px; text-align: center; }
+.apx-note          { font-size: 12px; color: var(--clr-text-light); margin: 0 0 14px; line-height: 1.5; }
+.apx-note b        { color: var(--clr-primary); }
+.apx-sub           { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.apx-comment       { padding: 10px 0; border-bottom: 1px solid var(--clr-border); font-size: 13px; }
+.apx-comment:last-child { border-bottom: none; }
+.apx-comment-meta  { font-size: 11px; color: var(--clr-text-light); margin-top: 3px; }
+@media (max-width: 900px) { .apx-grid { grid-template-columns: 1fr; } }
 </style>
 <script>
 /* ──────────────────────────────────────────────────────────────────────────
- *  partial_approval_timing.html  - Approval Timing (Oracle PO / SO / LA)
- *  Dedicated view: Charts, Leaderboard, Documents, Settings (Upload /
- *  Integration / Targets). All aggregation is server side; this only renders.
+ *  partial_approval_timing.html  -  Approvals (PO / SO) analytics module.
+ *
+ *  This file no longer registers a standalone route. It exposes window.ApprovalsUI,
+ *  a shared module mounted by two surfaces:
+ *    - the dashboard (partial_dashboard.html) calls ApprovalsUI.mountDashboard(el)
+ *      to render the two charts (PO / SO) and the two leaderboards;
+ *    - the Approvals admin page (route 'approvalsadmin') calls
+ *      ApprovalsUI.mountSettings(el) for the Upload / Integration tabs.
+ *
+ *  All timing is computed server-side (service 'approvals'); this only renders.
+ *  Loading Authority is never surfaced here (no chart, tile, metric, or row).
  * ────────────────────────────────────────────────────────────────────────── */
-var OAT = (function () {
+var ApprovalsUI = (function () {
   'use strict';
 
   var NAVY = '#0B1733', NAVY_MID = '#1F2D5C', GOLD = '#C9A227', GOLD_DK = '#A07E1C', ORANGE = '#E06820',
       GRID = '#eef1f5', AXIS = '#4b5563';
-  var _tab = 'charts', _settingsTab = 'upload', _pollTimer = null, _charts = [];
+  var ORD = ['', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
+  var CHART_MAX = 12;          // bars shown per chart (slowest first); leaderboard lists all
+  var _charts = [];
+  var _dashStage = '';         // current PO stage filter on the dashboard
+  var _dashEl = null;          // the dashboard section container (for refresh)
+  var _settingsTab = 'upload';
 
   // Minutes -> readable duration (hours/days when large).
   function fmtMins(m) {
@@ -74,14 +95,14 @@ var OAT = (function () {
     var d = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60);
     return d + 'd' + (hh ? ' ' + hh + 'h' : '');
   }
-  var ORD = ['', 'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh'];
+  function q(s) { return JSON.stringify(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
 
   // Lazy-load Chart.js (shared with the rest of the app via window.Chart).
   function ensureChart(cb) {
     if (window.Chart) { cb(true); return; }
-    if (window._oatChartCbs) { window._oatChartCbs.push(cb); return; }
-    window._oatChartCbs = [cb];
-    function done(ok) { var cbs = window._oatChartCbs || []; window._oatChartCbs = null; cbs.forEach(function (f) { try { f(ok); } catch (e) {} }); }
+    if (window._apxChartCbs) { window._apxChartCbs.push(cb); return; }
+    window._apxChartCbs = [cb];
+    function done(ok) { var cbs = window._apxChartCbs || []; window._apxChartCbs = null; cbs.forEach(function (f) { try { f(ok); } catch (e) {} }); }
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
     s.onload = function () { done(true); }; s.onerror = function () { done(false); };
@@ -89,147 +110,124 @@ var OAT = (function () {
   }
   function destroyCharts() { _charts.forEach(function (c) { try { c.destroy(); } catch (e) {} }); _charts = []; }
 
-  // ── Shell ─────────────────────────────────────────────────────────────────
-  function render(el) {
-    destroyCharts(); stopPoll();
-    var tabs = [['charts', 'Charts'], ['leaderboard', 'Leaderboard'], ['documents', 'Documents']];
-    if (can('order.manage')) tabs.push(['settings', 'Settings']);
-    el.innerHTML =
-      '<div class="oat-tabs">' +
-        tabs.map(function (t) {
-          return '<button class="btn btn-secondary btn-sm oatTab' + (t[0] === _tab ? ' active' : '') + '" data-t="' + t[0] + '">' + esc(t[1]) + '</button>';
-        }).join('') +
-      '</div><div id="oatPanel"></div>';
-    el.querySelectorAll('.oatTab').forEach(function (b) {
-      b.onclick = function () { _tab = b.dataset.t; render(el); };
-    });
-    if (_tab === 'charts')       loadCharts();
-    else if (_tab === 'leaderboard') loadLeaderboard();
-    else if (_tab === 'documents')   loadDocuments();
-    else if (_tab === 'settings')    loadSettings();
-  }
-
-  function panel(id) { return document.getElementById(id); }
-  function card(title, sub, bodyHtml, headExtra, tall) {
-    return '<div class="card oat-card"><div class="oat-card-head"><div class="oat-card-titles">' +
-      '<span class="oat-card-title">' + esc(title) + '</span><span class="oat-card-sub">' + esc(sub) + '</span></div>' +
-      (headExtra || '') + '</div><div class="oat-card-body' + (tall ? ' tall' : '') + '">' + bodyHtml + '</div></div>';
+  function card(title, sub, bodyHtml, headExtra, bodyClass) {
+    return '<div class="card apx-card"><div class="apx-card-head"><div class="apx-card-titles">' +
+      '<span class="apx-card-title">' + esc(title) + '</span><span class="apx-card-sub">' + esc(sub) + '</span></div>' +
+      (headExtra || '') + '</div><div class="apx-card-body' + (bodyClass ? ' ' + bodyClass : '') + '">' + bodyHtml + '</div></div>';
   }
   function calm(msg) {
-    return '<div class="oat-empty">' +
+    return '<div class="apx-empty">' +
       '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
       '<line x1="3" y1="20" x2="21" y2="20"/><rect x="5" y="11" width="3.4" height="7"/><rect x="10.3" y="7" width="3.4" height="11"/><rect x="15.6" y="13" width="3.4" height="5"/></svg>' +
       '<span>' + esc(msg) + '</span></div>';
   }
-
-  var _hBarOpts = function (titleFn) {
-    return {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
-      plugins: { legend: { display: false }, tooltip: { callbacks: {
-        label: function (ctx) { return fmtMins(ctx.parsed.x); },
-        afterLabel: function (ctx) { var c = ctx.dataset._counts && ctx.dataset._counts[ctx.dataIndex]; return c != null ? (c + ' handled') : ''; }
-      } } },
-      scales: {
-        x: { beginAtZero: true, grid: { color: GRID }, border: { display: false },
-             ticks: { color: AXIS, font: { size: 11 }, maxTicksLimit: 6, callback: function (v) { return fmtMins(v); } } },
-        y: { grid: { display: false }, ticks: { color: AXIS, font: { size: 11 } } }
-      }
-    };
-  };
-
-  // ── Charts tab ──────────────────────────────────────────────────────────────
-  function loadCharts(stage) {
-    setHTML('oatPanel',
-      '<p class="oat-note"><b>Loading Authority (LA)</b> has no officer in the Oracle extract, so it is shown as a cycle-time metric only, not a per-person one, until Oracle can supply who issued it.</p>' +
-      '<div class="oat-grid" id="oatChartsGrid">' + chartSkeletons() + '</div>');
-    var params = {}; if (stage) params.stage = stage;
-    API.call('oracleApprovals', 'charts', params).then(function (d) {
-      if (Router.current() !== 'approvaltiming') return;
-      ensureChart(function (ok) { if (Router.current() === 'approvaltiming') renderCharts(d, ok, stage); });
-    }).catch(function (e) { setHTML('oatChartsGrid', '<div style="grid-column:1/-1">' + errorCard(e, function () { loadCharts(stage); }) + '</div>'); });
-  }
-  function chartSkeletons() {
-    var c = '<div class="card oat-card"><div class="oat-card-head"><div class="oat-card-titles">' +
+  function chartSkeleton() {
+    return '<div class="card apx-card"><div class="apx-card-head"><div class="apx-card-titles">' +
       '<span class="skeleton sk-line" style="width:46%"></span><span class="skeleton sk-line" style="width:66%;margin-top:6px"></span>' +
-      '</div></div><div class="oat-card-body"><div class="skeleton" style="width:100%;height:100%"></div></div></div>';
-    var out = ''; for (var i = 0; i < 4; i++) out += c; return out;
+      '</div></div><div class="apx-card-body"><div class="skeleton" style="width:100%;height:100%"></div></div></div>';
   }
 
-  function renderCharts(d, ok, stage) {
+  // ════════════════════════════════════════════════════════════════════════
+  //  Dashboard section: two charts on top, two leaderboards below.
+  // ════════════════════════════════════════════════════════════════════════
+  function mountDashboard(el) {
+    if (!el) return;
+    _dashEl = el;
     destroyCharts();
-    d = d || {};
-    var po = d.poByApprover || [], so = d.soByApprover || [], laT = d.laOverTime || [], laA = d.laByAffiliate || [];
+    el.innerHTML =
+      '<div class="apx-head">' +
+        '<h2 class="apx-title">Approvals (PO / SO)</h2>' +
+        '<div class="apx-actions">' +
+          '<button class="btn btn-secondary btn-sm" id="apxRefresh">Refresh</button>' +
+          (can('order.manage') ? '<button class="btn btn-secondary btn-sm" id="apxTargets">Edit targets</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="apx-grid" id="apxChartsGrid">' + chartSkeleton() + chartSkeleton() + '</div>' +
+      '<div class="apx-grid" id="apxLbGrid">' + chartSkeleton() + chartSkeleton() + '</div>';
+
+    var rf = document.getElementById('apxRefresh');
+    if (rf) rf.onclick = function () { _dashStage = ''; loadCharts(); loadLeaderboards(); };
+    var tb = document.getElementById('apxTargets');
+    if (tb) tb.onclick = openTargets;
+
+    loadCharts();
+    loadLeaderboards();
+  }
+
+  // Still on the dashboard? (re-render guard for async callbacks)
+  function onDash() { return Router.current() === 'dashboard' && document.getElementById('apxChartsGrid'); }
+
+  function loadCharts() {
+    var grid = document.getElementById('apxChartsGrid');
+    if (!grid) return;
+    var p = {}; if (_dashStage) p.stage = _dashStage;
+    API.call('approvals', 'charts', p).then(function (d) {
+      if (!onDash()) return;
+      ensureChart(function (ok) { if (onDash()) renderCharts(d || {}, ok); });
+    }).catch(function (e) {
+      setHTML('apxChartsGrid', '<div style="grid-column:1/-1">' + errorCard(e, loadCharts) + '</div>');
+    });
+  }
+
+  function renderCharts(d, ok) {
+    destroyCharts();
+    var po = (d.poByApprover || []).slice(0, CHART_MAX);
+    var so = (d.soByApprover || []).slice(0, CHART_MAX);
+    var poAll = (d.poByApprover || []).length;
+    var soAll = (d.soByApprover || []).length;
     var stages = d.poStages || [];
 
-    var stageSel = '<select class="oat-sel" id="oatStageSel" aria-label="PO stage filter"><option value="">All stages</option>' +
-      stages.map(function (n) { return '<option value="' + n + '"' + (String(n) === String(stage || '') ? ' selected' : '') + '>' + esc(ORD[n] || ('Stage ' + n)) + ' Approval</option>'; }).join('') +
-      '</select>';
+    var stageSel = '<select class="apx-sel" id="apxStageSel" aria-label="PO approval stage">' +
+      '<option value="">All stages</option>' +
+      stages.map(function (n) {
+        return '<option value="' + n + '"' + (String(n) === String(_dashStage || '') ? ' selected' : '') + '>' + esc(ORD[n] || ('Stage ' + n)) + ' Approval</option>';
+      }).join('') + '</select>';
 
-    var poBody = po.length ? '<canvas id="oatPoCv"></canvas>' : calm('No PO approvals loaded yet.');
-    var soBody = so.length ? '<canvas id="oatSoCv"></canvas>' : calm('No SO approvals loaded yet.');
-    var laBody = laT.length ? '<canvas id="oatLaCv"></canvas>' : calm('No Loading Authority cycles loaded yet.');
-    var laAB  = laA.length ? '<canvas id="oatLaaCv"></canvas>' : calm('No LA breakdown yet.');
+    var poSub = 'Average time per approver, slowest first' + (poAll > CHART_MAX ? ' (top ' + CHART_MAX + ' of ' + poAll + ')' : '');
+    var soSub = 'Average finance approval time per approver, slowest first' + (soAll > CHART_MAX ? ' (top ' + CHART_MAX + ' of ' + soAll + ')' : '');
 
-    setHTML('oatChartsGrid',
-      card('PO approvals by approver', 'Average approval time, fastest at top. Doubles as the PO leaderboard.', poBody, stageSel) +
-      card('SO approvals by approver', 'Average SO approval time, fastest at top.', soBody) +
-      card('LA cycle time over time', 'Average Loading Authority cycle time per month (no officer attribution).', laBody) +
-      card('LA cycle time by affiliate', 'Average LA cycle time by affiliate or customer.', laAB));
+    setHTML('apxChartsGrid',
+      card('PO approvals by approver', poSub, po.length ? '<canvas id="apxPoCv"></canvas>' : calm('No PO approvals loaded yet.'), stageSel) +
+      card('SO approvals by approver', soSub, so.length ? '<canvas id="apxSoCv"></canvas>' : calm('No SO approvals loaded yet.')));
 
-    var sel = document.getElementById('oatStageSel');
-    if (sel) sel.onchange = function () { loadCharts(this.value); };
+    var sel = document.getElementById('apxStageSel');
+    if (sel) sel.onchange = function () { _dashStage = this.value; loadCharts(); };
+
     if (!ok) return;
-
-    if (po.length) _charts.push(hbar('oatPoCv', po, NAVY, NAVY_MID, 'PO', stage));
-    if (so.length) _charts.push(hbar('oatSoCv', so, GOLD, GOLD_DK, 'SO', ''));
-    if (laT.length) {
-      _charts.push(new Chart(document.getElementById('oatLaCv'), {
-        type: 'line',
-        data: { labels: laT.map(function (r) { return r.month; }),
-          datasets: [{ data: laT.map(function (r) { return r.avg_minutes; }), _counts: laT.map(function (r) { return r.count; }),
-            borderColor: ORANGE, backgroundColor: 'rgba(224,104,32,.10)', fill: true, tension: .3, borderWidth: 2,
-            pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: ORANGE, pointBorderColor: '#fff' }] },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
-          interaction: { mode: 'index', intersect: false }, onHover: pointer,
-          onClick: function (e, els, ch) { var i = idxFromClick(e, els, ch); if (i < 0 || !laT[i]) return;
-            openDrill({ title: 'LA cycle - ' + laT[i].month, subtitle: 'Loading Authority steps in ' + laT[i].month,
-              filter: { step_type: 'LA', month: laT[i].month } }); },
-          plugins: { legend: { display: false }, tooltip: { callbacks: {
-            label: function (ctx) { return 'Avg LA: ' + fmtMins(ctx.parsed.y); },
-            afterLabel: function (ctx) { var c = laT[ctx.dataIndex] && laT[ctx.dataIndex].count; return c != null ? (c + ' cycles') : ''; } } } },
-          scales: { x: { grid: { display: false }, ticks: { color: AXIS, font: { size: 11 }, maxRotation: 0 } },
-            y: { beginAtZero: true, grid: { color: GRID }, border: { display: false },
-                 ticks: { color: AXIS, font: { size: 11 }, maxTicksLimit: 5, callback: function (v) { return fmtMins(v); } } } }
-        }
-      }));
-    }
-    if (laA.length) _charts.push(hbar('oatLaaCv', laA, NAVY, NAVY_MID, 'LA_AFFIL', '', true));
+    if (po.length) _charts.push(hbar('apxPoCv', po, NAVY, NAVY_MID, 'PO'));
+    if (so.length) _charts.push(hbar('apxSoCv', so, GOLD, GOLD_DK, 'SO'));
   }
 
-  // Horizontal bar for an approver/affiliate series (server pre-sorts ascending).
-  function hbar(canvasId, rows, color, hover, kind, stage) {
-    var labels = rows.map(function (r) { return r.approver || r.label || 'Unknown'; });
+  // Horizontal bar for an approver series (already slowest-first from the server).
+  function hbar(canvasId, rows, color, hover, docType) {
+    var cv = document.getElementById(canvasId);
+    if (!cv) return null;
+    var labels = rows.map(function (r) { return r.approver || 'Unknown'; });
     var data = rows.map(function (r) { return r.avg_minutes; });
     var counts = rows.map(function (r) { return r.count; });
-    var opts = _hBarOpts();
-    opts.onHover = pointer;
-    opts.onClick = function (e, els, ch) {
-      var i = idxFromClick(e, els, ch); if (i < 0 || !rows[i]) return;
-      if (kind === 'PO' || kind === 'SO') {
-        var f = { doc_type: kind, step_type: 'APPROVAL', approver_name: rows[i].approver };
-        if (kind === 'PO' && stage) f.stage = stage;
-        openDrill({ title: (rows[i].approver || 'Approver') + ' - ' + kind + ' approvals',
-          subtitle: 'Documents this approver handled (avg ' + fmtMins(rows[i].avg_minutes) + ')', filter: f });
-      } else if (kind === 'LA_AFFIL') {
-        openDrill({ title: 'LA - ' + (rows[i].label || 'Unknown'), subtitle: 'Loading Authority steps for ' + (rows[i].label || 'Unknown'),
-          filter: { step_type: 'LA' } });
-      }
-    };
-    return new Chart(document.getElementById(canvasId), {
+    return new Chart(cv, {
       type: 'bar',
-      data: { labels: labels, datasets: [{ data: data, _counts: counts, backgroundColor: color, hoverBackgroundColor: hover, borderRadius: 4, maxBarThickness: 26 }] },
-      options: opts
+      data: { labels: labels, datasets: [{ data: data, _counts: counts, backgroundColor: color, hoverBackgroundColor: hover, borderRadius: 4, maxBarThickness: 24 }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+        onHover: pointer,
+        onClick: function (e, els, ch) {
+          var i = idxFromClick(e, els, ch); if (i < 0 || !rows[i]) return;
+          drillApprover(docType, rows[i].approver, docType === 'PO' ? _dashStage : '');
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            label: function (ctx) { return 'Avg: ' + fmtMins(ctx.parsed.x); },
+            afterLabel: function (ctx) { var c = ctx.dataset._counts && ctx.dataset._counts[ctx.dataIndex]; return c != null ? (c + ' document' + (c === 1 ? '' : 's') + ' handled') : ''; }
+          } }
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: GRID }, border: { display: false },
+               ticks: { color: AXIS, font: { size: 11 }, maxTicksLimit: 6, callback: function (v) { return fmtMins(v); } } },
+          y: { grid: { display: false }, ticks: { color: AXIS, font: { size: 11 } } }
+        }
+      }
     });
   }
   function pointer(evt, els) { var t = evt && evt.native && evt.native.target; if (t) t.style.cursor = (els && els.length) ? 'pointer' : 'default'; }
@@ -239,121 +237,62 @@ var OAT = (function () {
     return -1;
   }
 
-  // ── Leaderboard tab ───────────────────────────────────────────────────────
-  function loadLeaderboard() {
-    setHTML('oatPanel',
-      '<div class="filter-bar"><div style="flex:1"></div>' +
-        '<label style="font-size:12px;color:var(--clr-text-light);display:flex;align-items:center;gap:6px">' +
-          '<input type="checkbox" id="oatAutoRefresh"> Auto-refresh</label>' +
-        '<button class="btn btn-secondary btn-sm" id="oatLbRefresh">Refresh</button>' +
-        (can('order.manage') ? '<button class="btn btn-secondary btn-sm" id="oatTargetsBtn">Edit targets</button>' : '') +
-      '</div>' +
-      '<div class="oat-tiles" id="oatLbTiles"></div>' +
-      '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>#</th><th>Approver</th><th>Handled</th><th>Avg time</th><th>On-time rate</th></tr></thead>' +
-        '<tbody id="oatLbBody"></tbody></table></div></div>' +
-      '<p class="oat-note" style="margin-top:12px">On-time rate is measured against the editable targets per doc type and stage. ' +
-        'Lower average time and higher on-time rate rank higher. Loading Authority is excluded here (no officer) and shown as a cycle-time tile.</p>');
-
-    var rb = document.getElementById('oatLbRefresh'); if (rb) rb.onclick = fetchLeaderboard;
-    var tb = document.getElementById('oatTargetsBtn'); if (tb) tb.onclick = openTargets;
-    var ar = document.getElementById('oatAutoRefresh');
-    if (ar) ar.onchange = function () { if (this.checked) startPoll(); else stopPoll(); };
-    fetchLeaderboard();
+  // ── Leaderboards (PO + SO) ────────────────────────────────────────────────
+  function loadLeaderboards() {
+    var grid = document.getElementById('apxLbGrid');
+    if (!grid) return;
+    API.call('approvals', 'leaderboard', {}).then(function (d) {
+      if (!onDash()) return;
+      renderLeaderboards(d || {});
+    }).catch(function (e) {
+      setHTML('apxLbGrid', '<div style="grid-column:1/-1">' + errorCard(e, loadLeaderboards) + '</div>');
+    });
   }
-  function fetchLeaderboard() {
-    var body = document.getElementById('oatLbBody'); if (body) body.innerHTML = loadingRow(5);
-    API.call('oracleApprovals', 'leaderboard', {}).then(function (d) {
-      if (Router.current() !== 'approvaltiming' || _tab !== 'leaderboard') return;
-      var rows = d.rows || [];
-      var la = d.la || {};
-      setHTML('oatLbTiles',
-        tile('Top performer', rows.length ? (rows[0].approver + ' (' + fmtMins(rows[0].avg_minutes) + ')') : '-') +
-        tile('Approvers ranked', String(rows.length)) +
-        tile('LA cycle time (avg)', la.avg_minutes != null ? fmtMins(la.avg_minutes) : '-') +
-        tile('Active targets', String(d.targetsCount || 0)));
-      if (!rows.length) { setHTML('oatLbBody', emptyRow(5, 'No approver data yet. Upload a PO or SO extract under Settings.')); return; }
-      setHTML('oatLbBody', rows.map(function (r) {
-        var rateCls = r.on_time_rate == null ? '' : (r.on_time_rate >= 80 ? 'good' : (r.on_time_rate >= 50 ? 'mid' : 'bad'));
-        var rate = r.on_time_rate == null ? '<span style="color:var(--clr-text-light)">no target</span>'
-          : '<span class="oat-rate ' + rateCls + '">' + r.on_time_rate + '%</span> <span style="color:var(--clr-text-light);font-size:11px">(' + r.on_time + '/' + r.with_target + ')</span>';
-        var medal = r.rank <= 3 ? '<span class="oat-medal g' + r.rank + '">' + r.rank + '</span>' : r.rank;
-        return '<tr style="cursor:pointer" onclick="OAT.drillApprover(' + q(r.approver) + ')">' +
-          '<td>' + medal + '</td><td>' + esc(r.approver) + '</td><td>' + r.count + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums">' + fmtMins(r.avg_minutes) + '</td><td>' + rate + '</td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('oatLbBody', errorRow(5, e, fetchLeaderboard)); });
+  function renderLeaderboards(d) {
+    var configured = !!d.targetsConfigured;
+    var sub = configured ? 'Fastest and most on-time first' : 'Fastest first (on-time targets not configured)';
+    setHTML('apxLbGrid',
+      card('PO leaderboard', sub, lbTable(d.po || [], 'PO', configured), '', 'lb') +
+      card('SO leaderboard', sub, lbTable(d.so || [], 'SO', configured), '', 'lb'));
   }
-  function tile(label, value) { return '<div class="oat-tile"><div class="oat-tile-label">' + esc(label) + '</div><div class="oat-tile-value">' + esc(value) + '</div></div>'; }
-  function drillApprover(name) {
-    openDrill({ title: name + ' - approvals', subtitle: 'PO and SO documents this approver handled',
-      filter: { step_type: 'APPROVAL', approver_name: name } });
+  function lbTable(rows, docType, configured) {
+    if (!rows.length) return calm('No ' + docType + ' approver data yet.');
+    var body = rows.map(function (r) {
+      var medal = r.rank <= 3 ? '<span class="apx-medal g' + r.rank + '">' + r.rank + '</span>' : String(r.rank);
+      var rate;
+      if (!configured || r.on_time_rate == null) {
+        rate = '<span class="apx-rate none">not configured</span>';
+      } else {
+        var cls = r.on_time_rate >= 80 ? 'good' : (r.on_time_rate >= 50 ? 'mid' : 'bad');
+        rate = '<span class="apx-rate ' + cls + '">' + r.on_time_rate + '%</span>' +
+               ' <span style="color:var(--clr-text-light);font-size:10.5px">(' + r.on_time + '/' + r.with_target + ')</span>';
+      }
+      return '<tr onclick="ApprovalsUI.drillApprover(' + q(docType) + ',' + q(r.approver) + ')">' +
+        '<td>' + medal + '</td>' +
+        '<td>' + esc(r.approver) + '</td>' +
+        '<td class="apx-num">' + r.count + '</td>' +
+        '<td class="apx-num">' + fmtMins(r.avg_minutes) + '</td>' +
+        '<td class="apx-num">' + rate + '</td></tr>';
+    }).join('');
+    return '<table class="apx-lb"><thead><tr><th>#</th><th>Approver</th><th>Docs</th><th>Avg time</th><th>On-time</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table>';
   }
 
-  function startPoll() { stopPoll(); _pollTimer = setInterval(function () { if (Router.current() === 'approvaltiming' && _tab === 'leaderboard') fetchLeaderboard(); else stopPoll(); }, 30000); }
-  function stopPoll() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
-
-  // ── Documents tab (stuck detection + search + drill) ────────────────────────
-  function loadDocuments() {
-    setHTML('oatPanel',
-      '<h2 class="oat-section-title">Stuck documents</h2>' +
-      '<div class="card oat-stuck" style="margin-bottom:18px"><div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>Doc</th><th>Stuck at</th><th>Responsible</th><th>Waiting</th><th></th></tr></thead>' +
-        '<tbody id="oatStuckBody"></tbody></table></div></div>' +
-      '<h2 class="oat-section-title">All documents</h2>' +
-      '<div class="filter-bar">' +
-        '<select class="form-control" id="oatDocType"><option value="">PO and SO</option><option value="PO">PO</option><option value="SO">SO</option></select>' +
-        '<div class="search-input"><input id="oatDocSearch" placeholder="Search document number"></div>' +
-        '<button class="btn btn-secondary btn-sm" id="oatDocSearchBtn">Search</button>' +
-      '</div>' +
-      '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>Doc #</th><th>Type</th><th>Party</th><th>Status</th><th>Created</th></tr></thead>' +
-        '<tbody id="oatDocBody"></tbody></table></div></div>');
-    document.getElementById('oatDocSearchBtn').onclick = fetchDocs;
-    document.getElementById('oatDocType').onchange = fetchDocs;
-    var inp = document.getElementById('oatDocSearch');
-    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') fetchDocs(); });
-    fetchStuck(); fetchDocs();
-  }
-  function fetchStuck() {
-    var b = document.getElementById('oatStuckBody'); if (b) b.innerHTML = loadingRow(5);
-    API.call('oracleApprovals', 'stuck', { limit: 50 }).then(function (rows) {
-      if (Router.current() !== 'approvaltiming' || _tab !== 'documents') return;
-      rows = rows || [];
-      if (!rows.length) { setHTML('oatStuckBody', emptyRow(5, 'No in-flight documents are waiting. Completed uploads show no pending steps.')); return; }
-      setHTML('oatStuckBody', rows.map(function (r) {
-        return '<tr><td>' + esc(r.doc_type) + ' ' + esc(r.doc_number) + '</td>' +
-          '<td>' + esc(r.stage_label || r.step_type || '') + '</td>' +
-          '<td>' + esc(r.responsible || '-') + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums;color:var(--clr-warning);font-weight:600">' + fmtMins(r.waiting_minutes) + '</td>' +
-          '<td><button class="btn btn-secondary btn-sm" onclick="OAT.viewDoc(' + q(r.doc_type) + ',' + q(r.doc_number) + ')">Open</button></td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('oatStuckBody', errorRow(5, e, fetchStuck)); });
-  }
-  function fetchDocs() {
-    var b = document.getElementById('oatDocBody'); if (b) b.innerHTML = loadingRow(5);
-    var p = { limit: 50 };
-    var dt = document.getElementById('oatDocType'); if (dt && dt.value) p.doc_type = dt.value;
-    var s = document.getElementById('oatDocSearch'); if (s && s.value.trim()) p.q = s.value.trim();
-    API.call('oracleApprovals', 'list', p).then(function (rows) {
-      if (Router.current() !== 'approvaltiming' || _tab !== 'documents') return;
-      rows = rows || [];
-      if (!rows.length) { setHTML('oatDocBody', emptyRow(5, 'No documents found.')); return; }
-      setHTML('oatDocBody', rows.map(docRow).join(''));
-    }).catch(function (e) { setHTML('oatDocBody', errorRow(5, e, fetchDocs)); });
-  }
-  function docRow(r) {
-    var party = r.customer_name || r.affiliate || r.created_by || '-';
-    return '<tr style="cursor:pointer" onclick="OAT.viewDoc(' + q(r.doc_type) + ',' + q(r.doc_number) + ')">' +
-      '<td>' + esc(r.doc_number) + '</td><td>' + esc(r.doc_type) + '</td><td>' + esc(party) + '</td>' +
-      '<td>' + statusBadge(r.final_status || '-') + '</td><td>' + fmtDate(r.original_creation_date) + '</td></tr>';
-  }
-  function q(s) { return JSON.stringify(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
-
-  // ── Drill-down list modal (server-side paginated) ───────────────────────────
+  // ════════════════════════════════════════════════════════════════════════
+  //  Drill-down list modal (server-side paginated) -> document detail.
+  // ════════════════════════════════════════════════════════════════════════
   var DRILL_PER = 25;
+  function drillApprover(docType, name, stage) {
+    var filter = { doc_type: docType, step_type: 'APPROVAL', approver_name: name };
+    if (stage) filter.stage = stage;
+    openDrill({
+      title: (name || 'Approver') + ' - ' + docType + ' approvals',
+      subtitle: 'Documents ' + (name || 'this approver') + ' handled' + (stage ? ' at ' + (ORD[stage] || ('stage ' + stage)) + ' Approval' : ''),
+      filter: filter
+    });
+  }
   function openDrill(spec) {
-    var page = 0, uid = '_oad' + Math.random().toString(36).slice(2);
+    var page = 0, uid = '_apd' + Math.random().toString(36).slice(2);
     Modal.open({
       title: spec.title,
       body: '<div style="font-size:12.5px;color:var(--clr-text-light);margin:-6px 0 12px">' + esc(spec.subtitle || '') + '</div><div id="' + uid + '">' + spinnerHTML(30) + '</div>',
@@ -368,19 +307,19 @@ var OAT = (function () {
       var host = document.getElementById(uid); if (!host) return;
       host.innerHTML = spinnerHTML(30);
       var p = Object.assign({}, spec.filter, { limit: DRILL_PER + 1, offset: page * DRILL_PER });
-      API.call('oracleApprovals', 'list', p).then(function (rows) {
+      API.call('approvals', 'list', p).then(function (rows) {
         var h = document.getElementById(uid); if (!h) return;
         rows = rows || []; var hasNext = rows.length > DRILL_PER; if (hasNext) rows = rows.slice(0, DRILL_PER);
         if (!rows.length) { h.innerHTML = '<div class="empty-state" style="padding:30px">No documents behind this segment.</div>'; return; }
         var hasStep = rows[0].m_duration !== undefined;
-        var head = '<th>Doc #</th><th>Type</th><th>Party</th>' + (hasStep ? '<th>Stage</th><th>Duration</th>' : '<th>Status</th>') + '<th>Created</th>';
+        var head = '<th>Doc #</th><th>Type</th><th>Party</th>' + (hasStep ? '<th>Stage</th><th>Time</th>' : '<th>Status</th>') + '<th>Created</th>';
         h.innerHTML = '<div class="table-wrapper"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' +
           rows.map(function (r) {
             var party = r.customer_name || r.affiliate || r.created_by || '-';
             var mid = hasStep
-              ? '<td>' + esc(r.m_stage || r.m_step_type || '') + '</td><td style="font-variant-numeric:tabular-nums">' + (parseInt(r.m_pending, 10) === 1 ? '<span class="badge badge-warning">pending</span>' : fmtMins(r.m_duration)) + '</td>'
+              ? '<td>' + esc(r.m_stage || r.m_step_type || '') + '</td><td class="apx-num">' + (parseInt(r.m_pending, 10) === 1 ? '<span class="badge badge-warning">pending</span>' : fmtMins(r.m_duration)) + '</td>'
               : '<td>' + statusBadge(r.final_status || '-') + '</td>';
-            return '<tr style="cursor:pointer" onclick="OAT.viewDoc(' + q(r.doc_type) + ',' + q(r.doc_number) + ')">' +
+            return '<tr style="cursor:pointer" onclick="ApprovalsUI.viewDoc(' + q(r.doc_type) + ',' + q(r.doc_number) + ')">' +
               '<td>' + esc(r.doc_number) + '</td><td>' + esc(r.doc_type) + '</td><td>' + esc(party) + '</td>' + mid + '<td>' + fmtDate(r.original_creation_date) + '</td></tr>';
           }).join('') + '</tbody></table></div>' +
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">' +
@@ -397,40 +336,39 @@ var OAT = (function () {
     }
   }
 
-  // ── Document detail (header + step timeline + stuck + comments) ──────────────
+  // ── Document detail (header + step timeline + in-flight + comments) ───────
   function viewDoc(docType, docNumber) {
     var l = Loader.show();
-    API.call('oracleApprovals', 'getDoc', { doc_type: docType, doc_number: docNumber }).then(function (d) {
+    API.call('approvals', 'getDoc', { doc_type: docType, doc_number: docNumber }).then(function (d) {
       Loader.hide(l);
       var h = d.header || {}, steps = d.steps || [], comments = d.comments || [], stuck = d.stuck;
       var party = h.customer_name || h.affiliate || h.created_by || '-';
       var stuckHtml = stuck
-        ? '<div class="card oat-stuck card-body" style="margin-bottom:14px"><b>Stuck at ' + esc(stuck.stage_label || stuck.step_type) + '</b>. ' +
+        ? '<div class="card apx-stuck card-body" style="margin-bottom:14px"><b>In flight at ' + esc(stuck.stage_label || stuck.step_type) + '</b>. ' +
             'Responsible: ' + esc(stuck.responsible || 'unknown') + '. Waiting ' + fmtMins(stuck.waiting_minutes) + '.</div>'
         : '';
-      var timeline = steps.length ? '<ul class="oat-timeline">' + steps.map(function (s) {
+      var timeline = steps.length ? '<ul class="apx-timeline">' + steps.map(function (s) {
         var pending = parseInt(s.is_pending, 10) === 1;
-        return '<li class="oat-tl-item"><span class="oat-tl-dot' + (pending ? ' pending' : '') + '"></span>' +
-          '<div class="oat-tl-main"><div class="oat-tl-stage">' + esc(s.stage_label || s.step_type || '') +
+        return '<li class="apx-tl-item"><span class="apx-tl-dot' + (pending ? ' pending' : '') + '"></span>' +
+          '<div class="apx-tl-main"><div class="apx-tl-stage">' + esc(s.stage_label || s.step_type || '') +
             (s.approver_name ? ' <span style="font-weight:400;color:var(--clr-text-light)">- ' + esc(s.approver_name) + '</span>' : '') + '</div>' +
-          '<div class="oat-tl-meta">' + (pending ? 'Pending since ' + fmtDateTime(s.prior_date) : fmtDateTime(s.step_date)) +
-            (s.source_variance ? ' . Oracle variance: ' + esc(s.source_variance) : '') + '</div></div>' +
-          '<div class="oat-tl-dur">' + (pending ? '<span class="badge badge-warning">pending</span>' : fmtMins(s.duration_minutes)) + '</div></li>';
-      }).join('') + '</ul>' : '<p class="oat-note">No steps recorded.</p>';
+          '<div class="apx-tl-meta">' + (pending ? 'Pending since ' + fmtDateTime(s.prior_date) : fmtDateTime(s.step_date)) + '</div></div>' +
+          '<div class="apx-tl-dur">' + (pending ? '<span class="badge badge-warning">pending</span>' : fmtMins(s.duration_minutes)) + '</div></li>';
+      }).join('') + '</ul>' : '<p class="apx-note">No steps recorded.</p>';
 
       var commentsHtml = comments.length ? comments.map(function (c) {
-        return '<div class="oat-comment">' + esc(c.comment_text || '') +
-          '<div class="oat-comment-meta">by ' + esc(c.author_name || c.author_id || 'staff') + ' . ' + fmtDateTime(c.created_at) +
+        return '<div class="apx-comment">' + esc(c.comment_text || '') +
+          '<div class="apx-comment-meta">by ' + esc(c.author_name || c.author_id || 'staff') + ' . ' + fmtDateTime(c.created_at) +
           (c.recipient_email ? ' . emailed ' + esc(c.recipient_email) + ' (' + esc(c.email_status || '') + ')' : '') + '</div></div>';
-      }).join('') : '<p class="oat-note">No comments yet.</p>';
+      }).join('') : '<p class="apx-note">No comments yet.</p>';
 
       var commentForm = can('order.manage')
         ? '<div style="margin-top:14px;border-top:1px solid var(--clr-border);padding-top:14px">' +
             '<div class="form-group"><label class="form-label">Add a comment (emails the responsible person)</label>' +
-              '<textarea class="form-control" id="oatCommentText" rows="3" placeholder="Your comment"></textarea></div>' +
+              '<textarea class="form-control" id="apxCommentText" rows="3" placeholder="Your comment"></textarea></div>' +
             '<div class="form-group"><label class="form-label">Recipient email (optional, leave blank to resolve automatically)</label>' +
-              '<input class="form-control" id="oatCommentEmail" placeholder="name@hasspetroleum.com"></div>' +
-            '<button class="btn btn-primary" id="oatCommentSend">Post and email</button>' +
+              '<input class="form-control" id="apxCommentEmail" placeholder="name@hasspetroleum.com"></div>' +
+            '<button class="btn btn-primary" id="apxCommentSend">Post and email</button>' +
           '</div>'
         : '';
 
@@ -443,19 +381,19 @@ var OAT = (function () {
             '<dt style="color:var(--clr-text-light)">Created</dt><dd>' + fmtDateTime(h.original_creation_date) + '</dd>' +
             (h.description ? '<dt style="color:var(--clr-text-light)">Description</dt><dd>' + esc(h.description) + '</dd>' : '') +
           '</dl>' +
-          '<div class="oat-section-title" style="font-size:14px">Step timeline</div>' + timeline +
-          '<div class="oat-section-title" style="font-size:14px;margin-top:14px">Comments</div>' + commentsHtml + commentForm,
+          '<div class="apx-title" style="font-size:14px">Step timeline</div>' + timeline +
+          '<div class="apx-title" style="font-size:14px;margin-top:14px">Comments</div>' + commentsHtml + commentForm,
         footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>',
         onOpen: function (bd) {
           var m = bd.querySelector('.modal'); if (m) m.style.width = '640px';
-          var sendBtn = bd.querySelector('#oatCommentSend');
+          var sendBtn = bd.querySelector('#apxCommentSend');
           if (sendBtn) sendBtn.onclick = function () {
-            var text = (bd.querySelector('#oatCommentText').value || '').trim();
+            var text = (bd.querySelector('#apxCommentText').value || '').trim();
             if (!text) { Toast.warning('Enter a comment.'); return; }
             sendBtn.disabled = true; sendBtn.textContent = 'Sending...';
-            API.call('oracleApprovals', 'addComment', {
+            API.call('approvals', 'addComment', {
               doc_type: docType, doc_number: docNumber, comment_text: text,
-              recipient_email: (bd.querySelector('#oatCommentEmail').value || '').trim()
+              recipient_email: (bd.querySelector('#apxCommentEmail').value || '').trim()
             }, { retries: 0 }).then(function (r) {
               if (r.email_status === 'SENT') Toast.success('Comment posted and emailed to ' + (r.recipient_email || 'recipient') + '.');
               else if (r.email_status === 'FAILED') Toast.warning('Comment posted, but the email failed to send.');
@@ -468,51 +406,126 @@ var OAT = (function () {
     }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
   }
 
-  // ── Settings tab (Upload / Integration / Targets) ───────────────────────────
-  function loadSettings() {
-    var subs = [['upload', 'Upload'], ['integration', 'Integration'], ['targets', 'Targets']];
-    setHTML('oatPanel',
-      '<h2 class="oat-section-title">Approvals (Oracle PO / SO / LA)</h2>' +
-      '<div class="oat-sub">' + subs.map(function (s) {
-        return '<button class="btn btn-secondary btn-sm oatSub' + (s[0] === _settingsTab ? ' active' : '') + '" data-s="' + s[0] + '">' + esc(s[1]) + '</button>';
-      }).join('') + '</div><div id="oatSetPanel"></div>');
-    document.querySelectorAll('.oatSub').forEach(function (b) { b.onclick = function () { _settingsTab = b.dataset.s; loadSettings(); }; });
-    if (_settingsTab === 'upload') renderUpload();
-    else if (_settingsTab === 'integration') renderIntegration();
-    else renderTargets();
+  // ════════════════════════════════════════════════════════════════════════
+  //  Targets editor (editable on-time thresholds, stored as JSON in config).
+  // ════════════════════════════════════════════════════════════════════════
+  function openTargets() {
+    var uid = '_apt' + Math.random().toString(36).slice(2);
+    var manage = can('order.manage');
+    Modal.open({
+      title: 'On-time targets',
+      body:
+        '<p class="apx-note">Targets set the on-time threshold (in minutes) per doc type and stage, stored as a JSON value in the config table. ' +
+          'The leaderboards measure each approver against them. A target matches a step by its stage label (for example <b>First Approval</b>) or its step type (<b>APPROVAL</b>).</p>' +
+        (manage ? '<div class="form-row" style="grid-template-columns:1fr 1.4fr 1fr auto;align-items:end;gap:10px">' +
+          '<div class="form-group"><label class="form-label">Doc type</label><select class="form-control" id="' + uid + '_type"><option>PO</option><option>SO</option></select></div>' +
+          '<div class="form-group"><label class="form-label">Stage</label><input class="form-control" id="' + uid + '_stage" list="' + uid + '_list" placeholder="e.g. First Approval or APPROVAL">' +
+            '<datalist id="' + uid + '_list"><option>APPROVAL</option><option>Approval</option><option>First Approval</option><option>Second Approval</option><option>Third Approval</option>' +
+            '<option>Fourth Approval</option><option>Fifth Approval</option><option>Sixth Approval</option><option>Seventh Approval</option>' +
+            '<option>Credit Hold Release</option><option>CREDIT_HOLD</option></datalist></div>' +
+          '<div class="form-group"><label class="form-label">Target minutes</label><input class="form-control" id="' + uid + '_mins" type="number" min="0" placeholder="e.g. 240"></div>' +
+          '<div class="form-group"><button class="btn btn-primary" id="' + uid + '_add">Add</button></div>' +
+        '</div>' : '') +
+        '<div class="table-wrapper"><table class="data-table"><thead><tr><th>Doc type</th><th>Stage</th><th>Target</th>' + (manage ? '<th></th>' : '') + '</tr></thead>' +
+          '<tbody id="' + uid + '_body"></tbody></table></div>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>',
+      onOpen: function (bd) {
+        var m = bd.querySelector('.modal'); if (m) m.style.width = '640px';
+        var addBtn = bd.querySelector('#' + uid + '_add');
+        if (addBtn) addBtn.onclick = function () {
+          var docType = bd.querySelector('#' + uid + '_type').value;
+          var stage = bd.querySelector('#' + uid + '_stage').value.trim();
+          var mins = bd.querySelector('#' + uid + '_mins').value;
+          if (!stage) { Toast.warning('Enter a stage.'); return; }
+          if (mins === '' || isNaN(Number(mins))) { Toast.warning('Enter target minutes.'); return; }
+          API.call('approvals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(mins) }, { retries: 0 })
+            .then(function () { Toast.success('Target saved.'); bd.querySelector('#' + uid + '_stage').value = ''; bd.querySelector('#' + uid + '_mins').value = ''; fetchTargets(bd, uid); loadLeaderboards(); })
+            .catch(function (e) { Toast.error(e.message); });
+        };
+        fetchTargets(bd, uid);
+      }
+    });
+  }
+  function fetchTargets(bd, uid) {
+    var body = bd.querySelector('#' + uid + '_body');
+    var manage = can('order.manage'); var cols = manage ? 4 : 3;
+    if (body) body.innerHTML = loadingRow(cols);
+    API.call('approvals', 'getTargets', {}).then(function (d) {
+      var rows = (d && d.list) || [];
+      if (!body) return;
+      if (!rows.length) { body.innerHTML = emptyRow(cols, 'No targets yet. Until one is set, on-time shows as not configured.'); return; }
+      body.innerHTML = rows.map(function (t) {
+        var actions = manage ? '<td class="actions">' +
+          '<button class="btn btn-secondary btn-sm" onclick="ApprovalsUI.editTarget(' + q(t.doc_type) + ',' + q(t.stage) + ',' + (Number(t.target_minutes) || 0) + ')">Edit</button> ' +
+          '<button class="btn btn-danger btn-sm" onclick="ApprovalsUI.removeTarget(' + q(t.doc_type) + ',' + q(t.stage) + ')">Remove</button></td>' : '';
+        return '<tr><td>' + esc(t.doc_type) + '</td><td>' + esc(t.stage) + '</td>' +
+          '<td class="apx-num">' + fmtMins(t.target_minutes) + ' <span style="color:var(--clr-text-light);font-size:11px">(' + (Number(t.target_minutes) || 0) + 'm)</span></td>' + actions + '</tr>';
+      }).join('');
+    }).catch(function (e) { if (body) body.innerHTML = errorRow(cols, e, function () { fetchTargets(bd, uid); }); });
+  }
+  function editTarget(docType, stage, mins) {
+    var v = window.prompt('Target minutes for ' + docType + ' / ' + stage + ':', String(mins || ''));
+    if (v === null) return;
+    if (isNaN(Number(v))) { Toast.warning('Enter a number.'); return; }
+    API.call('approvals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(v) }, { retries: 0 })
+      .then(function () { Toast.success('Target updated.'); reopenTargets(); loadLeaderboards(); }).catch(function (e) { Toast.error(e.message); });
+  }
+  function removeTarget(docType, stage) {
+    Modal.confirm('Remove this target? On-time rates will stop using it.', function () {
+      API.call('approvals', 'saveTargets', { doc_type: docType, stage: stage, remove: true }, { retries: 0 })
+        .then(function () { Toast.success('Target removed.'); reopenTargets(); loadLeaderboards(); }).catch(function (e) { Toast.error(e.message); });
+    });
+  }
+  // editTarget/removeTarget run from inside the open targets modal; reopen to refresh it.
+  function reopenTargets() { Modal.close(); openTargets(); }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  Settings panel: Upload + Integration tabs (the ingestion surface).
+  // ════════════════════════════════════════════════════════════════════════
+  function mountSettings(el) {
+    if (!el) return;
+    var subs = [['upload', 'Upload'], ['integration', 'Integration']];
+    el.innerHTML =
+      '<h2 class="apx-title" style="margin-bottom:12px">Approvals (Oracle PO / SO)</h2>' +
+      '<div class="apx-sub">' + subs.map(function (s) {
+        return '<button class="btn btn-secondary btn-sm apxSub' + (s[0] === _settingsTab ? ' active' : '') + '" data-s="' + s[0] + '">' + esc(s[1]) + '</button>';
+      }).join('') + '</div><div id="apxSetPanel"></div>';
+    el.querySelectorAll('.apxSub').forEach(function (b) { b.onclick = function () { _settingsTab = b.dataset.s; mountSettings(el); }; });
+    if (_settingsTab === 'integration') renderIntegration();
+    else renderUpload();
   }
 
   function renderUpload() {
-    setHTML('oatSetPanel',
+    setHTML('apxSetPanel',
       '<div class="card card-body">' +
-        '<p class="oat-note">Upload a PO or SO extract. CSV is fully supported. xlsx and xls are converted server side via a temporary Google Sheet. ' +
+        '<p class="apx-note">Upload a PO or SO extract. CSV is fully supported. xlsx and xls are converted server side via a temporary Google Sheet that is deleted afterwards. ' +
           'PO vs SO is detected from the columns (a "purchase Number" column means PO, a "DOCUMENT_NUMBER" column means SO). ' +
-          'Re-uploading the same period updates documents in place by document number rather than duplicating them.</p>' +
-        '<div class="oat-uploadbox">' +
-          '<input type="file" id="oatFile" accept=".csv,.xlsx,.xls"><br><br>' +
-          '<button class="btn btn-primary" id="oatUploadBtn">Upload and load</button>' +
+          'Re-uploading the same period updates rows in place by primary key rather than duplicating them.</p>' +
+        '<div class="apx-uploadbox">' +
+          '<input type="file" id="apxFile" accept=".csv,.xlsx,.xls"><br><br>' +
+          '<button class="btn btn-primary" id="apxUploadBtn">Upload and load</button>' +
         '</div>' +
-        '<div id="oatUploadResult" style="margin-top:16px"></div>' +
+        '<div id="apxUploadResult" style="margin-top:16px"></div>' +
       '</div>');
-    document.getElementById('oatUploadBtn').onclick = doUpload;
+    document.getElementById('apxUploadBtn').onclick = doUpload;
   }
   function doUpload() {
-    var input = document.getElementById('oatFile');
+    var input = document.getElementById('apxFile');
     if (!input.files || !input.files.length) { Toast.warning('Choose a file first.'); return; }
     var file = input.files[0];
-    var btn = document.getElementById('oatUploadBtn');
+    var btn = document.getElementById('apxUploadBtn');
     btn.disabled = true; btn.textContent = 'Reading file...';
     var reader = new FileReader();
     reader.onload = function () {
       var dataUrl = String(reader.result || '');
       var b64 = dataUrl.indexOf('base64,') !== -1 ? dataUrl.split('base64,')[1] : dataUrl;
       btn.textContent = 'Uploading...';
-      setHTML('oatUploadResult', spinnerHTML(20));
-      API.call('oracleApprovals', 'upload', { filename: file.name, mimeType: file.type, contentBase64: b64 }, { retries: 0 })
+      setHTML('apxUploadResult', spinnerHTML(20));
+      API.call('approvals', 'upload', { filename: file.name, mimeType: file.type, contentBase64: b64 }, { retries: 0 })
         .then(function (r) {
           btn.disabled = false; btn.textContent = 'Upload and load';
           var skipped = r.skipped || [];
-          setHTML('oatUploadResult',
+          setHTML('apxUploadResult',
             '<div class="card card-body" style="border-left:4px solid var(--clr-success)">' +
               '<div style="font-weight:600;margin-bottom:6px">Loaded ' + esc(r.docType || '') + ' extract into ' + esc(r.table || '') + '</div>' +
               '<p style="margin:0 0 6px">Rows: <b>' + ((r.rows && r.rows.inserted) || 0) + '</b> inserted, <b>' + ((r.rows && r.rows.updated) || 0) + '</b> updated' + (r.documents != null ? ' across <b>' + r.documents + '</b> document(s)' : '') + '.</p>' +
@@ -522,11 +535,11 @@ var OAT = (function () {
                     skipped.slice(0, 50).map(function (s) { return '<li>Row ' + esc(s.row) + ': ' + esc(s.reason) + '</li>'; }).join('') + '</ul></details>'
                 : '<p style="margin:0;font-size:12px;color:var(--clr-text-light)">No rows skipped.</p>') +
             '</div>');
-          Toast.success('Extract loaded.');
+          Toast.success('Extract loaded. The dashboard Approvals section will reflect it on next load.');
         })
         .catch(function (e) {
           btn.disabled = false; btn.textContent = 'Upload and load';
-          setHTML('oatUploadResult', errorCard(e, null));
+          setHTML('apxUploadResult', errorCard(e, null));
         });
     };
     reader.onerror = function () { btn.disabled = false; btn.textContent = 'Upload and load'; Toast.error('Could not read the file.'); };
@@ -534,148 +547,88 @@ var OAT = (function () {
   }
 
   function renderIntegration() {
-    setHTML('oatSetPanel', spinnerHTML(30));
-    API.call('oracleApprovals', 'getIntegrationConfig', {}).then(function (c) {
+    setHTML('apxSetPanel', spinnerHTML(30));
+    API.call('approvals', 'getIntegrationConfig', {}).then(function (c) {
       c = c || {};
-      var webhookUrl = (window.location && window.location.origin) ? '(your /exec URL)?hook=oracle_approvals' : '(your /exec URL)?hook=oracle_approvals';
-      setHTML('oatSetPanel',
+      setHTML('apxSetPanel',
         '<div class="card card-body">' +
-          '<p class="oat-note">Configure an automatic source for near-real-time refresh. Apps Script has no push, so near-real-time means a short-interval scheduled pull (every 10 minutes when enabled) or an inbound webhook the source calls. ' +
+          '<p class="apx-note">Configure an automatic source for near-real-time refresh. Apps Script has no push, so near-real-time means a short-interval scheduled pull or an inbound webhook the source calls. ' +
             '<b>Oracle EBS is typically on-premise behind a firewall and not reachable directly from this cloud script</b>, so the connector is a clearly marked pluggable point and is not faked. The Upload tab works on its own regardless.</p>' +
           '<div class="form-row">' +
             '<div class="form-group"><label class="form-label">Source type</label>' +
-              '<select class="form-control" id="oatIntType">' +
+              '<select class="form-control" id="apxIntType">' +
                 ['', 'EBS_REST', 'SHARED_DB', 'DATA_DROP', 'WEBHOOK', 'OTHER'].map(function (v) {
                   return '<option value="' + v + '"' + (v === (c.source_type || '') ? ' selected' : '') + '>' + (v || 'Select...') + '</option>'; }).join('') +
               '</select></div>' +
             '<div class="form-group"><label class="form-label">Schedule</label>' +
-              '<select class="form-control" id="oatIntSchedule">' +
+              '<select class="form-control" id="apxIntSchedule">' +
                 [['manual', 'Manual only'], ['10min', 'Every 10 minutes'], ['hourly', 'Hourly'], ['daily', 'Daily']].map(function (o) {
                   return '<option value="' + o[0] + '"' + (o[0] === (c.schedule || 'manual') ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
               '</select></div>' +
           '</div>' +
-          '<div class="form-group"><label class="form-label">Endpoint / connection string</label><input class="form-control" id="oatIntEndpoint" value="' + esc(c.endpoint || '') + '" placeholder="https://... or a data-drop location"></div>' +
+          '<div class="form-group"><label class="form-label">Endpoint / connection string</label><input class="form-control" id="apxIntEndpoint" value="' + esc(c.endpoint || '') + '" placeholder="https://... or a data-drop location"></div>' +
           '<div class="form-row">' +
-            '<div class="form-group"><label class="form-label">Username</label><input class="form-control" id="oatIntUser" value="' + esc(c.username || '') + '"></div>' +
-            '<div class="form-group"><label class="form-label">Secret / password ' + (c.has_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="oatIntSecret" type="password" placeholder="' + (c.has_secret ? 'leave blank to keep' : 'enter secret') + '"></div>' +
+            '<div class="form-group"><label class="form-label">Username</label><input class="form-control" id="apxIntUser" value="' + esc(c.username || '') + '"></div>' +
+            '<div class="form-group"><label class="form-label">Secret / password ' + (c.has_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="apxIntSecret" type="password" placeholder="' + (c.has_secret ? 'leave blank to keep' : 'enter secret') + '"></div>' +
           '</div>' +
-          '<div class="form-group"><label class="form-label">Inbound webhook secret ' + (c.has_webhook_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="oatIntHook" type="password" placeholder="' + (c.has_webhook_secret ? 'leave blank to keep' : 'shared secret for the doPost webhook') + '"></div>' +
-          '<p class="oat-note">Webhook endpoint: <b>' + esc(webhookUrl) + '</b>. The source POSTs JSON {"hook":"oracle_approvals","secret":"...","rows":[[header...],[row...]]}. It only writes to the po_approvals / so_approvals tables.</p>' +
-          '<div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="oatIntNotes" rows="2">' + esc(c.notes || '') + '</textarea></div>' +
-          '<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" id="oatIntEnabled"' + (c.enabled ? ' checked' : '') + '> Enable scheduled pull</label>' +
+          '<div class="form-group"><label class="form-label">Inbound webhook secret ' + (c.has_webhook_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="apxIntHook" type="password" placeholder="' + (c.has_webhook_secret ? 'leave blank to keep' : 'shared secret for the doPost webhook') + '"></div>' +
+          '<p class="apx-note">Inbound webhook: the source POSTs JSON {"hook":"oracle_approvals","secret":"...","rows":[[header...],[row...]]} to your /exec URL with <b>?hook=oracle_approvals</b>. It only writes to the po_approvals / so_approvals tables.</p>' +
+          '<div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="apxIntNotes" rows="2">' + esc(c.notes || '') + '</textarea></div>' +
+          '<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" id="apxIntEnabled"' + (c.enabled ? ' checked' : '') + '> Enable scheduled pull</label>' +
           '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-            '<button class="btn btn-primary" id="oatIntSave">Save</button>' +
-            '<button class="btn btn-secondary" id="oatIntSync">Sync now</button>' +
+            '<button class="btn btn-primary" id="apxIntSave">Save</button>' +
+            '<button class="btn btn-secondary" id="apxIntSync">Sync now</button>' +
             '<span style="font-size:12px;color:' + (c.connector_ready ? 'var(--clr-success)' : 'var(--clr-text-light)') + '">' +
               (c.connector_ready ? 'Connector reports configured.' : 'Connector not connected yet (pluggable point).') + '</span>' +
           '</div>' +
-          '<div id="oatIntResult" style="margin-top:14px"></div>' +
+          '<div id="apxIntResult" style="margin-top:14px"></div>' +
         '</div>');
-      document.getElementById('oatIntSave').onclick = saveIntegration;
-      document.getElementById('oatIntSync').onclick = syncNow;
-    }).catch(function (e) { setHTML('oatSetPanel', errorCard(e, renderIntegration)); });
+      document.getElementById('apxIntSave').onclick = saveIntegration;
+      document.getElementById('apxIntSync').onclick = syncNow;
+    }).catch(function (e) { setHTML('apxSetPanel', errorCard(e, renderIntegration)); });
   }
   function saveIntegration() {
-    var btn = document.getElementById('oatIntSave'); btn.disabled = true; btn.textContent = 'Saving...';
-    API.call('oracleApprovals', 'saveIntegrationConfig', {
-      enabled: document.getElementById('oatIntEnabled').checked,
-      source_type: document.getElementById('oatIntType').value,
-      schedule: document.getElementById('oatIntSchedule').value,
-      endpoint: document.getElementById('oatIntEndpoint').value.trim(),
-      username: document.getElementById('oatIntUser').value.trim(),
-      secret: document.getElementById('oatIntSecret').value,
-      webhook_secret: document.getElementById('oatIntHook').value,
-      notes: document.getElementById('oatIntNotes').value.trim()
+    var btn = document.getElementById('apxIntSave'); btn.disabled = true; btn.textContent = 'Saving...';
+    API.call('approvals', 'saveIntegrationConfig', {
+      enabled: document.getElementById('apxIntEnabled').checked,
+      source_type: document.getElementById('apxIntType').value,
+      schedule: document.getElementById('apxIntSchedule').value,
+      endpoint: document.getElementById('apxIntEndpoint').value.trim(),
+      username: document.getElementById('apxIntUser').value.trim(),
+      secret: document.getElementById('apxIntSecret').value,
+      webhook_secret: document.getElementById('apxIntHook').value,
+      notes: document.getElementById('apxIntNotes').value.trim()
     }, { retries: 0 }).then(function () { btn.disabled = false; btn.textContent = 'Save'; Toast.success('Integration settings saved.'); renderIntegration(); })
       .catch(function (e) { btn.disabled = false; btn.textContent = 'Save'; Toast.error(e.message); });
   }
   function syncNow() {
-    var btn = document.getElementById('oatIntSync'); btn.disabled = true; btn.textContent = 'Syncing...';
-    setHTML('oatIntResult', spinnerHTML(20));
-    API.call('oracleApprovals', 'syncNow', {}, { retries: 0 }).then(function (r) {
+    var btn = document.getElementById('apxIntSync'); btn.disabled = true; btn.textContent = 'Syncing...';
+    setHTML('apxIntResult', spinnerHTML(20));
+    API.call('approvals', 'syncNow', {}, { retries: 0 }).then(function (r) {
       btn.disabled = false; btn.textContent = 'Sync now';
-      setHTML('oatIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-success)">Synced. Rows: <b>' +
+      setHTML('apxIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-success)">Synced. Rows: <b>' +
         ((r.rows && r.rows.inserted) || 0) + '</b> inserted, <b>' + ((r.rows && r.rows.updated) || 0) + '</b> updated' + (r.documents != null ? ' across <b>' + r.documents + '</b> document(s)' : '') + '.</div>');
       Toast.success('Sync complete.');
     }).catch(function (e) {
       btn.disabled = false; btn.textContent = 'Sync now';
-      setHTML('oatIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-warning)">' + esc(e && e.message ? e.message : 'Sync could not run.') + '</div>');
+      setHTML('apxIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-warning)">' + esc(e && e.message ? e.message : 'Sync could not run.') + '</div>');
     });
   }
 
-  function renderTargets() {
-    setHTML('oatSetPanel',
-      '<div class="card"><div class="card-body" style="padding-bottom:0">' +
-        '<p class="oat-note">Targets set the on-time threshold (in minutes) per doc type and stage, stored as a JSON value in the config table. The leaderboard measures each approver against them. ' +
-          'A target matches a step by its stage label (for example <b>First Approval</b>) or its step type (<b>APPROVAL</b>, <b>CREDIT_HOLD</b>, <b>LA</b>, <b>INVOICE</b>).</p>' +
-        (can('order.manage') ? '<div class="form-row" style="grid-template-columns:1fr 1fr 1fr auto;align-items:end">' +
-          '<div class="form-group"><label class="form-label">Doc type</label><select class="form-control" id="oatTgtType"><option>PO</option><option>SO</option></select></div>' +
-          '<div class="form-group"><label class="form-label">Stage</label><input class="form-control" id="oatTgtStage" list="oatStageList" placeholder="e.g. First Approval or APPROVAL">' +
-            '<datalist id="oatStageList"><option>APPROVAL</option><option>First Approval</option><option>Second Approval</option><option>Third Approval</option>' +
-            '<option>Fourth Approval</option><option>Fifth Approval</option><option>Sixth Approval</option><option>Seventh Approval</option>' +
-            '<option>Credit Hold Release</option><option>CREDIT_HOLD</option><option>Loading Authority</option><option>LA</option><option>Invoice</option><option>INVOICE</option></datalist></div>' +
-          '<div class="form-group"><label class="form-label">Target minutes</label><input class="form-control" id="oatTgtMins" type="number" min="0" placeholder="e.g. 240"></div>' +
-          '<div class="form-group"><button class="btn btn-primary" id="oatTgtAdd">Add / update</button></div>' +
-        '</div>' : '') +
-      '</div>' +
-      '<div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>Doc type</th><th>Stage</th><th>Target</th>' + (can('order.manage') ? '<th></th>' : '') + '</tr></thead>' +
-        '<tbody id="oatTgtBody"></tbody></table></div></div>');
-    var addBtn = document.getElementById('oatTgtAdd');
-    if (addBtn) addBtn.onclick = function () {
-      var docType = document.getElementById('oatTgtType').value;
-      var stage = document.getElementById('oatTgtStage').value.trim();
-      var mins = document.getElementById('oatTgtMins').value;
-      if (!stage) { Toast.warning('Enter a stage.'); return; }
-      if (mins === '' || isNaN(Number(mins))) { Toast.warning('Enter target minutes.'); return; }
-      API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(mins) }, { retries: 0 })
-        .then(function () { Toast.success('Target saved.'); document.getElementById('oatTgtStage').value = ''; document.getElementById('oatTgtMins').value = ''; fetchTargets(); })
-        .catch(function (e) { Toast.error(e.message); });
-    };
-    fetchTargets();
-  }
-  function fetchTargets() {
-    var b = document.getElementById('oatTgtBody'); var cols = can('order.manage') ? 4 : 3;
-    if (b) b.innerHTML = loadingRow(cols);
-    API.call('oracleApprovals', 'getTargets', {}).then(function (d) {
-      var rows = (d && d.list) || [];
-      if (!rows.length) { setHTML('oatTgtBody', emptyRow(cols, 'No targets yet. Add one above to enable on-time rates.')); return; }
-      setHTML('oatTgtBody', rows.map(function (t) {
-        var actions = can('order.manage') ? '<td class="actions">' +
-          '<button class="btn btn-secondary btn-sm" onclick="OAT.editTarget(' + q(t.doc_type) + ',' + q(t.stage) + ',' + (Number(t.target_minutes) || 0) + ')">Edit</button>' +
-          '<button class="btn btn-danger btn-sm" onclick="OAT.removeTarget(' + q(t.doc_type) + ',' + q(t.stage) + ')">Remove</button>' +
-          '</td>' : '';
-        return '<tr><td>' + esc(t.doc_type) + '</td><td>' + esc(t.stage) + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums">' + fmtMins(t.target_minutes) + ' <span style="color:var(--clr-text-light);font-size:11px">(' + (Number(t.target_minutes) || 0) + 'm)</span></td>' + actions + '</tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('oatTgtBody', errorRow(cols, e, fetchTargets)); });
-  }
-  function editTarget(docType, stage, mins) {
-    var v = window.prompt('Target minutes for ' + docType + ' / ' + stage + ':', String(mins || ''));
-    if (v === null) return;
-    if (isNaN(Number(v))) { Toast.warning('Enter a number.'); return; }
-    API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(v) }, { retries: 0 })
-      .then(function () { Toast.success('Target updated.'); fetchTargets(); }).catch(function (e) { Toast.error(e.message); });
-  }
-  function removeTarget(docType, stage) {
-    Modal.confirm('Remove this target? On-time rates will stop using it.', function () {
-      API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, remove: true }, { retries: 0 })
-        .then(function () { Toast.success('Target removed.'); fetchTargets(); }).catch(function (e) { Toast.error(e.message); });
-    });
-  }
-  function openTargets() { _tab = 'settings'; _settingsTab = 'targets'; var el = document.getElementById('pageContent'); render(el); }
-
-  // Stop polling when navigating away from this view.
+  // Tear charts down when navigating away from the dashboard.
   window.addEventListener('hass:route', function (e) {
-    if (!e || !e.detail || e.detail.route !== 'approvaltiming') { stopPoll(); destroyCharts(); }
+    if (!e || !e.detail || e.detail.route !== 'dashboard') destroyCharts();
   });
 
   return {
-    render: render, viewDoc: viewDoc, drillApprover: drillApprover,
-    editTarget: editTarget, removeTarget: removeTarget, _stopPoll: stopPoll
+    mountDashboard: mountDashboard, mountSettings: mountSettings,
+    viewDoc: viewDoc, drillApprover: drillApprover, openTargets: openTargets,
+    editTarget: editTarget, removeTarget: removeTarget
   };
 })();
-window.OAT = OAT;
+window.ApprovalsUI = ApprovalsUI;
 
-Router.register('approvaltiming', function (el) { OAT.render(el); });
+// The ingestion admin page (Upload / Integration). The analytics charts and
+// leaderboards live on the dashboard, mounted from partial_dashboard.html.
+Router.register('approvalsadmin', function (el) { ApprovalsUI.mountSettings(el); });
 </script>
