@@ -965,7 +965,7 @@ function smokeTickets() {
 }
 
 // =============================================================================
-// smokeOracleApprovals  —  Oracle PO / SO / LA timing feature
+// smokeOracleApprovals  -  Oracle PO / SO / LA timing feature
 // =============================================================================
 // Run manually from the Apps Script IDE. Loads small in-memory PO and SO
 // extracts through the SAME loader the upload path uses, then exercises the
@@ -983,112 +983,134 @@ function smokeOracleApprovals() {
   var saId    = seed.userId;
   var saToken = Session.create(saId, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'smoke-oa', 'KE').token;
 
+  // PO extract. The *_approvals_variance values are CUMULATIVE minutes from the
+  // submission date, so the per-step delta for step 1 is 60 - 0 = 60. The second
+  // approver is named but has no date => a pending step (status not final).
   var PO = [
     ['purchase Number', 'Req Description', 'NATURE', 'ORIGINAL_CREATION_DATE', 'SUBMISSION_FOR_APPROVAL_DATE',
      'PURCHASE_ORDER_CREATED_BY', 'AUTHORIZATION_STATUS',
      'FIRST_APPROVER', 'FIRST_APPROVAL_DATE', 'FIRST_APPROVALS_VARIANCE',
      'SECOND_APPROVER', 'SECOND_APPROVAL_DATE', 'SECOND_APPROVALS_VARIANCE'],
     ['SMOKE-PO-1', 'Diesel order', 'CAPEX', '2024-01-01T08:00:00Z', '2024-01-01T09:00:00Z',
-     'jane creator', 'APPROVED',
-     'Alice Approver', '2024-01-01T10:00:00Z', '0',
-     'Bob Approver', '', '0']   // second approver present, NO date => pending
+     'jane creator', 'IN PROCESS',
+     'Alice Approver', '2024-01-01T10:00:00Z', '60',
+     'Bob Approver', '', '']   // second approver present, NO date => pending
   ];
+  // SO extract is line level: two lines for the same document_number must collapse
+  // to one document. finance_variance 120 (create -> approval), LA variance 90.
   var SO = [
-    ['DOCUMENT_NUMBER', 'AFFILIATE', 'CUSTOMER_CODE', 'CUSTOMER_NAME', 'USER_NAME', 'CREATE_DATE_TIME', 'APPROVAL_STATUS',
+    ['DOCUMENT_NUMBER', 'LINE_NUMBER', 'AFFILIATE', 'CUSTOMER_CODE', 'CUSTOMER_NAME', 'USER_NAME', 'CREATE_DATE_TIME', 'APPROVAL_STATUS',
      'APPROVER', 'APPROVAL_DATE_TIME', 'FINANCE_VARIANCE',
      'HOLD_RELEASED_BY', 'CREDIT_HOLD_DATE', 'CREDIT_HOLD_RELEASE_DATE', 'CREDIT_VARIANCE',
      'LOADING_AUTHORITY_DATE', 'LOADING_AUTHORITY_VARIANCE', 'INVOICE_CREATION_DATE', 'INVOICE_VARIANCE'],
-    ['SMOKE-SO-1', 'Hass Petroleum Kenya', 'C001', 'Acme Ltd', 'sam user', '2024-02-01T08:00:00Z', 'APPROVED',
-     'Carol Approver', '2024-02-01T10:00:00Z', '0', '', '', '', '', '2024-02-01T12:00:00Z', '0', '2024-02-01T13:00:00Z', '0'],
-    ['SMOKE-SO-1', 'Hass Petroleum Kenya', 'C001', 'Acme Ltd', 'sam user', '2024-02-01T08:00:00Z', 'APPROVED',
-     'Carol Approver', '2024-02-01T10:00:00Z', '0', '', '', '', '', '2024-02-01T12:00:00Z', '0', '2024-02-01T13:00:00Z', '0']  // duplicate line, same doc
+    ['SMOKE-SO-1', '1', 'Hass Petroleum Kenya', 'C001', 'Acme Ltd', 'sam user', '2024-02-01T08:00:00Z', 'APPROVED',
+     'Carol Approver', '2024-02-01T10:00:00Z', '120', '', '', '', '', '2024-02-01T11:30:00Z', '90', '2024-02-01T13:00:00Z', '180'],
+    ['SMOKE-SO-1', '2', 'Hass Petroleum Kenya', 'C001', 'Acme Ltd', 'sam user', '2024-02-01T08:00:00Z', 'APPROVED',
+     'Carol Approver', '2024-02-01T10:00:00Z', '120', '', '', '', '', '2024-02-01T11:30:00Z', '90', '2024-02-01T13:00:00Z', '180']  // 2nd line, same doc
   ];
 
+  // Snapshot the on-time targets so the test can restore them (they live as a
+  // JSON value in the config table, not a table the test can simply DELETE from).
+  var savedTargets = {};
+  try {
+    var gt0 = processRequest({ service: 'oracleApprovals', action: 'getTargets', sessionToken: saToken, params: {} });
+    if (gt0.ok) savedTargets = gt0.data.targets || {};
+  } catch (_) {}
+
   function cleanup() {
+    try { TursoClient.write('DELETE FROM po_approvals WHERE purchase_number = ?', ['SMOKE-PO-1']); } catch (_) {}
+    try { TursoClient.write('DELETE FROM so_approvals WHERE document_number = ?', ['SMOKE-SO-1']); } catch (_) {}
     ['SMOKE-PO-1', 'SMOKE-SO-1'].forEach(function (dn) {
-      try { TursoClient.write('DELETE FROM oracle_approval_steps WHERE doc_number = ?', [dn]); } catch (_) {}
-      try { TursoClient.write('DELETE FROM oracle_approval_comments WHERE doc_number = ?', [dn]); } catch (_) {}
-      try { TursoClient.write('DELETE FROM oracle_approvals WHERE doc_number = ?', [dn]); } catch (_) {}
+      try { TursoClient.write('DELETE FROM po_so_comments WHERE doc_number = ?', [dn]); } catch (_) {}
     });
-    try { TursoClient.write("DELETE FROM oracle_approval_targets WHERE stage = 'First Approval' AND doc_type = 'PO'"); } catch (_) {}
+    try { processRequest({ service: 'oracleApprovals', action: 'saveTargets', sessionToken: saToken, params: { targets: savedTargets } }); } catch (_) {}
   }
   cleanup();  // start clean
 
-  // ── 1. PO load: documents + typed steps, duration + variance, pending flag ──
-  check('1. PO extract loads with computed duration and a pending step', function () {
+  // ── 1. PO load: 1:1 mapping straight into po_approvals ──────────────────────
+  check('1. PO extract loads one row into po_approvals (1:1 mapping)', function () {
     var r = OracleApprovalsLoader.loadFromRows(PO, { source: 'UPLOAD', batchId: 'SMOKE-B1' });
     if (r.docType !== 'PO') throw new Error('Expected PO, got ' + r.docType);
-    if (r.documents.inserted !== 1) throw new Error('Expected 1 document inserted, got ' + r.documents.inserted);
-    if (r.steps.inserted !== 2) throw new Error('Expected 2 steps, got ' + r.steps.inserted);
-    var s1 = TursoClient.select("SELECT duration_minutes, source_variance, is_pending FROM oracle_approval_steps WHERE doc_number='SMOKE-PO-1' AND step_no=1");
-    if (!s1.length) throw new Error('Step 1 not found');
-    if (parseInt(s1[0].duration_minutes, 10) !== 60) throw new Error('Expected 60 min for step 1, got ' + s1[0].duration_minutes);
-    if (String(s1[0].source_variance) !== '0') throw new Error('Variance not preserved: ' + s1[0].source_variance);
-    var pend = TursoClient.select("SELECT COUNT(*) AS n FROM oracle_approval_steps WHERE doc_number='SMOKE-PO-1' AND is_pending=1");
-    if (parseInt(pend[0].n, 10) !== 1) throw new Error('Expected 1 pending step, got ' + pend[0].n);
+    if (r.rows.inserted !== 1) throw new Error('Expected 1 row inserted, got ' + r.rows.inserted);
+    if (r.documents !== 1) throw new Error('Expected 1 document, got ' + r.documents);
+    var row = TursoClient.select("SELECT first_approver, first_approvals_variance FROM po_approvals WHERE purchase_number='SMOKE-PO-1'");
+    if (!row.length) throw new Error('po_approvals row not found');
+    if (String(row[0].first_approver) !== 'Alice Approver') throw new Error('first_approver not stored: ' + row[0].first_approver);
+    if (Number(row[0].first_approvals_variance) !== 60) throw new Error('variance not stored as 60: ' + row[0].first_approvals_variance);
   });
 
-  // ── 2. SO load: de-dup by DOCUMENT_NUMBER, country mapping, LA + invoice ────
-  check('2. SO extract de-dupes to one document and maps affiliate to KE', function () {
+  // ── 2. SO load: both lines land in so_approvals (deduped only at read time) ──
+  check('2. SO extract loads two lines for one document into so_approvals', function () {
     var r = OracleApprovalsLoader.loadFromRows(SO, { source: 'UPLOAD', batchId: 'SMOKE-B2' });
-    if (r.documents.total !== 1) throw new Error('Expected 1 SO document, got ' + r.documents.total);
-    var h = TursoClient.select("SELECT country_code FROM oracle_approvals WHERE doc_number='SMOKE-SO-1'");
-    if (!h.length || h[0].country_code !== 'KE') throw new Error('Expected country KE, got ' + (h[0] && h[0].country_code));
-    var la = TursoClient.select("SELECT duration_minutes FROM oracle_approval_steps WHERE doc_number='SMOKE-SO-1' AND step_type='LA'");
-    if (!la.length || parseInt(la[0].duration_minutes, 10) !== 120) throw new Error('Expected LA 120 min, got ' + (la[0] && la[0].duration_minutes));
+    if (r.rows.inserted !== 2) throw new Error('Expected 2 line rows inserted, got ' + r.rows.inserted);
+    if (r.documents !== 1) throw new Error('Expected 1 SO document, got ' + r.documents);
+    var cnt = TursoClient.select("SELECT COUNT(*) AS n FROM so_approvals WHERE document_number='SMOKE-SO-1'");
+    if (parseInt(cnt[0].n, 10) !== 2) throw new Error('Expected 2 so_approvals rows, got ' + cnt[0].n);
   });
 
-  // ── 3. Re-upload upserts (no duplication) ───────────────────────────────────
-  check('3. Re-uploading the PO updates in place rather than duplicating', function () {
-    var r = OracleApprovalsLoader.loadFromRows(PO, { source: 'UPLOAD', batchId: 'SMOKE-B3' });
-    if (r.documents.updated !== 1 || r.documents.inserted !== 0) throw new Error('Expected 1 updated/0 inserted, got ' + JSON.stringify(r.documents));
-    var cnt = TursoClient.select("SELECT COUNT(*) AS n FROM oracle_approval_steps WHERE doc_number='SMOKE-PO-1'");
-    if (parseInt(cnt[0].n, 10) !== 2) throw new Error('Expected 2 steps after re-upload, got ' + cnt[0].n);
-    var hc = TursoClient.select("SELECT COUNT(*) AS n FROM oracle_approvals WHERE doc_number='SMOKE-PO-1'");
-    if (parseInt(hc[0].n, 10) !== 1) throw new Error('Expected 1 header row, got ' + hc[0].n);
+  // ── 3. Re-upload upserts by primary key (no duplication) ─────────────────────
+  check('3. Re-uploading upserts by primary key rather than duplicating', function () {
+    var rp = OracleApprovalsLoader.loadFromRows(PO, { source: 'UPLOAD', batchId: 'SMOKE-B3' });
+    if (rp.rows.updated !== 1 || rp.rows.inserted !== 0) throw new Error('PO re-upload expected 1 updated/0 inserted, got ' + JSON.stringify(rp.rows));
+    var rs = OracleApprovalsLoader.loadFromRows(SO, { source: 'UPLOAD', batchId: 'SMOKE-B4' });
+    if (rs.rows.updated !== 2 || rs.rows.inserted !== 0) throw new Error('SO re-upload expected 2 updated/0 inserted, got ' + JSON.stringify(rs.rows));
+    var pc = TursoClient.select("SELECT COUNT(*) AS n FROM po_approvals WHERE purchase_number='SMOKE-PO-1'");
+    if (parseInt(pc[0].n, 10) !== 1) throw new Error('Expected 1 po_approvals row, got ' + pc[0].n);
+    var sc = TursoClient.select("SELECT COUNT(*) AS n FROM so_approvals WHERE document_number='SMOKE-SO-1'");
+    if (parseInt(sc[0].n, 10) !== 2) throw new Error('Expected 2 so_approvals rows, got ' + sc[0].n);
   });
 
-  // ── 4. charts aggregate on the backend ──────────────────────────────────────
-  check('4. oracleApprovals.charts returns PO approver averages', function () {
+  // ── 4. charts: PO per-step delta + SO document-deduped averages ─────────────
+  check('4. charts returns PO per-step (60) and SO document (120) averages', function () {
     var res = processRequest({ service: 'oracleApprovals', action: 'charts', sessionToken: saToken, params: {} });
     if (!res.ok) throw new Error('charts failed: ' + JSON.stringify(res.error));
     var alice = (res.data.poByApprover || []).filter(function (x) { return x.approver === 'Alice Approver'; });
     if (!alice.length) throw new Error('Alice not in poByApprover');
-    if (alice[0].avg_minutes !== 60) throw new Error('Expected Alice avg 60, got ' + alice[0].avg_minutes);
+    if (alice[0].avg_minutes !== 60) throw new Error('Expected Alice per-step avg 60, got ' + alice[0].avg_minutes);
+    var carol = (res.data.soByApprover || []).filter(function (x) { return x.approver === 'Carol Approver'; });
+    if (!carol.length) throw new Error('Carol not in soByApprover');
+    if (carol[0].avg_minutes !== 120) throw new Error('Expected Carol avg 120, got ' + carol[0].avg_minutes);
+    if (carol[0].count !== 1) throw new Error('SO not deduped to one document, count=' + carol[0].count);
   });
 
-  // ── 5. target + leaderboard on-time rate ────────────────────────────────────
-  check('5. upsertTarget then leaderboard computes on-time rate', function () {
-    var t = processRequest({ service: 'oracleApprovals', action: 'upsertTarget', sessionToken: saToken,
+  // ── 5. saveTargets (config JSON) then leaderboard on-time rate ──────────────
+  check('5. saveTargets then leaderboard computes on-time rate', function () {
+    var t = processRequest({ service: 'oracleApprovals', action: 'saveTargets', sessionToken: saToken,
       params: { doc_type: 'PO', stage: 'First Approval', target_minutes: 120 } });
-    if (!t.ok) throw new Error('upsertTarget failed: ' + JSON.stringify(t.error));
+    if (!t.ok) throw new Error('saveTargets failed: ' + JSON.stringify(t.error));
     var lb = processRequest({ service: 'oracleApprovals', action: 'leaderboard', sessionToken: saToken, params: {} });
     if (!lb.ok) throw new Error('leaderboard failed: ' + JSON.stringify(lb.error));
     var alice = (lb.data.rows || []).filter(function (x) { return x.approver === 'Alice Approver'; });
     if (!alice.length) throw new Error('Alice not on leaderboard');
     if (alice[0].on_time_rate !== 100) throw new Error('Expected Alice on-time 100, got ' + alice[0].on_time_rate);
+    if (lb.data.la == null) throw new Error('Expected an LA cycle-time tile on the leaderboard');
   });
 
-  // ── 6. stuck detection ──────────────────────────────────────────────────────
+  // ── 6. stuck detection (PO with a pending second approver) ──────────────────
   check('6. stuck returns the in-flight PO with its responsible approver', function () {
-    var res = processRequest({ service: 'oracleApprovals', action: 'stuck', sessionToken: saToken, params: { limit: 50 } });
+    var res = processRequest({ service: 'oracleApprovals', action: 'stuck', sessionToken: saToken, params: { limit: 200 } });
     if (!res.ok) throw new Error('stuck failed: ' + JSON.stringify(res.error));
     var row = (res.data || []).filter(function (x) { return x.doc_number === 'SMOKE-PO-1'; });
     if (!row.length) throw new Error('SMOKE-PO-1 not flagged as stuck');
     if (String(row[0].responsible).indexOf('Bob') === -1) throw new Error('Expected Bob responsible, got ' + row[0].responsible);
   });
 
-  // ── 7. getDoc + addComment record ───────────────────────────────────────────
+  // ── 7. getDoc returns derived steps; addComment records to po_so_comments ───
   check('7. getDoc returns steps and addComment records a comment', function () {
     var g = processRequest({ service: 'oracleApprovals', action: 'getDoc', sessionToken: saToken,
       params: { doc_type: 'PO', doc_number: 'SMOKE-PO-1' } });
     if (!g.ok) throw new Error('getDoc failed: ' + JSON.stringify(g.error));
-    if (!g.data.steps || g.data.steps.length !== 2) throw new Error('Expected 2 steps from getDoc');
+    if (!g.data.steps || g.data.steps.length !== 2) throw new Error('Expected 2 derived steps from getDoc, got ' + (g.data.steps || []).length);
     if (!g.data.stuck) throw new Error('Expected stuck info on getDoc');
+    var so = processRequest({ service: 'oracleApprovals', action: 'getDoc', sessionToken: saToken,
+      params: { doc_type: 'SO', doc_number: 'SMOKE-SO-1' } });
+    if (!so.ok) throw new Error('SO getDoc failed: ' + JSON.stringify(so.error));
+    var la = (so.data.steps || []).filter(function (s) { return s.step_type === 'LA'; });
+    if (!la.length || Number(la[0].duration_minutes) !== 90) throw new Error('Expected SO LA cycle 90, got ' + (la[0] && la[0].duration_minutes));
     var c = processRequest({ service: 'oracleApprovals', action: 'addComment', sessionToken: saToken,
       params: { doc_type: 'PO', doc_number: 'SMOKE-PO-1', comment_text: 'Please action this approval.', recipient_email: 'test@example.com' } });
     if (!c.ok) throw new Error('addComment failed: ' + JSON.stringify(c.error));
-    var rows = TursoClient.select("SELECT COUNT(*) AS n FROM oracle_approval_comments WHERE doc_number='SMOKE-PO-1'");
+    var rows = TursoClient.select("SELECT COUNT(*) AS n FROM po_so_comments WHERE doc_number='SMOKE-PO-1'");
     if (parseInt(rows[0].n, 10) < 1) throw new Error('Comment not recorded');
   });
 

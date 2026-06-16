@@ -514,8 +514,8 @@ var OAT = (function () {
           var skipped = r.skipped || [];
           setHTML('oatUploadResult',
             '<div class="card card-body" style="border-left:4px solid var(--clr-success)">' +
-              '<div style="font-weight:600;margin-bottom:6px">Loaded ' + esc(r.docType || '') + ' extract</div>' +
-              '<p style="margin:0 0 6px">Documents: <b>' + (r.documents.inserted || 0) + '</b> inserted, <b>' + (r.documents.updated || 0) + '</b> updated. Steps: <b>' + (r.steps.inserted || 0) + '</b>.</p>' +
+              '<div style="font-weight:600;margin-bottom:6px">Loaded ' + esc(r.docType || '') + ' extract into ' + esc(r.table || '') + '</div>' +
+              '<p style="margin:0 0 6px">Rows: <b>' + ((r.rows && r.rows.inserted) || 0) + '</b> inserted, <b>' + ((r.rows && r.rows.updated) || 0) + '</b> updated' + (r.documents != null ? ' across <b>' + r.documents + '</b> document(s)' : '') + '.</p>' +
               (skipped.length
                 ? '<details><summary style="cursor:pointer;color:var(--clr-warning)">' + skipped.length + ' row(s) skipped</summary>' +
                     '<ul style="margin:8px 0 0 18px;font-size:12px;color:var(--clr-text-light)">' +
@@ -560,7 +560,7 @@ var OAT = (function () {
             '<div class="form-group"><label class="form-label">Secret / password ' + (c.has_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="oatIntSecret" type="password" placeholder="' + (c.has_secret ? 'leave blank to keep' : 'enter secret') + '"></div>' +
           '</div>' +
           '<div class="form-group"><label class="form-label">Inbound webhook secret ' + (c.has_webhook_secret ? '(set)' : '(not set)') + '</label><input class="form-control" id="oatIntHook" type="password" placeholder="' + (c.has_webhook_secret ? 'leave blank to keep' : 'shared secret for the doPost webhook') + '"></div>' +
-          '<p class="oat-note">Webhook endpoint: <b>' + esc(webhookUrl) + '</b>. The source POSTs JSON {"hook":"oracle_approvals","secret":"...","rows":[[header...],[row...]]}. It only writes to the Oracle tables.</p>' +
+          '<p class="oat-note">Webhook endpoint: <b>' + esc(webhookUrl) + '</b>. The source POSTs JSON {"hook":"oracle_approvals","secret":"...","rows":[[header...],[row...]]}. It only writes to the po_approvals / so_approvals tables.</p>' +
           '<div class="form-group"><label class="form-label">Notes</label><textarea class="form-control" id="oatIntNotes" rows="2">' + esc(c.notes || '') + '</textarea></div>' +
           '<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" id="oatIntEnabled"' + (c.enabled ? ' checked' : '') + '> Enable scheduled pull</label>' +
           '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
@@ -594,8 +594,8 @@ var OAT = (function () {
     setHTML('oatIntResult', spinnerHTML(20));
     API.call('oracleApprovals', 'syncNow', {}, { retries: 0 }).then(function (r) {
       btn.disabled = false; btn.textContent = 'Sync now';
-      setHTML('oatIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-success)">Synced. Documents: <b>' +
-        (r.documents.inserted || 0) + '</b> inserted, <b>' + (r.documents.updated || 0) + '</b> updated. Steps: <b>' + (r.steps.inserted || 0) + '</b>.</div>');
+      setHTML('oatIntResult', '<div class="card card-body" style="border-left:4px solid var(--clr-success)">Synced. Rows: <b>' +
+        ((r.rows && r.rows.inserted) || 0) + '</b> inserted, <b>' + ((r.rows && r.rows.updated) || 0) + '</b> updated' + (r.documents != null ? ' across <b>' + r.documents + '</b> document(s)' : '') + '.</div>');
       Toast.success('Sync complete.');
     }).catch(function (e) {
       btn.disabled = false; btn.textContent = 'Sync now';
@@ -606,7 +606,7 @@ var OAT = (function () {
   function renderTargets() {
     setHTML('oatSetPanel',
       '<div class="card"><div class="card-body" style="padding-bottom:0">' +
-        '<p class="oat-note">Targets set the on-time threshold (in minutes) per doc type and stage. The leaderboard measures each approver against them. ' +
+        '<p class="oat-note">Targets set the on-time threshold (in minutes) per doc type and stage, stored as a JSON value in the config table. The leaderboard measures each approver against them. ' +
           'A target matches a step by its stage label (for example <b>First Approval</b>) or its step type (<b>APPROVAL</b>, <b>CREDIT_HOLD</b>, <b>LA</b>, <b>INVOICE</b>).</p>' +
         (can('order.manage') ? '<div class="form-row" style="grid-template-columns:1fr 1fr 1fr auto;align-items:end">' +
           '<div class="form-group"><label class="form-label">Doc type</label><select class="form-control" id="oatTgtType"><option>PO</option><option>SO</option></select></div>' +
@@ -619,7 +619,7 @@ var OAT = (function () {
         '</div>' : '') +
       '</div>' +
       '<div class="table-wrapper"><table class="data-table">' +
-        '<thead><tr><th>Doc type</th><th>Stage</th><th>Target</th><th>Active</th>' + (can('order.manage') ? '<th></th>' : '') + '</tr></thead>' +
+        '<thead><tr><th>Doc type</th><th>Stage</th><th>Target</th>' + (can('order.manage') ? '<th></th>' : '') + '</tr></thead>' +
         '<tbody id="oatTgtBody"></tbody></table></div></div>');
     var addBtn = document.getElementById('oatTgtAdd');
     if (addBtn) addBtn.onclick = function () {
@@ -628,27 +628,25 @@ var OAT = (function () {
       var mins = document.getElementById('oatTgtMins').value;
       if (!stage) { Toast.warning('Enter a stage.'); return; }
       if (mins === '' || isNaN(Number(mins))) { Toast.warning('Enter target minutes.'); return; }
-      API.call('oracleApprovals', 'upsertTarget', { doc_type: docType, stage: stage, target_minutes: Number(mins) }, { retries: 0 })
+      API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(mins) }, { retries: 0 })
         .then(function () { Toast.success('Target saved.'); document.getElementById('oatTgtStage').value = ''; document.getElementById('oatTgtMins').value = ''; fetchTargets(); })
         .catch(function (e) { Toast.error(e.message); });
     };
     fetchTargets();
   }
   function fetchTargets() {
-    var b = document.getElementById('oatTgtBody'); var cols = can('order.manage') ? 5 : 4;
+    var b = document.getElementById('oatTgtBody'); var cols = can('order.manage') ? 4 : 3;
     if (b) b.innerHTML = loadingRow(cols);
-    API.call('oracleApprovals', 'listTargets', {}).then(function (rows) {
-      rows = rows || [];
+    API.call('oracleApprovals', 'getTargets', {}).then(function (d) {
+      var rows = (d && d.list) || [];
       if (!rows.length) { setHTML('oatTgtBody', emptyRow(cols, 'No targets yet. Add one above to enable on-time rates.')); return; }
       setHTML('oatTgtBody', rows.map(function (t) {
-        var active = parseInt(t.is_active, 10) !== 0;
         var actions = can('order.manage') ? '<td class="actions">' +
           '<button class="btn btn-secondary btn-sm" onclick="OAT.editTarget(' + q(t.doc_type) + ',' + q(t.stage) + ',' + (Number(t.target_minutes) || 0) + ')">Edit</button>' +
-          (active && t.target_id ? '<button class="btn btn-danger btn-sm" onclick="OAT.deactivateTarget(' + q(t.target_id) + ')">Deactivate</button>' : '') +
+          '<button class="btn btn-danger btn-sm" onclick="OAT.removeTarget(' + q(t.doc_type) + ',' + q(t.stage) + ')">Remove</button>' +
           '</td>' : '';
-        return '<tr style="' + (active ? '' : 'opacity:.55') + '"><td>' + esc(t.doc_type) + '</td><td>' + esc(t.stage) + '</td>' +
-          '<td style="font-variant-numeric:tabular-nums">' + fmtMins(t.target_minutes) + ' <span style="color:var(--clr-text-light);font-size:11px">(' + (Number(t.target_minutes) || 0) + 'm)</span></td>' +
-          '<td>' + (active ? '<span class="badge badge-success">active</span>' : '<span class="badge badge-neutral">inactive</span>') + '</td>' + actions + '</tr>';
+        return '<tr><td>' + esc(t.doc_type) + '</td><td>' + esc(t.stage) + '</td>' +
+          '<td style="font-variant-numeric:tabular-nums">' + fmtMins(t.target_minutes) + ' <span style="color:var(--clr-text-light);font-size:11px">(' + (Number(t.target_minutes) || 0) + 'm)</span></td>' + actions + '</tr>';
       }).join(''));
     }).catch(function (e) { setHTML('oatTgtBody', errorRow(cols, e, fetchTargets)); });
   }
@@ -656,13 +654,13 @@ var OAT = (function () {
     var v = window.prompt('Target minutes for ' + docType + ' / ' + stage + ':', String(mins || ''));
     if (v === null) return;
     if (isNaN(Number(v))) { Toast.warning('Enter a number.'); return; }
-    API.call('oracleApprovals', 'upsertTarget', { doc_type: docType, stage: stage, target_minutes: Number(v) }, { retries: 0 })
+    API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, target_minutes: Number(v) }, { retries: 0 })
       .then(function () { Toast.success('Target updated.'); fetchTargets(); }).catch(function (e) { Toast.error(e.message); });
   }
-  function deactivateTarget(id) {
-    Modal.confirm('Deactivate this target? On-time rates will stop using it.', function () {
-      API.call('oracleApprovals', 'deactivateTarget', { target_id: id }, { retries: 0 })
-        .then(function () { Toast.success('Target deactivated.'); fetchTargets(); }).catch(function (e) { Toast.error(e.message); });
+  function removeTarget(docType, stage) {
+    Modal.confirm('Remove this target? On-time rates will stop using it.', function () {
+      API.call('oracleApprovals', 'saveTargets', { doc_type: docType, stage: stage, remove: true }, { retries: 0 })
+        .then(function () { Toast.success('Target removed.'); fetchTargets(); }).catch(function (e) { Toast.error(e.message); });
     });
   }
   function openTargets() { _tab = 'settings'; _settingsTab = 'targets'; var el = document.getElementById('pageContent'); render(el); }
@@ -674,7 +672,7 @@ var OAT = (function () {
 
   return {
     render: render, viewDoc: viewDoc, drillApprover: drillApprover,
-    editTarget: editTarget, deactivateTarget: deactivateTarget, _stopPoll: stopPoll
+    editTarget: editTarget, removeTarget: removeTarget, _stopPoll: stopPoll
   };
 })();
 window.OAT = OAT;
