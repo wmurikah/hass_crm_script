@@ -4,7 +4,13 @@
  * Approval inbox and action endpoints.
  * Reads approval_requests rows (created by workflow engine or by order/credit submit flows).
  *
- * approvals.{inbox,get,approve,reject,list}
+ * approvalRequests.{inbox,get,approve,reject,list}
+ *
+ * NOTE: registered under the `approvalRequests.*` service. The `approvals.*`
+ * namespace is owned by the PO/SO approval-timing analytics feature
+ * (40_svc_oracle_approvals.gs). The client route id for this inbox is unchanged
+ * (Router.register('approvals', ...) in partial_approvals.html), only the
+ * dispatcher service key moved, so behaviour and navigation are identical.
  *
  * Country scope enforced: GLOBAL roles see all; COUNTRY roles see their scope.
  * SoD: approver must not equal the created_by field of the approval_request.
@@ -182,9 +188,9 @@ function _approvalsReject_(ctx, params) {
 // ── Registration ──────────────────────────────────────────────────────────────
 
 (function _registerApprovals_() {
-  register({ service: 'approvals', action: 'inbox',   permission: 'order.approve_low', handler: _approvalsInbox_ });
-  register({ service: 'approvals', action: 'list',    permission: 'order.view',        handler: _approvalsList_ });
-  register({ service: 'approvals', action: 'get',     permission: 'order.view',        handler: _approvalsGet_ });
-  register({ service: 'approvals', action: 'approve', permission: 'order.approve_low', handler: _approvalsApprove_ });
-  register({ service: 'approvals', action: 'reject',  permission: 'order.approve_low', handler: _approvalsReject_ });
+  register({ service: 'approvalRequests', action: 'inbox',   permission: 'order.approve_low', handler: _approvalsInbox_ });
+  register({ service: 'approvalRequests', action: 'list',    permission: 'order.view',        handler: _approvalsList_ });
+  register({ service: 'approvalRequests', action: 'get',     permission: 'order.view',        handler: _approvalsGet_ });
+  register({ service: 'approvalRequests', action: 'approve', permission: 'order.approve_low', handler: _approvalsApprove_ });
+  register({ service: 'approvalRequests', action: 'reject',  permission: 'order.approve_low', handler: _approvalsReject_ });
 })();

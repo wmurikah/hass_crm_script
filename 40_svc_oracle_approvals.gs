@@ -1,5 +1,5 @@
 /**
- * 40_svc_oracle_approvals.gs  -  Hass CMS  (Oracle PO / SO / LA timing)
+ * 40_svc_oracle_approvals.gs  -  Hass CMS  (Approvals: Oracle PO / SO timing)
  *
  * App facing surface for the approval-timing feature. Every timing calculation
  * runs on the BACKEND (Turso queries or this handler), never in the browser.
@@ -15,13 +15,16 @@
  *     the per-step delta, NOT the cumulative variance, so later approvers are not
  *     penalised merely for being later in the chain.
  *   SO is deduped to document level first (a multi-line SO must not count its
- *     approval many times). Per document: approval time = finance_variance
- *     (attributed to approver); credit-hold time = credit_variance (attributed to
- *     hold_released_by); LA cycle time = loading_authority_variance (no officer);
- *     invoice time = invoice_variance.
+ *     approval many times). Per document the approval time = finance_variance,
+ *     attributed to the approver; a credit hold (when one occurred) is the
+ *     credit_variance, attributed to hold_released_by.
  *
- * Actions (service "oracleApprovals"):
- *   reads  (order.view):  charts, leaderboard, list, getDoc, stuck, getTargets
+ * Loading Authority: the extract carries loading_authority_* columns but they are
+ * NOT surfaced anywhere in this feature (no chart, tile, metric, or timeline row).
+ * The columns stay in the table untouched; nothing here reads them into the UI.
+ *
+ * Actions (service "approvals"):
+ *   reads  (order.view):  charts, leaderboard, list, getDoc, getTargets
  *   writes (order.manage): upload, addComment, saveTargets,
  *                          getIntegrationConfig, saveIntegrationConfig, syncNow
  *
@@ -30,12 +33,10 @@
  * scoping; GLOBAL roles see all, country roles see their countries (an unknown
  * affiliate stays group-level, matching the existing activity-feed convention).
  *
- * NOTE on service name: the spec lists the actions under `approvals.*`, but that
- * namespace is already owned by the live internal approval-inbox feature
- * (40_svc_approvals.gs / partial_approvals.html: approvals.inbox/list/get/...).
- * To avoid overriding and breaking that feature, this one registers under
- * `oracleApprovals.*` with the exact action names the spec names. The UI calls
- * the same namespace.
+ * NOTE on service name: this analytics feature owns the `approvals.*` namespace
+ * that the spec names. The older internal approval-inbox feature was moved to the
+ * `approvalRequests.*` service (40_svc_approvals.gs) to free this namespace; that
+ * rename preserves the inbox behaviour and its client route id is unchanged.
  */
 
 var T_PO_TABLE = 'po_approvals';
@@ -82,11 +83,7 @@ function _oaCols_() {
     credit_hold_name:    pk(T_SO_TABLE, ['credit_hold_name']),
     credit_release_date: pk(T_SO_TABLE, ['credit_hold_release_date']),
     hold_released_by:    pk(T_SO_TABLE, ['hold_released_by']),
-    credit_var:          pk(T_SO_TABLE, ['credit_variance']),
-    invoice_date:        pk(T_SO_TABLE, ['invoice_creation_date']),
-    invoice_var:         pk(T_SO_TABLE, ['invoice_variance']),
-    la_date:             pk(T_SO_TABLE, ['loading_authority_date']),
-    la_var:              pk(T_SO_TABLE, ['loading_authority_variance'])
+    credit_var:          pk(T_SO_TABLE, ['credit_variance'])
   };
   _oaColsCache_ = { po: po, so: so };
   return _oaColsCache_;
@@ -116,7 +113,6 @@ function _oaMs_(v) {
 }
 function _oaNum_(v) { if (v === null || v === undefined || v === '') return null; var n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? null : n; }
 function _oaMins_(a, b) { var x = _oaMs_(a), y = _oaMs_(b); if (isNaN(x) || isNaN(y)) return null; return Math.round((y - x) / 60000); }
-function _oaMonth_(v) { var ms = _oaMs_(v); if (isNaN(ms)) return null; var d = new Date(ms); var mo = d.getUTCMonth() + 1; return d.getUTCFullYear() + '-' + (mo < 10 ? '0' + mo : mo); }
 function _oaHas_(v) { return v !== null && v !== undefined && String(v).trim() !== ''; }
 function _isPoFinal_(s) { return /APPROVED|REJECT|CANCEL|COMPLETE|CLOSED/i.test(String(s || '')); }
 function _isSoApproved_(s) { return /APPROV|COMPLETE|CLOSED|RELEASED/i.test(String(s || '')); }
@@ -241,14 +237,16 @@ function _soDocsDeduped_(extraWhere, extraArgs, cap) {
     mx(S.create, 'create_dt') + ', ' + mx(S.approval_dt, 'approval_dt') + ', ' + mx(S.finance_var, 'finance_var') + ', ' +
     mx(S.credit_hold_date, 'credit_hold_date') + ', ' + mx(S.credit_hold_name, 'credit_hold_name') + ', ' +
     mx(S.hold_released_by, 'hold_released_by') + ', ' + mx(S.credit_release_date, 'credit_release_date') + ', ' +
-    mx(S.credit_var, 'credit_var') + ', ' + mx(S.la_date, 'la_date') + ', ' + mx(S.la_var, 'la_var') + ', ' +
-    mx(S.invoice_date, 'invoice_date') + ', ' + mx(S.invoice_var, 'invoice_var') + ', COUNT(*) AS lines ' +
+    mx(S.credit_var, 'credit_var') + ', COUNT(*) AS lines ' +
     'FROM ' + T_SO_TABLE + (extraWhere ? ' WHERE ' + extraWhere : '') +
     ' GROUP BY ' + S.doc + ' LIMIT ' + (cap || OA_SO_DOC_CAP);
   return TursoClient.select(sql, extraArgs || []);
 }
 
 // Build the typed steps for one deduped SO document row (aliases from above).
+// Only the approval-relevant steps are surfaced: the finance approval and, when
+// one occurred, the credit-hold release. Loading Authority and invoice cycle
+// stages are intentionally NOT surfaced anywhere in this feature.
 function _soSteps_(d) {
   var steps = [];
   var apprDone = _oaHas_(d.approval_dt) || _isSoApproved_(d.status);
@@ -272,28 +270,6 @@ function _soSteps_(d) {
       step_date: relDone ? d.credit_release_date : null, prior_date: d.credit_hold_date || null,
       duration_minutes: relDone ? (cv != null ? cv : _oaMins_(d.credit_hold_date, d.credit_release_date)) : null,
       source_variance: d.credit_var == null ? null : String(d.credit_var), is_pending: relDone ? 0 : 1
-    });
-  }
-  // 3. Loading Authority (cycle time, NO officer in the extract)
-  if (_oaHas_(d.la_date) || apprDone) {
-    var laDone = _oaHas_(d.la_date);
-    var lv = _oaNum_(d.la_var);
-    steps.push({
-      step_no: 3, step_type: 'LA', stage_label: 'Loading Authority', approver_name: null,
-      step_date: laDone ? d.la_date : null, prior_date: d.approval_dt || null,
-      duration_minutes: laDone ? (lv != null ? lv : _oaMins_(d.approval_dt, d.la_date)) : null,
-      source_variance: d.la_var == null ? null : String(d.la_var), is_pending: laDone ? 0 : 1
-    });
-  }
-  // 4. Invoice creation
-  if (_oaHas_(d.invoice_date) || apprDone) {
-    var invDone = _oaHas_(d.invoice_date);
-    var iv = _oaNum_(d.invoice_var);
-    steps.push({
-      step_no: 4, step_type: 'INVOICE', stage_label: 'Invoice', approver_name: null,
-      step_date: invDone ? d.invoice_date : null, prior_date: d.approval_dt || null,
-      duration_minutes: invDone ? (iv != null ? iv : _oaMins_(d.approval_dt, d.invoice_date)) : null,
-      source_variance: d.invoice_var == null ? null : String(d.invoice_var), is_pending: invDone ? 0 : 1
     });
   }
   return steps;
@@ -325,7 +301,8 @@ function _poRows_(extraWhere, extraArgs, limit) {
   return TursoClient.select(sql, extraArgs || []);
 }
 
-// Group a flat measurement list [{key, minutes}] into [{key, avg_minutes, count}] asc.
+// Group a flat measurement list [{key, minutes}] into [{key, avg_minutes, count}].
+// Sorted fastest (lowest average) first; callers re-sort for charts.
 function _oaAvgBy_(list) {
   var m = {}, order = [];
   list.forEach(function (x) {
@@ -361,8 +338,9 @@ function _oaUpload_(ctx, params) {
   return summary;
 }
 
-// ── charts (all aggregation on the backend) ──────────────────────────────────
-
+// ── charts (only PO and SO; all aggregation on the backend) ───────────────────
+// Both series are sorted SLOWEST first so the people holding documents up sit at
+// the top of the horizontal bar. Document counts ride along for context.
 function _oaCharts_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var P = _oaCols_().po;
@@ -386,29 +364,24 @@ function _oaCharts_(ctx, params) {
     .map(function (r) { return { approver: r.key, avg_minutes: r.avg_minutes, count: r.count }; });
   var poStages = Object.keys(stageSet).map(Number).filter(function (n) { return n >= 1 && n <= 7; }).sort(function (a, b) { return a - b; });
 
-  // SO: deduped to document level, scope-filtered.
+  // SO: deduped to document level, scope-filtered, finance approval per approver.
   var soDocs = _soDocsDeduped_('', [], OA_SO_DOC_CAP).filter(function (d) { return _soVisible_(d.affiliate, scope); });
-  var soMeas = [], laMonth = {}, laMonthOrder = [], laAff = {}, laAffOrder = [];
+  var soMeas = [];
   soDocs.forEach(function (d) {
     var fv = _oaNum_(d.finance_var);
     if (_oaHas_(d.approver) && fv != null) soMeas.push({ key: d.approver, minutes: fv });
-    var lv = _oaNum_(d.la_var);
-    if (_oaHas_(d.la_date) && lv != null) {
-      var mo = _oaMonth_(d.la_date);
-      if (mo) { if (!laMonth[mo]) { laMonth[mo] = { sum: 0, n: 0 }; laMonthOrder.push(mo); } laMonth[mo].sum += lv; laMonth[mo].n++; }
-      var lbl = d.affiliate || d.customer_name || 'Unknown';
-      if (!laAff[lbl]) { laAff[lbl] = { sum: 0, n: 0 }; laAffOrder.push(lbl); } laAff[lbl].sum += lv; laAff[lbl].n++;
-    }
   });
   var soByApprover = _oaAvgBy_(soMeas).map(function (r) { return { approver: r.key, avg_minutes: r.avg_minutes, count: r.count }; });
-  var laOverTime = laMonthOrder.sort().map(function (mo) { return { month: mo, avg_minutes: Math.round(laMonth[mo].sum / laMonth[mo].n), count: laMonth[mo].n }; });
-  var laByAffiliate = laAffOrder.map(function (l) { return { label: l, avg_minutes: Math.round(laAff[l].sum / laAff[l].n), count: laAff[l].n }; })
-    .sort(function (a, b) { return a.avg_minutes - b.avg_minutes; });
 
-  return { poByApprover: poByApprover, soByApprover: soByApprover, laOverTime: laOverTime, laByAffiliate: laByAffiliate, poStages: poStages };
+  // Slowest at the top for the chart (leaderboards keep fastest-first).
+  function slowestFirst(a, b) { return b.avg_minutes - a.avg_minutes; }
+  poByApprover.sort(slowestFirst);
+  soByApprover.sort(slowestFirst);
+
+  return { poByApprover: poByApprover, soByApprover: soByApprover, poStages: poStages };
 }
 
-// ── leaderboard (PO per-step + SO document approval, ranked) ──────────────────
+// ── leaderboard (separate PO and SO rankings, fastest + most on-time first) ───
 
 function _targetFor_(targets, docType, stageLabel, stepType) {
   var t = targets && targets[docType];
@@ -418,32 +391,10 @@ function _targetFor_(targets, docType, stageLabel, stepType) {
   return null;
 }
 
-function _oaLeaderboard_(ctx, params) {
-  Rbac.requirePermission(ctx.session, 'order.view');
-  var cols = _oaCols_(), P = cols.po;
-  var scope = _oaScope_(ctx.session);
-  var targets = _oaTargetsObj_();
-
-  var meas = [];   // { approver, minutes, target }
-  if (P.pk) {
-    _poRows_('', [], OA_MAX_SCAN).forEach(function (row) {
-      _poSteps_(row, P).forEach(function (s) {
-        if (s.step_type === 'APPROVAL' && !s.is_pending && s.approver_name && s.duration_minutes != null) {
-          meas.push({ approver: s.approver_name, minutes: s.duration_minutes, target: _targetFor_(targets, 'PO', s.stage_label, 'APPROVAL') });
-        }
-      });
-    });
-  }
-  var soDocs = _soDocsDeduped_('', [], OA_SO_DOC_CAP).filter(function (d) { return _soVisible_(d.affiliate, scope); });
-  var laSum = 0, laN = 0;
-  soDocs.forEach(function (d) {
-    var fv = _oaNum_(d.finance_var);
-    if (_oaHas_(d.approver) && fv != null) meas.push({ approver: d.approver, minutes: fv, target: _targetFor_(targets, 'SO', 'Approval', 'APPROVAL') });
-    var lv = _oaNum_(d.la_var);
-    if (_oaHas_(d.la_date) && lv != null) { laSum += lv; laN++; }
-  });
-
-  // Group by approver.
+// Group per-approver measurements [{approver, minutes, target}] and rank them.
+// Lower average and higher on-time rate rank higher; untargeted rows fall back to
+// average time alone and report on_time_rate = null (not configured).
+function _rankApprovers_(meas) {
   var g = {}, order = [];
   meas.forEach(function (x) {
     var k = x.approver; if (!k) return;
@@ -459,7 +410,6 @@ function _oaLeaderboard_(ctx, params) {
       on_time_rate: r.withT ? Math.round(r.on * 100 / r.withT) : null
     };
   });
-  // Lower average and higher on-time rate rank higher; untargeted rows fall back to avg asc.
   rows.sort(function (a, b) {
     var ar = a.on_time_rate, br = b.on_time_rate;
     if (ar == null && br == null) return a.avg_minutes - b.avg_minutes;
@@ -469,11 +419,43 @@ function _oaLeaderboard_(ctx, params) {
     return a.avg_minutes - b.avg_minutes;
   });
   rows.forEach(function (r, i) { r.rank = i + 1; });
+  return rows;
+}
+
+function _oaLeaderboard_(ctx, params) {
+  Rbac.requirePermission(ctx.session, 'order.view');
+  var P = _oaCols_().po;
+  var scope = _oaScope_(ctx.session);
+  var targets = _oaTargetsObj_();
+
+  var poMeas = [];
+  if (P.pk) {
+    _poRows_('', [], OA_MAX_SCAN).forEach(function (row) {
+      _poSteps_(row, P).forEach(function (s) {
+        if (s.step_type === 'APPROVAL' && !s.is_pending && s.approver_name && s.duration_minutes != null) {
+          poMeas.push({ approver: s.approver_name, minutes: s.duration_minutes, target: _targetFor_(targets, 'PO', s.stage_label, 'APPROVAL') });
+        }
+      });
+    });
+  }
+  var soMeas = [];
+  _soDocsDeduped_('', [], OA_SO_DOC_CAP).forEach(function (d) {
+    if (!_soVisible_(d.affiliate, scope)) return;
+    var fv = _oaNum_(d.finance_var);
+    if (_oaHas_(d.approver) && fv != null) {
+      soMeas.push({ approver: d.approver, minutes: fv, target: _targetFor_(targets, 'SO', 'Approval', 'APPROVAL') });
+    }
+  });
 
   var targetsCount = 0;
   ['PO', 'SO'].forEach(function (dt) { if (targets[dt]) targetsCount += Object.keys(targets[dt]).length; });
 
-  return { rows: rows, la: { avg_minutes: laN ? Math.round(laSum / laN) : null, count: laN }, targetsCount: targetsCount };
+  return {
+    po: _rankApprovers_(poMeas),
+    so: _rankApprovers_(soMeas),
+    targetsConfigured: targetsCount > 0,
+    targetsCount: targetsCount
+  };
 }
 
 // ── list (drill-down; server-side paginated) ─────────────────────────────────
@@ -487,7 +469,6 @@ function _oaStepMatches_(s, params) {
     else if (String(s.stage_label) !== String(params.stage)) return false;
   }
   if (params.pending !== undefined && params.pending !== '') { if (s.is_pending !== (parseInt(params.pending, 10) ? 1 : 0)) return false; }
-  if (params.month) { if (s.is_pending) return false; if (_oaMonth_(s.step_date) !== String(params.month)) return false; }
   return true;
 }
 
@@ -499,7 +480,7 @@ function _oaList_(ctx, params) {
   var offset = parseInt(params.offset, 10) || 0;
   var docType = String(params.doc_type || '').toUpperCase();
 
-  var stepFilters = ['approver_name', 'stage', 'step_type', 'pending', 'month'].some(function (k) {
+  var stepFilters = ['approver_name', 'stage', 'step_type', 'pending'].some(function (k) {
     return params[k] !== undefined && params[k] !== null && params[k] !== '';
   });
 
@@ -521,7 +502,7 @@ function _oaList_(ctx, params) {
       });
     }
     // SO steps (skip when explicitly PO). _oaStepMatches_ applies the approver /
-    // step_type / stage / month / pending filters per derived step.
+    // step_type / stage / pending filters per derived step.
     if (docType !== 'PO') {
       _soDocsDeduped_('', [], OA_SO_DOC_CAP).forEach(function (d) {
         if (!_soVisible_(d.affiliate, scope)) return;
@@ -579,7 +560,7 @@ function _oaHeaderResult_(h) {
   };
 }
 
-// ── getDoc (header + steps + comments + stuck) ───────────────────────────────
+// ── getDoc (header + steps + comments + in-flight pending) ────────────────────
 
 function _oaGetDoc_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
@@ -629,52 +610,6 @@ function _oaFirstPending_(docType, header, steps) {
   };
 }
 
-// ── stuck (all in-flight documents) ──────────────────────────────────────────
-
-function _oaStuck_(ctx, params) {
-  Rbac.requirePermission(ctx.session, 'order.view');
-  var cols = _oaCols_(), P = cols.po;
-  var scope = _oaScope_(ctx.session);
-  var docType = String(params.doc_type || '').toUpperCase();
-  var out = [];
-
-  // PO: scan non-final rows, surface the first pending step.
-  if (docType !== 'SO' && P.pk) {
-    var where = '', args = [];
-    if (P.status) {
-      where = "(UPPER(COALESCE(" + P.status + ",'')) NOT LIKE 'APPROVED%' AND UPPER(COALESCE(" + P.status + ",'')) NOT LIKE '%REJECT%' " +
-              "AND UPPER(COALESCE(" + P.status + ",'')) NOT LIKE '%CANCEL%' AND UPPER(COALESCE(" + P.status + ",'')) NOT LIKE '%COMPLETE%' " +
-              "AND UPPER(COALESCE(" + P.status + ",'')) NOT LIKE '%CLOSED%')";
-    }
-    _poRows_(where, args, OA_MAX_SCAN).forEach(function (row) {
-      var header = _poHeader_(row, P);
-      var st = _oaFirstPending_('PO', header, _poSteps_(row, P));
-      if (st) out.push({
-        doc_type: 'PO', doc_number: header.doc_number, customer_name: '', affiliate: '', created_by: header.created_by || '',
-        step_type: st.step_type, stage_label: st.stage_label, step_no: st.step_no,
-        responsible: st.responsible || '', waiting_minutes: st.waiting_minutes
-      });
-    });
-  }
-  // SO: deduped docs, first pending among approval / credit-hold / LA.
-  if (docType !== 'PO') {
-    _soDocsDeduped_('', [], OA_SO_DOC_CAP).forEach(function (d) {
-      if (!_soVisible_(d.affiliate, scope)) return;
-      var header = _soHeader_(d);
-      var st = _oaFirstPending_('SO', header, _soSteps_(d));
-      if (st) out.push({
-        doc_type: 'SO', doc_number: d.document_number, customer_name: d.customer_name || '', affiliate: d.affiliate || '',
-        created_by: d.user_name || '', step_type: st.step_type, stage_label: st.stage_label, step_no: st.step_no,
-        responsible: st.responsible || '', waiting_minutes: st.waiting_minutes
-      });
-    });
-  }
-  out.sort(function (a, b) { return (b.waiting_minutes || 0) - (a.waiting_minutes || 0); });
-  var limit = Math.min(parseInt(params.limit, 10) || 50, 200);
-  var offset = parseInt(params.offset, 10) || 0;
-  return out.slice(offset, offset + limit);
-}
-
 // ── comments (po_so_comments; created lazily with the migration helper) ──────
 
 var _oaCommentsReady_ = false;
@@ -721,7 +656,7 @@ function _oaAddComment_(ctx, params) {
   var text = String(params.comment_text || params.comment || '').trim();
   if (!text) throw new Errors.Validation('Enter a comment.');
 
-  var doc = _oaLoadDoc_(ctx.session, params);   // scope + stuck, without the order.view gate
+  var doc = _oaLoadDoc_(ctx.session, params);   // scope + pending, without the order.view gate
   var header = doc.header;
   var docType = header.doc_type, docNumber = header.doc_number;
 
@@ -897,16 +832,15 @@ function _oaSyncNow_(ctx, params) {
 // ── Registration ──────────────────────────────────────────────────────────────
 
 (function _registerOracleApprovals_() {
-  register({ service: 'oracleApprovals', action: 'upload',                permission: 'order.manage', handler: _oaUpload_ });
-  register({ service: 'oracleApprovals', action: 'charts',                permission: 'order.view',   handler: _oaCharts_ });
-  register({ service: 'oracleApprovals', action: 'leaderboard',           permission: 'order.view',   handler: _oaLeaderboard_ });
-  register({ service: 'oracleApprovals', action: 'list',                  permission: 'order.view',   handler: _oaList_ });
-  register({ service: 'oracleApprovals', action: 'getDoc',                permission: 'order.view',   handler: _oaGetDoc_ });
-  register({ service: 'oracleApprovals', action: 'stuck',                 permission: 'order.view',   handler: _oaStuck_ });
-  register({ service: 'oracleApprovals', action: 'addComment',            permission: 'order.manage', handler: _oaAddComment_ });
-  register({ service: 'oracleApprovals', action: 'getTargets',            permission: 'order.view',   handler: _oaGetTargets_ });
-  register({ service: 'oracleApprovals', action: 'saveTargets',           permission: 'order.manage', handler: _oaSaveTargets_ });
-  register({ service: 'oracleApprovals', action: 'getIntegrationConfig',  permission: 'order.manage', handler: _oaGetIntegrationConfig_ });
-  register({ service: 'oracleApprovals', action: 'saveIntegrationConfig', permission: 'order.manage', handler: _oaSaveIntegrationConfig_ });
-  register({ service: 'oracleApprovals', action: 'syncNow',               permission: 'order.manage', handler: _oaSyncNow_ });
+  register({ service: 'approvals', action: 'upload',                permission: 'order.manage', handler: _oaUpload_ });
+  register({ service: 'approvals', action: 'charts',                permission: 'order.view',   handler: _oaCharts_ });
+  register({ service: 'approvals', action: 'leaderboard',           permission: 'order.view',   handler: _oaLeaderboard_ });
+  register({ service: 'approvals', action: 'list',                  permission: 'order.view',   handler: _oaList_ });
+  register({ service: 'approvals', action: 'getDoc',                permission: 'order.view',   handler: _oaGetDoc_ });
+  register({ service: 'approvals', action: 'addComment',            permission: 'order.manage', handler: _oaAddComment_ });
+  register({ service: 'approvals', action: 'getTargets',            permission: 'order.view',   handler: _oaGetTargets_ });
+  register({ service: 'approvals', action: 'saveTargets',           permission: 'order.manage', handler: _oaSaveTargets_ });
+  register({ service: 'approvals', action: 'getIntegrationConfig',  permission: 'order.manage', handler: _oaGetIntegrationConfig_ });
+  register({ service: 'approvals', action: 'saveIntegrationConfig', permission: 'order.manage', handler: _oaSaveIntegrationConfig_ });
+  register({ service: 'approvals', action: 'syncNow',               permission: 'order.manage', handler: _oaSyncNow_ });
 })();

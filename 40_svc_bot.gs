@@ -117,11 +117,11 @@ function _botToolCatalog_() {
       description: 'Get one ticket by id with its comments and history. Use to summarise a ticket thread.',
       params: { ticketId: { type: 'string', description: 'The ticket_id.' } } },
 
-    // ── Approvals ──────────────────────────────────────────────────────────
-    { service: 'approvals', action: 'list', is_write: 0, permission: 'order.view',
+    // ── Approval requests (inbox / workflow) ─────────────────────────────────
+    { service: 'approvalRequests', action: 'list', is_write: 0, permission: 'order.view',
       description: 'List approval requests, optionally by status.',
       params: { status: STATUS, limit: LIMIT } },
-    { service: 'approvals', action: 'inbox', is_write: 0, permission: 'order.approve_low',
+    { service: 'approvalRequests', action: 'inbox', is_write: 0, permission: 'order.approve_low',
       description: 'Approval requests awaiting the signed-in user (their inbox).',
       params: { limit: LIMIT } },
 
@@ -710,7 +710,7 @@ function _botExtractDirectives_(text) {
 
 var _BOT_SECTION_BY_SERVICE_ = {
   invoices: 'invoices', orders: 'orders', tickets: 'tickets', customers: 'customers',
-  payments: 'payments', approvals: 'approvals', documents: 'documents',
+  payments: 'payments', approvalRequests: 'approvals', documents: 'documents',
   knowledge: 'knowledge', users: 'users', catalog: 'catalog',
 };
 

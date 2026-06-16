@@ -13,6 +13,11 @@
  */
 
 function seedAll() {
+  // Sample PO/SO approval extracts so the dashboard Approvals section renders in a
+  // fresh dev DB. Idempotent and self-guarding: it only loads when BOTH approval
+  // tables are empty, so it never touches an already-populated (live) database.
+  try { seedOracleApprovalsSample(); } catch (e) { Logger.log('[Seed] approvals sample skipped: ' + e.message); }
+
   // ── 1. Idempotency check ───────────────────────────────────────────────────
   var existing = TursoClient.select(
     "SELECT user_id FROM user_roles WHERE role_code = 'SUPER_ADMIN' LIMIT 1"
@@ -69,6 +74,64 @@ function seedAll() {
   Logger.log('║ Password: ' + password);
   Logger.log('╚════════════════════════════════════════╝');
   return { userId: userId };
+}
+
+/**
+ * seedOracleApprovalsSample - load a few sample PO and SO extracts so the
+ * dashboard Approvals (PO / SO) section has data to render in development.
+ *
+ * Idempotent and SAFE on a populated database: it loads ONLY when both
+ * po_approvals and so_approvals are empty, and it goes through the normal loader
+ * (OracleApprovalsLoader.loadFromRows), so no schema is created or altered. The
+ * PO *_approvals_variance values are CUMULATIVE minutes from submission, exactly
+ * like the real extract, so the per-step deltas are derived at read time.
+ */
+function seedOracleApprovalsSample() {
+  if (typeof OracleApprovalsLoader === 'undefined') { Logger.log('[Seed] loader unavailable'); return; }
+  function count(t) { try { var r = TursoClient.select('SELECT COUNT(*) AS n FROM ' + t); return parseInt(r[0].n, 10) || 0; } catch (e) { return -1; } }
+  var poN = count('po_approvals'), soN = count('so_approvals');
+  if (poN === -1 || soN === -1) { Logger.log('[Seed] approval tables missing - skipping sample'); return; }
+  if (poN > 0 || soN > 0) { Logger.log('[Seed] approval tables already populated (' + poN + ' PO / ' + soN + ' SO) - skipping sample'); return; }
+
+  // PO extract: cumulative variances; one in-flight (pending second approver).
+  var PO = [
+    ['purchase Number', 'Req Description', 'NATURE', 'ORIGINAL_CREATION_DATE', 'SUBMISSION_FOR_APPROVAL_DATE',
+     'PURCHASE_ORDER_CREATED_BY', 'AUTHORIZATION_STATUS',
+     'FIRST_APPROVER', 'FIRST_APPROVAL_DATE', 'FIRST_APPROVALS_VARIANCE',
+     'SECOND_APPROVER', 'SECOND_APPROVAL_DATE', 'SECOND_APPROVALS_VARIANCE',
+     'THIRD_APPROVER', 'THIRD_APPROVAL_DATE', 'THIRD_APPROVALS_VARIANCE'],
+    ['PO-1001', 'Diesel restock', 'OPEX', '2024-03-01T07:00:00Z', '2024-03-01T08:00:00Z', 'jane creator', 'APPROVED',
+     'Alice Wanjiku', '2024-03-01T08:45:00Z', '45', 'Bob Otieno', '2024-03-01T11:00:00Z', '180', 'Carol Mensah', '2024-03-01T12:00:00Z', '240'],
+    ['PO-1002', 'Lubricants', 'OPEX', '2024-03-02T07:00:00Z', '2024-03-02T08:00:00Z', 'jane creator', 'APPROVED',
+     'Bob Otieno', '2024-03-02T13:00:00Z', '300', 'Alice Wanjiku', '2024-03-02T14:00:00Z', '360', '', '', ''],
+    ['PO-1003', 'Pumps', 'CAPEX', '2024-03-03T07:00:00Z', '2024-03-03T08:00:00Z', 'sam creator', 'APPROVED',
+     'Carol Mensah', '2024-03-03T18:00:00Z', '600', 'David Kamau', '2024-03-03T20:00:00Z', '720', '', '', ''],
+    ['PO-1004', 'Safety gear', 'OPEX', '2024-03-04T07:00:00Z', '2024-03-04T08:00:00Z', 'sam creator', 'IN PROCESS',
+     'Alice Wanjiku', '2024-03-04T09:30:00Z', '90', 'Bob Otieno', '', '', '', '', ''],
+    ['PO-1005', 'Tanker hire', 'CAPEX', '2024-03-05T07:00:00Z', '2024-03-05T08:00:00Z', 'jane creator', 'APPROVED',
+     'David Kamau', '2024-03-06T09:00:00Z', '1500', 'Alice Wanjiku', '2024-03-06T10:00:00Z', '1560', '', '', '']
+  ];
+
+  // SO extract: line level (multi-line docs dedupe to one), finance variance per
+  // document; one in-flight (approver assigned, no approval date); one credit hold.
+  var SO = [
+    ['DOCUMENT_NUMBER', 'LINE_NUMBER', 'AFFILIATE', 'CUSTOMER_CODE', 'CUSTOMER_NAME', 'USER_NAME', 'CREATE_DATE_TIME', 'APPROVAL_STATUS',
+     'APPROVER', 'APPROVAL_DATE_TIME', 'FINANCE_VARIANCE',
+     'HOLD_RELEASED_BY', 'CREDIT_HOLD_DATE', 'CREDIT_HOLD_RELEASE_DATE', 'CREDIT_VARIANCE',
+     'LOADING_AUTHORITY_DATE', 'LOADING_AUTHORITY_VARIANCE'],
+    ['SO-2001', '1', 'Hass Petroleum Kenya', 'C100', 'Acme Ltd', 'tom sales', '2024-03-01T08:00:00Z', 'APPROVED', 'Faith Njeri', '2024-03-01T10:00:00Z', '120', '', '', '', '', '2024-03-01T12:00:00Z', '120'],
+    ['SO-2001', '2', 'Hass Petroleum Kenya', 'C100', 'Acme Ltd', 'tom sales', '2024-03-01T08:00:00Z', 'APPROVED', 'Faith Njeri', '2024-03-01T10:00:00Z', '120', '', '', '', '', '2024-03-01T12:00:00Z', '120'],
+    ['SO-2002', '1', 'Hass Petroleum Uganda', 'C101', 'Best Co', 'tom sales', '2024-03-02T08:00:00Z', 'APPROVED', 'Grace Akello', '2024-03-02T16:00:00Z', '480', '', '', '', '', '', ''],
+    ['SO-2003', '1', 'Hass Petroleum Kenya', 'C102', 'Crown Ltd', 'mary sales', '2024-03-03T08:00:00Z', 'APPROVED', 'Faith Njeri', '2024-03-03T09:30:00Z', '90', '', '', '', '', '', ''],
+    ['SO-2003', '2', 'Hass Petroleum Kenya', 'C102', 'Crown Ltd', 'mary sales', '2024-03-03T08:00:00Z', 'APPROVED', 'Faith Njeri', '2024-03-03T09:30:00Z', '90', '', '', '', '', '', ''],
+    ['SO-2004', '1', 'Hass Petroleum Tanzania', 'C103', 'Delta Co', 'mary sales', '2024-03-04T08:00:00Z', 'APPROVED', 'Henry Mballa', '2024-03-05T06:00:00Z', '1320', 'Henry Mballa', '2024-03-04T09:00:00Z', '2024-03-04T12:20:00Z', '200', '', ''],
+    ['SO-2005', '1', 'Hass Petroleum Kenya', 'C104', 'Echo Ltd', 'tom sales', '2024-03-06T08:00:00Z', 'PENDING', 'Grace Akello', '', '', '', '', '', '', '', '']
+  ];
+
+  var rp = OracleApprovalsLoader.loadFromRows(PO, { source: 'UPLOAD', batchId: 'SEED-PO' });
+  var rs = OracleApprovalsLoader.loadFromRows(SO, { source: 'UPLOAD', batchId: 'SEED-SO' });
+  Logger.log('[Seed] approvals sample loaded: PO ' + JSON.stringify(rp.rows) + ', SO ' + JSON.stringify(rs.rows));
+  return { po: rp, so: rs };
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -155,7 +218,7 @@ function reproAllPages() {
 
   var calls = [
     { service: 'invoices',  action: 'list',           params: {} },
-    { service: 'approvals', action: 'list',           params: {} },
+    { service: 'approvalRequests', action: 'list',    params: {} },
     { service: 'pricing',   action: 'listLists',      params: {} },
     { service: 'catalog',   action: 'listPriceLists', params: {} },
     { service: 'rbac',      action: 'listRoles',      params: {} },

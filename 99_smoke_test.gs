@@ -997,7 +997,8 @@ function smokeOracleApprovals() {
      'Bob Approver', '', '']   // second approver present, NO date => pending
   ];
   // SO extract is line level: two lines for the same document_number must collapse
-  // to one document. finance_variance 120 (create -> approval), LA variance 90.
+  // to one document. finance_variance 120 (create -> approval). The loading-authority
+  // columns are loaded but never surfaced, so the analytics ignore them.
   var SO = [
     ['DOCUMENT_NUMBER', 'LINE_NUMBER', 'AFFILIATE', 'CUSTOMER_CODE', 'CUSTOMER_NAME', 'USER_NAME', 'CREATE_DATE_TIME', 'APPROVAL_STATUS',
      'APPROVER', 'APPROVAL_DATE_TIME', 'FINANCE_VARIANCE',
@@ -1013,7 +1014,7 @@ function smokeOracleApprovals() {
   // JSON value in the config table, not a table the test can simply DELETE from).
   var savedTargets = {};
   try {
-    var gt0 = processRequest({ service: 'oracleApprovals', action: 'getTargets', sessionToken: saToken, params: {} });
+    var gt0 = processRequest({ service: 'approvals', action: 'getTargets', sessionToken: saToken, params: {} });
     if (gt0.ok) savedTargets = gt0.data.targets || {};
   } catch (_) {}
 
@@ -1023,7 +1024,7 @@ function smokeOracleApprovals() {
     ['SMOKE-PO-1', 'SMOKE-SO-1'].forEach(function (dn) {
       try { TursoClient.write('DELETE FROM po_so_comments WHERE doc_number = ?', [dn]); } catch (_) {}
     });
-    try { processRequest({ service: 'oracleApprovals', action: 'saveTargets', sessionToken: saToken, params: { targets: savedTargets } }); } catch (_) {}
+    try { processRequest({ service: 'approvals', action: 'saveTargets', sessionToken: saToken, params: { targets: savedTargets } }); } catch (_) {}
   }
   cleanup();  // start clean
 
@@ -1060,10 +1061,11 @@ function smokeOracleApprovals() {
     if (parseInt(sc[0].n, 10) !== 2) throw new Error('Expected 2 so_approvals rows, got ' + sc[0].n);
   });
 
-  // ── 4. charts: PO per-step delta + SO document-deduped averages ─────────────
+  // ── 4. charts: PO per-step delta + SO document-deduped averages (no LA) ──────
   check('4. charts returns PO per-step (60) and SO document (120) averages', function () {
-    var res = processRequest({ service: 'oracleApprovals', action: 'charts', sessionToken: saToken, params: {} });
+    var res = processRequest({ service: 'approvals', action: 'charts', sessionToken: saToken, params: {} });
     if (!res.ok) throw new Error('charts failed: ' + JSON.stringify(res.error));
+    if (res.data.laOverTime !== undefined || res.data.laByAffiliate !== undefined) throw new Error('charts must not surface LA');
     var alice = (res.data.poByApprover || []).filter(function (x) { return x.approver === 'Alice Approver'; });
     if (!alice.length) throw new Error('Alice not in poByApprover');
     if (alice[0].avg_minutes !== 60) throw new Error('Expected Alice per-step avg 60, got ' + alice[0].avg_minutes);
@@ -1073,41 +1075,45 @@ function smokeOracleApprovals() {
     if (carol[0].count !== 1) throw new Error('SO not deduped to one document, count=' + carol[0].count);
   });
 
-  // ── 5. saveTargets (config JSON) then leaderboard on-time rate ──────────────
-  check('5. saveTargets then leaderboard computes on-time rate', function () {
-    var t = processRequest({ service: 'oracleApprovals', action: 'saveTargets', sessionToken: saToken,
+  // ── 5. saveTargets (config JSON) then leaderboard on-time rate (PO list) ─────
+  check('5. saveTargets then PO leaderboard computes on-time rate', function () {
+    var t = processRequest({ service: 'approvals', action: 'saveTargets', sessionToken: saToken,
       params: { doc_type: 'PO', stage: 'First Approval', target_minutes: 120 } });
     if (!t.ok) throw new Error('saveTargets failed: ' + JSON.stringify(t.error));
-    var lb = processRequest({ service: 'oracleApprovals', action: 'leaderboard', sessionToken: saToken, params: {} });
+    var lb = processRequest({ service: 'approvals', action: 'leaderboard', sessionToken: saToken, params: {} });
     if (!lb.ok) throw new Error('leaderboard failed: ' + JSON.stringify(lb.error));
-    var alice = (lb.data.rows || []).filter(function (x) { return x.approver === 'Alice Approver'; });
-    if (!alice.length) throw new Error('Alice not on leaderboard');
+    if (lb.data.la !== undefined) throw new Error('leaderboard must not surface an LA tile');
+    var alice = (lb.data.po || []).filter(function (x) { return x.approver === 'Alice Approver'; });
+    if (!alice.length) throw new Error('Alice not on the PO leaderboard');
     if (alice[0].on_time_rate !== 100) throw new Error('Expected Alice on-time 100, got ' + alice[0].on_time_rate);
-    if (lb.data.la == null) throw new Error('Expected an LA cycle-time tile on the leaderboard');
   });
 
-  // ── 6. stuck detection (PO with a pending second approver) ──────────────────
-  check('6. stuck returns the in-flight PO with its responsible approver', function () {
-    var res = processRequest({ service: 'oracleApprovals', action: 'stuck', sessionToken: saToken, params: { limit: 200 } });
-    if (!res.ok) throw new Error('stuck failed: ' + JSON.stringify(res.error));
-    var row = (res.data || []).filter(function (x) { return x.doc_number === 'SMOKE-PO-1'; });
-    if (!row.length) throw new Error('SMOKE-PO-1 not flagged as stuck');
-    if (String(row[0].responsible).indexOf('Bob') === -1) throw new Error('Expected Bob responsible, got ' + row[0].responsible);
+  // ── 6. leaderboard returns SEPARATE PO and SO rankings ──────────────────────
+  check('6. leaderboard splits PO and SO approvers into two rankings', function () {
+    var lb = processRequest({ service: 'approvals', action: 'leaderboard', sessionToken: saToken, params: {} });
+    if (!lb.ok) throw new Error('leaderboard failed: ' + JSON.stringify(lb.error));
+    if (!Array.isArray(lb.data.po) || !Array.isArray(lb.data.so)) throw new Error('Expected separate po and so arrays');
+    var aliceInPo = (lb.data.po || []).some(function (x) { return x.approver === 'Alice Approver'; });
+    var carolInSo = (lb.data.so || []).some(function (x) { return x.approver === 'Carol Approver'; });
+    if (!aliceInPo) throw new Error('Alice (PO approver) missing from po ranking');
+    if (!carolInSo) throw new Error('Carol (SO approver) missing from so ranking');
   });
 
-  // ── 7. getDoc returns derived steps; addComment records to po_so_comments ───
-  check('7. getDoc returns steps and addComment records a comment', function () {
-    var g = processRequest({ service: 'oracleApprovals', action: 'getDoc', sessionToken: saToken,
+  // ── 7. getDoc returns derived steps + in-flight; addComment records a row ────
+  check('7. getDoc returns steps/in-flight and addComment records a comment', function () {
+    var g = processRequest({ service: 'approvals', action: 'getDoc', sessionToken: saToken,
       params: { doc_type: 'PO', doc_number: 'SMOKE-PO-1' } });
     if (!g.ok) throw new Error('getDoc failed: ' + JSON.stringify(g.error));
     if (!g.data.steps || g.data.steps.length !== 2) throw new Error('Expected 2 derived steps from getDoc, got ' + (g.data.steps || []).length);
-    if (!g.data.stuck) throw new Error('Expected stuck info on getDoc');
-    var so = processRequest({ service: 'oracleApprovals', action: 'getDoc', sessionToken: saToken,
+    if (!g.data.stuck) throw new Error('Expected in-flight (stuck) info on getDoc');
+    if (String(g.data.stuck.responsible).indexOf('Bob') === -1) throw new Error('Expected Bob responsible for the pending step, got ' + g.data.stuck.responsible);
+    var so = processRequest({ service: 'approvals', action: 'getDoc', sessionToken: saToken,
       params: { doc_type: 'SO', doc_number: 'SMOKE-SO-1' } });
     if (!so.ok) throw new Error('SO getDoc failed: ' + JSON.stringify(so.error));
-    var la = (so.data.steps || []).filter(function (s) { return s.step_type === 'LA'; });
-    if (!la.length || Number(la[0].duration_minutes) !== 90) throw new Error('Expected SO LA cycle 90, got ' + (la[0] && la[0].duration_minutes));
-    var c = processRequest({ service: 'oracleApprovals', action: 'addComment', sessionToken: saToken,
+    if ((so.data.steps || []).some(function (s) { return s.step_type === 'LA'; })) throw new Error('SO timeline must not surface an LA step');
+    var appr = (so.data.steps || []).filter(function (s) { return s.step_type === 'APPROVAL'; });
+    if (!appr.length || Number(appr[0].duration_minutes) !== 120) throw new Error('Expected SO approval 120, got ' + (appr[0] && appr[0].duration_minutes));
+    var c = processRequest({ service: 'approvals', action: 'addComment', sessionToken: saToken,
       params: { doc_type: 'PO', doc_number: 'SMOKE-PO-1', comment_text: 'Please action this approval.', recipient_email: 'test@example.com' } });
     if (!c.ok) throw new Error('addComment failed: ' + JSON.stringify(c.error));
     var rows = TursoClient.select("SELECT COUNT(*) AS n FROM po_so_comments WHERE doc_number='SMOKE-PO-1'");
@@ -1116,7 +1122,7 @@ function smokeOracleApprovals() {
 
   // ── 8. list drill-down by approver ──────────────────────────────────────────
   check('8. list returns documents for an approver filter', function () {
-    var res = processRequest({ service: 'oracleApprovals', action: 'list', sessionToken: saToken,
+    var res = processRequest({ service: 'approvals', action: 'list', sessionToken: saToken,
       params: { step_type: 'APPROVAL', approver_name: 'Alice Approver' } });
     if (!res.ok) throw new Error('list failed: ' + JSON.stringify(res.error));
     var found = (res.data || []).some(function (r) { return r.doc_number === 'SMOKE-PO-1'; });

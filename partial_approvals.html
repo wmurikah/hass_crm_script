@@ -16,7 +16,7 @@ Router.register('approvals', function (el) {
     var action = mode === 'inbox' ? 'inbox' : 'list';
     var params = { limit: 50 };
     if (status) params.status = status;
-    API.call('approvals', action, params).then(function (rows) {
+    API.call('approvalRequests', action, params).then(function (rows) {
       if (!rows.length) { setHTML('appBody', emptyRow(7, 'No approval requests.')); return; }
       setHTML('appBody', rows.map(function (r) {
         var rid = esc(r.request_id);
@@ -40,7 +40,7 @@ Router.register('approvals', function (el) {
 
 function viewApproval(requestId) {
   var l = Loader.show();
-  API.call('approvals', 'get', { requestId: requestId }).then(function (a) {
+  API.call('approvalRequests', 'get', { requestId: requestId }).then(function (a) {
     Loader.hide(l);
     Modal.open({
       title: 'Approval Request',
@@ -69,7 +69,7 @@ function approvalAction(requestId, action) {
   } else {
     params.comment = window.prompt('Comment (optional):') || '';
   }
-  API.call('approvals', action, params)
+  API.call('approvalRequests', action, params)
     .then(function (r) { Toast.success('Request ' + r.status + '.'); Router.navigate('approvals', {}); })
     .catch(function (e) { Toast.error(e.message); });
 }
