@@ -376,6 +376,19 @@ var Orders = (function () {
       entity: 'orders', entityId: orderId,
       before: { status: 'DRAFT' }, after: { status: 'SUBMITTED' },
     });
+    // NOT-2: notify the approver(s). Best-effort; never blocks the submit.
+    try {
+      Notify.emitMany(Notify.resolveOrderApprovers(order), {
+        channel:      'EMAIL',
+        event_key:    'ORDER_SUBMITTED',
+        vars:         { order_number: order.order_number, total_amount: order.total_amount, currency_code: order.currency_code, order_id: orderId },
+        subject:      'Order submitted for approval: ' + (order.order_number || orderId),
+        body:         'Order ' + (order.order_number || orderId) + ' has been submitted and is awaiting your approval.',
+        entity_type:  'orders',
+        entity_id:    orderId,
+        country_code: order.country_code,
+      });
+    } catch (_) {}
     return { success: true, status: 'SUBMITTED' };
   }
 
@@ -418,6 +431,25 @@ var Orders = (function () {
       entity: 'orders', entityId: orderId,
       before: { status: 'SUBMITTED' }, after: { status: 'APPROVED', approved_by: ctx.session.userId },
     });
+    // NOT-2: notify the creator and the customer contact. Best-effort.
+    try {
+      var approveVars = { order_number: order.order_number, status: 'APPROVED', order_id: orderId };
+      var creatorType = String(order.created_by_type || '').toUpperCase() === 'CUSTOMER' ? 'CUSTOMER' : 'STAFF';
+      Notify.emit({
+        recipient_id: order.created_by_id, recipient_type: creatorType,
+        channel: 'EMAIL', event_key: 'ORDER_APPROVED', vars: approveVars,
+        subject: 'Order approved: ' + (order.order_number || orderId),
+        body:    'Order ' + (order.order_number || orderId) + ' has been approved.',
+        entity_type: 'orders', entity_id: orderId, country_code: order.country_code,
+      });
+      Notify.emit({
+        recipient_id: order.customer_id, recipient_type: 'CUSTOMER',
+        channel: 'EMAIL', event_key: 'ORDER_APPROVED', vars: approveVars,
+        subject: 'Your order has been approved: ' + (order.order_number || orderId),
+        body:    'Order ' + (order.order_number || orderId) + ' has been approved and is being processed.',
+        entity_type: 'orders', entity_id: orderId, country_code: order.country_code,
+      });
+    } catch (_) {}
     return { success: true, status: 'APPROVED' };
   }
 
@@ -451,6 +483,25 @@ var Orders = (function () {
       entity: 'orders', entityId: orderId,
       before: { status: 'SUBMITTED' }, after: { status: 'REJECTED', reason: reason },
     });
+    // NOT-2: notify the creator and the customer contact. Best-effort.
+    try {
+      var rejectVars = { order_number: order.order_number, status: 'REJECTED', reason: reason, order_id: orderId };
+      var rejCreatorType = String(order.created_by_type || '').toUpperCase() === 'CUSTOMER' ? 'CUSTOMER' : 'STAFF';
+      Notify.emit({
+        recipient_id: order.created_by_id, recipient_type: rejCreatorType,
+        channel: 'EMAIL', event_key: 'ORDER_REJECTED', vars: rejectVars,
+        subject: 'Order rejected: ' + (order.order_number || orderId),
+        body:    'Order ' + (order.order_number || orderId) + ' was rejected. Reason: ' + reason,
+        entity_type: 'orders', entity_id: orderId, country_code: order.country_code,
+      });
+      Notify.emit({
+        recipient_id: order.customer_id, recipient_type: 'CUSTOMER',
+        channel: 'EMAIL', event_key: 'ORDER_REJECTED', vars: rejectVars,
+        subject: 'Update on your order: ' + (order.order_number || orderId),
+        body:    'Order ' + (order.order_number || orderId) + ' could not be approved. Reason: ' + reason,
+        entity_type: 'orders', entity_id: orderId, country_code: order.country_code,
+      });
+    } catch (_) {}
     return { success: true, status: 'REJECTED' };
   }
 

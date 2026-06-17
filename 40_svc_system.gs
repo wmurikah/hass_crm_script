@@ -83,11 +83,36 @@ function _systemVersion_(ctx, params) {
   };
 }
 
+// ── system.installTriggers ─────────────────────────────────────────────────────
+//
+// Guarded admin action that (re)installs all time-based triggers, including the
+// NOTIF_FLUSH drain. This is the one-time setup the human runs ONCE after a
+// deploy so trigger installation no longer depends on opening the Apps Script
+// IDE. Re-running is safe: installAllTriggers deletes the managed triggers first,
+// so it never stacks duplicates. Gated by order.manage (the existing admin gate,
+// matching system.dbStats / configAdmin.*).
+
+function _systemInstallTriggers_(ctx, params) {
+  Rbac.requirePermission(ctx.session, 'order.manage');
+  if (typeof Jobs === 'undefined' || !Jobs.installAllTriggers) {
+    throw new Errors.AppError('Trigger installer unavailable.', 'CONFIG_ERROR');
+  }
+  Jobs.installAllTriggers();
+  Audit.log({
+    actor:    ctx.session.userId,
+    action:   'TRIGGERS_INSTALLED',
+    entity:   'system',
+    entityId: 'triggers',
+  });
+  return { success: true, message: 'All time-based triggers (re)installed, including NOTIF_FLUSH.' };
+}
+
 // ── Registration ───────────────────────────────────────────────────────────────
 
 (function _registerSystem_() {
-  register({ service: 'system', action: 'ping',     permission: null,           handler: _systemPing_ });
-  register({ service: 'system', action: 'health',   permission: 'order.view',   handler: _systemHealth_ });
-  register({ service: 'system', action: 'dbStats',  permission: 'order.manage', handler: _systemDbStats_ });
-  register({ service: 'system', action: 'version',  permission: null,           handler: _systemVersion_ });
+  register({ service: 'system', action: 'ping',            permission: null,           handler: _systemPing_ });
+  register({ service: 'system', action: 'health',          permission: 'order.view',   handler: _systemHealth_ });
+  register({ service: 'system', action: 'dbStats',         permission: 'order.manage', handler: _systemDbStats_ });
+  register({ service: 'system', action: 'version',         permission: null,           handler: _systemVersion_ });
+  register({ service: 'system', action: 'installTriggers', permission: 'order.manage', handler: _systemInstallTriggers_ });
 })();

@@ -273,6 +273,25 @@ function _paymentApprove_(ctx, params) {
     entity: 'payment_uploads', entityId: uploadId,
     before: before, after: { status: 'APPROVED', reviewed_by: ctx.session.userId },
   });
+  // NOT-2: notify the customer contact and the uploader. Best-effort; the
+  // payment is already approved and this can never undo or block that.
+  try {
+    var payVars = { amount: before.amount, currency_code: before.currency_code, invoice_id: before.invoice_id, upload_id: uploadId };
+    Notify.emit({
+      recipient_id: before.customer_id, recipient_type: 'CUSTOMER',
+      channel: 'EMAIL', event_key: 'PAYMENT_APPROVED', vars: payVars,
+      subject: 'Payment approved',
+      body:    'Your payment of ' + before.amount + ' ' + (before.currency_code || '') + ' has been approved.',
+      entity_type: 'payment_uploads', entity_id: uploadId,
+    });
+    Notify.emit({
+      recipient_id: before.uploaded_by, recipient_type: 'STAFF',
+      channel: 'EMAIL', event_key: 'PAYMENT_APPROVED', vars: payVars,
+      subject: 'Payment approved: ' + uploadId,
+      body:    'Payment ' + uploadId + ' (' + before.amount + ' ' + (before.currency_code || '') + ') has been approved.',
+      entity_type: 'payment_uploads', entity_id: uploadId,
+    });
+  } catch (_) {}
   return { success: true, status: 'APPROVED' };
 }
 
