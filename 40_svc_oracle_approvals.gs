@@ -335,16 +335,43 @@ function _oaUpload_(ctx, params) {
     entity: summary.table || T_PO_TABLE, entityId: summary.batchId || batchId,
     metadata: { filename: file.filename, docType: summary.docType, rows: summary.rows, documents: summary.documents, skipped: (summary.skipped || []).length }
   });
+  // The approvals aggregate cache is invalidated centrally in
+  // OracleApprovalsLoader.loadFromRows (the single write choke point), so the
+  // upload, sync and webhook paths all stay fresh without a per-handler bump.
   return summary;
 }
 
 // ── charts (only PO and SO; all aggregation on the backend) ───────────────────
 // Both series are sorted SLOWEST first so the people holding documents up sit at
 // the top of the horizontal bar. Document counts ride along for context.
+// ── Aggregate cache (Layer 7) ────────────────────────────────────────────────
+// The PO/SO charts and leaderboard scan many rows (capped at OA_MAX_SCAN /
+// OA_SO_DOC_CAP) on every load. They are pure functions of the country scope
+// (and, for charts, the stage filter), so they are cached by that signature and
+// shared across users with the same scope. The cache is invalidated the moment
+// approval data changes (upload / sync / webhook all bump the 'oa' namespace),
+// with a TTL backstop, so the leaderboard math is identical and only its
+// execution moves off the hot path.
+var _OA_AGG_TTL_ = 600;   // seconds; approval data changes only on upload/sync
+
+function _oaSig_(scope) {
+  if (scope && scope.isGlobal) return 'G';
+  var cs = (scope && scope.countries) ? scope.countries.slice().sort() : [];
+  return 'C:' + cs.join(',');
+}
+
 function _oaCharts_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var P = _oaCols_().po;
   var scope = _oaScope_(ctx.session);
+  var stageNo = parseInt(params && params.stage, 10);
+  var stageKey = (!isNaN(stageNo) && stageNo >= 1 && stageNo <= 7) ? String(stageNo) : '';
+  return AggCache.getOrSet('oa.charts', _oaSig_(scope) + '|s=' + stageKey, _OA_AGG_TTL_, function () {
+    return _oaChartsCompute_(scope, params || {});
+  });
+}
+
+function _oaChartsCompute_(scope, params) {
+  var P = _oaCols_().po;
 
   // PO: per-step time per approver (optional stage 1..7), and which stages exist.
   var poMeas = [], stageSet = {};
@@ -424,8 +451,14 @@ function _rankApprovers_(meas) {
 
 function _oaLeaderboard_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var P = _oaCols_().po;
   var scope = _oaScope_(ctx.session);
+  return AggCache.getOrSet('oa.leaderboard', _oaSig_(scope), _OA_AGG_TTL_, function () {
+    return _oaLeaderboardCompute_(scope);
+  });
+}
+
+function _oaLeaderboardCompute_(scope) {
+  var P = _oaCols_().po;
   var targets = _oaTargetsObj_();
 
   var poMeas = [];

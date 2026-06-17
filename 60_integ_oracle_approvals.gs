@@ -333,9 +333,15 @@ var OracleApprovalsLoader = (function () {
   }
 
   // ── Public: load from a 2D array (shared by upload and integration) ─────────
+  // This is the single choke point for ALL approval-data writes (file upload,
+  // scheduled/manual integration sync, and the inbound webhook all call it), so
+  // invalidating the approvals aggregate cache here keeps the charts/leaderboard
+  // fresh after every write through exactly one place (Layer 7).
   function loadFromRows(rows, opts) {
     _metaCache_ = {};   // fresh introspection per load
-    return _loadExtract_(rows, opts);
+    var res = _loadExtract_(rows, opts);
+    try { if (typeof AggCache !== 'undefined') AggCache.bump('oa'); } catch (_) {}
+    return res;
   }
 
   // ── Public: run the integration pull (uses the pluggable connector) ─────────

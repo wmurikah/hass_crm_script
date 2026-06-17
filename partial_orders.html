@@ -19,24 +19,36 @@ Router.register('orders', function (el, routeParams) {
       '<thead><tr><th>Order #</th><th>Customer</th><th>Country</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>' +
       '<tbody id="ordBody"></tbody></table></div></div>';
 
+  // Render is idempotent (stale-while-revalidate may call it twice; setHTML
+  // no-ops on a stale target after navigation).
+  function renderOrders(rows) {
+    if (!rows.length) { setHTML('ordBody', emptyRow(7, 'No orders.')); return; }
+    setHTML('ordBody', rows.map(function (r) {
+      var oid = esc(r.order_id);
+      return '<tr style="cursor:pointer" onclick="viewOrder(\'' + oid + '\')"><td>' + esc(r.order_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
+             '<td>' + esc(r.country_code) + '</td><td>' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
+             '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
+             '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewOrder(\'' + oid + '\')">View</button></td></tr>';
+    }).join(''));
+  }
+
   function load() {
-    setHTML('ordBody', loadingRow(7));
     var params = { limit: 50 };
     var s = document.getElementById('ordStatus').value;
     var c = document.getElementById('ordCust').value.trim();
     if (s) params.status = s;
     if (c) params.customer_id = c;
     Object.keys(drill).forEach(function (k) { params[k] = drill[k]; });
-    API.call('orders', 'list', params).then(function (rows) {
-      if (!rows.length) { setHTML('ordBody', emptyRow(7, 'No orders.')); return; }
-      setHTML('ordBody', rows.map(function (r) {
-        var oid = esc(r.order_id);
-        return '<tr style="cursor:pointer" onclick="viewOrder(\'' + oid + '\')"><td>' + esc(r.order_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
-               '<td>' + esc(r.country_code) + '</td><td>' + fmtMoney(r.total_amount, r.currency_code) + '</td>' +
-               '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
-               '<td class="actions"><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewOrder(\'' + oid + '\')">View</button></td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('ordBody', errorRow(7, e, load)); });
+    if (API.swr) {
+      API.swr('orders', 'list', params, renderOrders, {
+        onLoading: function () { setHTML('ordBody', loadingRow(7)); },
+        onError:   function (e) { setHTML('ordBody', errorRow(7, e, load)); }
+      });
+    } else {
+      setHTML('ordBody', loadingRow(7));
+      API.call('orders', 'list', params).then(renderOrders)
+        .catch(function (e) { setHTML('ordBody', errorRow(7, e, load)); });
+    }
   }
 
   document.getElementById('ordCust').oninput = function () { clearTimeout(this._t); this._t = setTimeout(load, 400); };

@@ -9,23 +9,34 @@ Router.register('invoices', function (el) {
       '<thead><tr><th>Invoice #</th><th>Customer</th><th>Total</th><th>Due Date</th><th>Status</th><th>Payment</th><th></th></tr></thead>' +
       '<tbody id="invBody"></tbody></table></div></div>';
 
+  // Idempotent render (stale-while-revalidate may call it twice).
+  function renderInvoices(rows) {
+    if (!rows.length) { setHTML('invBody', emptyRow(7, 'No invoices.')); return; }
+    setHTML('invBody', rows.map(function (r) {
+      var iid = esc(r.invoice_id);
+      return '<tr style="cursor:pointer" onclick="viewInvoice(\'' + iid + '\')"><td>' + esc(r.invoice_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
+             '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td><td>' + fmtDate(r.due_date) + '</td>' +
+             '<td>' + statusBadge(r.status) + '</td><td>' + statusBadge(r.payment_status) + '</td>' +
+             '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewInvoice(\'' + iid + '\')">View</button></td></tr>';
+    }).join(''));
+  }
+
   function load() {
-    setHTML('invBody', loadingRow(7));
     var params = { limit: 50 };
     var s = document.getElementById('invStatus').value;
     var p = document.getElementById('invPayStatus').value;
     if (s) params.status = s;
     if (p) params.payment_status = p;
-    API.call('invoices', 'list', params).then(function (rows) {
-      if (!rows.length) { setHTML('invBody', emptyRow(7, 'No invoices.')); return; }
-      setHTML('invBody', rows.map(function (r) {
-        var iid = esc(r.invoice_id);
-        return '<tr style="cursor:pointer" onclick="viewInvoice(\'' + iid + '\')"><td>' + esc(r.invoice_number) + '</td><td>' + esc(r.company_name || r.customer_id) + '</td>' +
-               '<td>' + fmtMoney(r.total_amount, r.currency_code) + '</td><td>' + fmtDate(r.due_date) + '</td>' +
-               '<td>' + statusBadge(r.status) + '</td><td>' + statusBadge(r.payment_status) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewInvoice(\'' + iid + '\')">View</button></td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('invBody', errorRow(7, e, load)); });
+    if (API.swr) {
+      API.swr('invoices', 'list', params, renderInvoices, {
+        onLoading: function () { setHTML('invBody', loadingRow(7)); },
+        onError:   function (e) { setHTML('invBody', errorRow(7, e, load)); }
+      });
+    } else {
+      setHTML('invBody', loadingRow(7));
+      API.call('invoices', 'list', params).then(renderInvoices)
+        .catch(function (e) { setHTML('invBody', errorRow(7, e, load)); });
+    }
   }
 
   document.getElementById('invStatus').onchange = load;
