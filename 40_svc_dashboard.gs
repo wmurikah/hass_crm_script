@@ -58,12 +58,36 @@ function _dashLast6Months_() {
   return out;
 }
 
+// ── Aggregate-cache helpers (Layer 7) ───────────────────────────────────────
+// The summary/charts/sla aggregates are pure functions of the country scope, so
+// they are cached by a scope signature and shared across users with the same
+// scope. RBAC is enforced in each handler BEFORE the cache is consulted, and the
+// cache is invalidated on every data mutation (via Audit.log -> AggCache.onAudit)
+// with a short TTL backstop, so a read after a write never serves stale numbers.
+var _DASH_SUMMARY_TTL_ = 30;    // seconds; counts, kept very fresh
+var _DASH_CHARTS_TTL_  = 180;   // seconds; six-month trends move slowly
+var _DASH_SLA_TTL_     = 120;   // seconds
+
+function _dashSig_(scope) {
+  if (scope && scope.isGlobal) return 'G';
+  var cs = (scope && scope.countries) ? scope.countries.slice().sort() : [];
+  return 'C:' + cs.join(',');
+}
+
 // ── dashboard.summary ─────────────────────────────────────────────────────────
 
 function _dashSummary_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _dashScopeData_(ctx.session);
-  var sc    = _dashScopeClause_(scope, '');
+  return AggCache.getOrSet('dash.summary', _dashSig_(scope), _DASH_SUMMARY_TTL_, function () {
+    return _dashSummaryCompute_(scope);
+  });
+}
+
+// The aggregation itself, byte-for-byte unchanged; only its execution moved
+// behind the cache. Callable directly by the trigger warmer with a GLOBAL scope.
+function _dashSummaryCompute_(scope) {
+  var sc = _dashScopeClause_(scope, '');
 
   // All six aggregates in ONE Turso round-trip (was six separate selects).
   // Mirrors the tursoPipeline_ batch pattern: multiple statements, single HTTP
@@ -167,7 +191,13 @@ function _dashTicketsPulse_(ctx, params) {
 // client charts one currency at a time via a selector.
 function _dashCharts_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var scope  = _dashScopeData_(ctx.session);
+  var scope = _dashScopeData_(ctx.session);
+  return AggCache.getOrSet('dash.charts', _dashSig_(scope), _DASH_CHARTS_TTL_, function () {
+    return _dashChartsCompute_(scope);
+  });
+}
+
+function _dashChartsCompute_(scope) {
   var sc     = _dashScopeClause_(scope, '');          // orders & tickets both carry country_code
   var months = _dashLast6Months_();
   // Confirmed revenue only: exclude draft/cancelled/rejected so the bar reflects
@@ -266,7 +296,13 @@ function _dashCharts_(ctx, params) {
 function _dashSlaMetrics_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _dashScopeData_(ctx.session);
-  var sc    = _dashScopeClause_(scope, '');
+  return AggCache.getOrSet('dash.sla', _dashSig_(scope), _DASH_SLA_TTL_, function () {
+    return _dashSlaCompute_(scope);
+  });
+}
+
+function _dashSlaCompute_(scope) {
+  var sc = _dashScopeClause_(scope, '');
 
   // ── sla_config map: priority → { response, resolve } minutes (fallback) ──
   // Kept as its own read: the table can be absent on older schemas, and a single

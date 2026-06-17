@@ -1,0 +1,472 @@
+<script>
+// -----------------------------------------------------------------
+//  js_perf.html  -  Hass CMS client performance layer
+//
+//  A transparent speed layer on top of the EXISTING API.call channel.
+//  It changes nothing about what data is fetched, what the server
+//  returns, or who is allowed to see it. It only changes WHEN the user
+//  sees data they have seen before (instantly, from a per-user cache)
+//  and quietly refreshes it in the background.
+//
+//  Pieces:
+//    HassStore   persistent, per-user-namespaced cache (localStorage
+//                first, sessionStorage then in-memory fallback)
+//    API.swr     stale-while-revalidate read: paint cache now, refetch,
+//                repaint only if the result changed (Layer 1)
+//    Prefetch    idle + hover prefetch of likely-next pages (Layer 2)
+//    API.optimistic  optimistic write with clean rollback (Layer 3)
+//    API.batch   one round-trip for several reads via bundle.batch (Layer 4)
+//
+//  Safety rules baked in:
+//    - Every cache key is prefixed with the current user id. One user can
+//      never read another user's cache.
+//    - A change of owner (different user on the same browser) purges the
+//      whole store before the new user can read it.
+//    - Logout / session loss clears the store.
+//    - Any write invalidates the cache it could affect, so a read after a
+//      write never serves pre-write data.
+//    - A background refetch that comes back PERMISSION_DENIED / NO_SESSION /
+//      NOT_FOUND evicts the cached entry, so a permission change can never
+//      keep showing stale, now-forbidden data.
+// -----------------------------------------------------------------
+(function () {
+  'use strict';
+
+  if (typeof API === 'undefined' || !API || typeof API.call !== 'function') {
+    // js_api.html must load first. If it did not, do nothing (the app still
+    // works on the plain API.call path).
+    return;
+  }
+
+  // -- storage backend: localStorage, then sessionStorage, then memory ----
+  // The HtmlService sandbox does allow localStorage (the app already uses it
+  // for token clearing), but we still feature-detect so a locked-down browser
+  // degrades gracefully instead of throwing.
+  var _backend = (function () {
+    function probe(store) {
+      try {
+        var k = '__hs_probe__';
+        store.setItem(k, '1');
+        store.removeItem(k);
+        return store;
+      } catch (e) { return null; }
+    }
+    var ls = (typeof localStorage !== 'undefined') ? probe(localStorage) : null;
+    if (ls) return { kind: 'local', s: ls };
+    var ss = (typeof sessionStorage !== 'undefined') ? probe(sessionStorage) : null;
+    if (ss) return { kind: 'session', s: ss };
+    return { kind: 'memory', s: null };
+  })();
+
+  var _mem = {};   // in-memory mirror (also the fallback backend)
+
+  function _rawGet(key) {
+    if (_mem[key] !== undefined) return _mem[key];
+    if (_backend.s) { try { return _backend.s.getItem(key); } catch (e) {} }
+    return null;
+  }
+  function _rawSet(key, val) {
+    _mem[key] = val;
+    if (!_backend.s) return;
+    try {
+      _backend.s.setItem(key, val);
+    } catch (e) {
+      // Quota or similar: drop our own oldest entries once, then retry.
+      try {
+        _gcOldest(0.5);
+        _backend.s.setItem(key, val);
+      } catch (e2) { /* give up quietly; in-memory copy still serves this tab */ }
+    }
+  }
+  function _rawRemove(key) {
+    delete _mem[key];
+    if (_backend.s) { try { _backend.s.removeItem(key); } catch (e) {} }
+  }
+  function _ourKeys() {
+    var out = [];
+    // memory keys
+    Object.keys(_mem).forEach(function (k) { if (k.indexOf(PREFIX) === 0) out.push(k); });
+    if (_backend.s) {
+      try {
+        for (var i = 0; i < _backend.s.length; i++) {
+          var k = _backend.s.key(i);
+          if (k && k.indexOf(PREFIX) === 0 && out.indexOf(k) === -1) out.push(k);
+        }
+      } catch (e) {}
+    }
+    return out;
+  }
+  // Evict the oldest `frac` fraction of our entries to free space.
+  function _gcOldest(frac) {
+    var keys = _ourKeys();
+    var dated = keys.map(function (k) {
+      var t = 0;
+      try { var o = JSON.parse(_rawGet(k)); t = (o && o.t) || 0; } catch (e) {}
+      return { k: k, t: t };
+    }).sort(function (a, b) { return a.t - b.t; });
+    var cut = Math.max(1, Math.floor(dated.length * (frac || 0.5)));
+    for (var i = 0; i < cut && i < dated.length; i++) _rawRemove(dated[i].k);
+  }
+
+  // -- HassStore: the per-user namespaced cache --------------------------
+  var PREFIX     = 'hs1|';          // schema version 1 marker
+  var OWNER_KEY  = PREFIX + 'owner';
+  var _owner     = '';              // current user id (namespace)
+
+  function _key(sig) { return PREFIX + _owner + '|' + sig; }
+
+  var HassStore = {
+    // Bind the cache to a user. If the owner changes (a different user signs
+    // in on this browser), wipe everything first so no entry can cross users.
+    setUser: function (userId) {
+      var uid = String(userId || '');
+      var prev = '';
+      try { prev = _rawGet(OWNER_KEY) || ''; } catch (e) {}
+      if (prev && prev !== uid) { HassStore.clearAll(); }
+      _owner = uid;
+      try { _rawSet(OWNER_KEY, uid); } catch (e) {}
+    },
+    user: function () { return _owner; },
+
+    // Return { v: value, t: timestamp } or null. Never throws.
+    getEntry: function (sig) {
+      if (!_owner) return null;
+      var raw = _rawGet(_key(sig));
+      if (!raw) return null;
+      try { var o = JSON.parse(raw); return (o && 'v' in o) ? o : null; } catch (e) { return null; }
+    },
+    get: function (sig) { var e = HassStore.getEntry(sig); return e ? e.v : null; },
+
+    set: function (sig, value) {
+      if (!_owner) return;
+      try { _rawSet(_key(sig), JSON.stringify({ v: value, t: Date.now() })); } catch (e) {}
+    },
+    remove: function (sig) { if (_owner) _rawRemove(_key(sig)); },
+
+    // Remove every entry whose signature starts with `sigPrefix` (for the
+    // current user). Used to invalidate one service's reads after a write.
+    removeBySigPrefix: function (sigPrefix) {
+      if (!_owner) return;
+      var full = _key(sigPrefix);
+      _ourKeys().forEach(function (k) { if (k.indexOf(full) === 0) _rawRemove(k); });
+    },
+
+    // Wipe the whole store (every user, every key under our prefix). Called on
+    // logout, session loss and owner change.
+    clearAll: function () {
+      _ourKeys().forEach(_rawRemove);
+      _mem = {};
+    },
+    backend: function () { return _backend.kind; }
+  };
+  window.HassStore = HassStore;
+
+  // -- request signature -------------------------------------------------
+  // Stable across calls: same service.action + same params => same key.
+  function _stable(obj) {
+    if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+    if (Array.isArray(obj)) return '[' + obj.map(_stable).join(',') + ']';
+    return '{' + Object.keys(obj).sort().map(function (k) {
+      return JSON.stringify(k) + ':' + _stable(obj[k]);
+    }).join(',') + '}';
+  }
+  function _sig(service, action, params) {
+    var p = {};
+    Object.keys(params || {}).forEach(function (k) {
+      if (k === 'sessionToken') return;  // never part of identity
+      p[k] = params[k];
+    });
+    return service + '.' + action + '|' + _stable(p);
+  }
+  API._sig = _sig;
+
+  // -- foreground tracking + write invalidation wrapper ------------------
+  // We wrap API.call WITHOUT changing what it returns: callers get the exact
+  // same promise. We only (a) count in-flight foreground calls so prefetch can
+  // yield to them, and (b) invalidate the cache after a successful write.
+  var _origCall = API.call;
+  var _inflight = 0;
+  function _busy() { return _inflight > 0; }
+
+  // Mark a promise as foreground (user-initiated) work so prefetch yields to it.
+  // Returns the same promise; only attaches a counter side branch.
+  function _foreground(promise) {
+    _inflight++;
+    var dec = function () { _inflight = Math.max(0, _inflight - 1); };
+    promise.then(dec, dec);
+    return promise;
+  }
+
+  // Read-looking verbs never invalidate. Everything else is treated as a write
+  // for cache purposes (over-invalidation is safe; under-invalidation is a bug).
+  var _READ_VERBS = [
+    'list', 'get', 'search', 'summary', 'inbox', 'preview', 'charts',
+    'leaderboard', 'me', 'health', 'ping', 'version', 'stats', 'export',
+    'suggestions', 'check', 'activity', 'pulse', 'metrics'
+  ];
+  function _isReadVerb(action) {
+    var a = String(action || '');
+    for (var i = 0; i < _READ_VERBS.length; i++) if (a.indexOf(_READ_VERBS[i]) === 0) return true;
+    return false;
+  }
+
+  // Which cached services a write to `service` can affect. Supersets are fine.
+  // A service missing here falls back to clearing everything (always correct).
+  var _RELATED = {
+    customers:           ['customers', 'contacts', 'delivery_locations', 'documents'],
+    contacts:            ['contacts', 'customers'],
+    delivery_locations:  ['delivery_locations', 'customers'],
+    orders:              ['orders', 'invoices', 'approvalRequests', 'catalog', 'pricing'],
+    approvalRequests:    ['approvalRequests', 'orders'],
+    invoices:            ['invoices', 'orders', 'payments'],
+    payments:            ['payments', 'invoices'],
+    tickets:             ['tickets', 'sla', 'knowledge'],
+    sla:                 ['sla', 'tickets'],
+    pricing:             ['pricing', 'catalog', 'orders'],
+    catalog:             ['catalog', 'pricing'],
+    knowledge:           ['knowledge'],
+    documents:           ['documents', 'customers'],
+    users:               ['users', 'rbac'],
+    rbac:                ['rbac', 'users'],
+    branding:            ['branding'],
+    localization:        ['localization'],
+    notifications:       ['notifications'],
+    notificationTemplates: ['notificationTemplates'],
+    approvals:           ['approvals'],
+    configAdmin:         ['configAdmin']
+  };
+
+  // Decide what to invalidate for a settled call. Returns null (nothing),
+  // '*' (clear all) or an array of service names.
+  function _invalidationTargets(service, action) {
+    if (service === 'system' || service === 'bundle' || service === 'auth') return null;
+    if (service === 'bot') return (action === 'confirmAction') ? '*' : null;
+    if (_isReadVerb(action)) return null;
+    return _RELATED[service] || '*';
+  }
+
+  function _invalidate(service, action) {
+    var t = _invalidationTargets(service, action);
+    if (!t) return;
+    if (t === '*') { HassStore.clearAll(); return; }
+    t.forEach(function (svc) { HassStore.removeBySigPrefix(svc + '.'); });
+  }
+
+  API.call = function (service, action, params, opts) {
+    _inflight++;
+    var done = false;
+    function settle() { if (!done) { done = true; _inflight = Math.max(0, _inflight - 1); } }
+    var p = _origCall.call(API, service, action, params, opts);
+    // Attach a side branch that never alters `p`'s settlement seen by callers.
+    p.then(function () {
+      settle();
+      try { _invalidate(service, action); } catch (e) {}
+    }, function () {
+      settle();   // do NOT invalidate on a failed write (nothing changed server-side)
+    });
+    return p;
+  };
+
+  // Manual invalidation hook for callers that want to be explicit.
+  API.invalidate = function (service, action) {
+    try { _invalidate(service, action || 'update'); } catch (e) {}
+  };
+  API.cacheClear = function () { try { HassStore.clearAll(); } catch (e) {} };
+
+  // -- Layer 1: stale-while-revalidate read ------------------------------
+  // swr(service, action, params, onData, opts)
+  //   onData(value)   may be called up to twice: once from cache (if present),
+  //                   then again with fresh data ONLY if it differs.
+  //   opts.onLoading  called when there is no cached value to paint first.
+  //   opts.onError    called only when the network fails AND there was no cache
+  //                   (a cached paint that later fails to refresh stays quietly).
+  //   opts.ttl        soft freshness hint in seconds. Stale is always served,
+  //                   but if an entry is still within ttl we skip the refetch.
+  // Returns true if it painted from cache (so the caller can skip its spinner).
+  var _latest = {};   // service.action -> most recent sig requested (race guard)
+
+  API.swr = function (service, action, params, onData, opts) {
+    opts = opts || {};
+    var sig   = _sig(service, action, params);
+    var laneId = service + '.' + action;
+    _latest[laneId] = sig;
+
+    var entry  = HassStore.getEntry(sig);
+    var cachedJson = null;
+    var painted = false;
+    if (entry) {
+      cachedJson = JSON.stringify(entry.v);
+      try { onData(entry.v, { fromCache: true }); painted = true; } catch (e) {}
+      // Within the soft ttl we trust the cache and skip the refetch entirely.
+      if (opts.ttl && (Date.now() - (entry.t || 0)) < opts.ttl * 1000) {
+        return true;
+      }
+    } else if (opts.onLoading) {
+      try { opts.onLoading(); } catch (e) {}
+    }
+
+    _foreground(_origCall.call(API, service, action, params, opts.callOpts))
+      .then(function (fresh) {
+        HassStore.set(sig, fresh);
+        // A newer request for the same lane has superseded us: do not repaint
+        // over what the user is now looking at.
+        if (_latest[laneId] !== sig) return;
+        var freshJson = JSON.stringify(fresh);
+        if (freshJson !== cachedJson) { try { onData(fresh, { fromCache: false }); } catch (e) {} }
+      })
+      .catch(function (err) {
+        var code = err && err.code;
+        // A now-authoritative refusal must not keep a stale paint on screen.
+        if (code === 'PERMISSION_DENIED' || code === 'FORBIDDEN' || code === 'NOT_FOUND') {
+          HassStore.remove(sig);
+        }
+        if (code === 'NO_SESSION' || code === 'SESSION_EXPIRED') {
+          HassStore.clearAll();   // js_api also fires hass:logout
+        }
+        if (!painted && _latest[laneId] === sig && opts.onError) {
+          try { opts.onError(err); } catch (e) {}
+        }
+      });
+
+    return painted;
+  };
+
+  // -- Layer 4: one round-trip for several reads (bundle.batch) ----------
+  // API.batch([{service,action,params}, ...]) resolves to an array aligned with
+  // the input, each item { ok:true, data } or { ok:false, error }. Every
+  // sub-call is gated server-side exactly as if called on its own.
+  API.batch = function (calls, opts) {
+    opts = opts || {};
+    var list = (calls || []).map(function (c) {
+      return { service: c.service, action: c.action, params: c.params || {} };
+    });
+    // retries:0 by default so a batch that happens to carry a write is not
+    // auto-replayed. Reads are unaffected (a failed read just rejects).
+    return _foreground(_origCall.call(API, 'bundle', 'batch', { calls: list }, { retries: (opts.retries != null ? opts.retries : 0) }))
+      .then(function (res) {
+        var out = (res && res.results) || [];
+        // normalize length to the request
+        return list.map(function (_, i) {
+          return out[i] || { ok: false, error: { code: 'NO_RESULT', message: 'Missing batch result.' } };
+        });
+      });
+  };
+
+  // Convenience: batch reads and hand each a callback. Each entry:
+  //   { service, action, params, onData, onError }
+  API.batchInto = function (specs) {
+    return API.batch(specs).then(function (results) {
+      results.forEach(function (r, i) {
+        var spec = specs[i];
+        if (r && r.ok) { if (spec.onData) try { spec.onData(r.data); } catch (e) {} }
+        else if (spec.onError) { try { spec.onError((r && r.error) || {}); } catch (e) {} }
+      });
+      return results;
+    });
+  };
+
+  // Batch several reads in one round-trip and store each successful result in
+  // the SWR cache under the SAME key its page would read, so a later API.swr for
+  // that read paints instantly from cache. Used to make tabbed/multi-panel pages
+  // load everything in a single call (Layer 4 + Layer 1 together).
+  API.batchWarm = function (specs) {
+    return API.batch(specs).then(function (results) {
+      results.forEach(function (r, i) {
+        if (r && r.ok) {
+          try { HassStore.set(_sig(specs[i].service, specs[i].action, specs[i].params || {}), r.data); } catch (e) {}
+        }
+      });
+      return results;
+    });
+  };
+
+  // -- Layer 3: optimistic write with rollback ---------------------------
+  // optimistic({ service, action, params, apply, rollback, onDone, onError })
+  //   apply()     mutate the UI now and (optionally) return a snapshot token.
+  //   rollback(t) undo the UI change using the token apply() returned.
+  //   onDone(res) reconcile with the server result on success.
+  //   onError(e)  optional extra handling after rollback (a toast fires anyway).
+  // Use ONLY for changes that are safe to reverse visually. Anything the user
+  // must confirm, or with irreversible side effects, stays a plain API.call.
+  API.optimistic = function (o) {
+    o = o || {};
+    var token;
+    try { token = o.apply ? o.apply() : undefined; } catch (e) { token = undefined; }
+    return API.call(o.service, o.action, o.params, o.callOpts)
+      .then(function (res) { if (o.onDone) o.onDone(res, token); return res; })
+      .catch(function (err) {
+        try { if (o.rollback) o.rollback(token); } catch (e) {}
+        try {
+          if (typeof Toast !== 'undefined') Toast.error((err && err.message) || 'That change did not save.');
+        } catch (e) {}
+        if (o.onError) o.onError(err, token);
+        throw err;
+      });
+  };
+
+  // -- Layer 2: predictive + hover prefetch ------------------------------
+  // Prefetch warms the SWR cache for a route's primary read(s) so the first
+  // navigation paints instantly. It is strictly low priority: it never starts
+  // while a foreground call is in flight, runs one fetch at a time, and skips
+  // anything already cached and still fresh.
+  var Prefetch = (function () {
+    var SPECS = {};            // route -> [{service, action, params}]
+    var queue = [];
+    var running = false;
+    var FRESH_MS = 60 * 1000;  // skip a prefetch if we fetched it this recently
+
+    function register(route, specs) { SPECS[route] = specs || []; }
+
+    function _freshEnough(sig) {
+      var e = HassStore.getEntry(sig);
+      return !!(e && (Date.now() - (e.t || 0)) < FRESH_MS);
+    }
+
+    function warm(route) {
+      var specs = SPECS[route];
+      if (!specs || !specs.length) return;
+      specs.forEach(function (s) {
+        var sig = _sig(s.service, s.action, s.params || {});
+        if (_freshEnough(sig)) return;
+        if (queue.indexOf(sig) !== -1) return;     // already queued
+        queue.push(sig);
+        queue._map = queue._map || {};
+        queue._map[sig] = s;
+      });
+      _pump();
+    }
+
+    function _pump() {
+      if (running) return;
+      if (!queue.length) return;
+      // Yield to any user-initiated work: try again shortly.
+      if (_busy()) { setTimeout(_pump, 250); return; }
+      running = true;
+      var sig = queue.shift();
+      var s = queue._map && queue._map[sig];
+      if (!s) { running = false; return _pump(); }
+      _origCall.call(API, s.service, s.action, s.params || {}, { retries: 0 })
+        .then(function (data) { try { HassStore.set(sig, data); } catch (e) {} })
+        .catch(function () {})   // a prefetch failure is silent by design
+        .then(function () { running = false; setTimeout(_pump, 60); });
+    }
+
+    // Warm the few most likely next pages once, when the app goes idle.
+    function warmLikely(routes) {
+      var go = function () { (routes || []).forEach(warm); };
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(go, { timeout: 2500 });
+      } else {
+        setTimeout(go, 1200);
+      }
+    }
+
+    return { register: register, warm: warm, warmLikely: warmLikely };
+  })();
+  window.Prefetch = Prefetch;
+
+  // Clear the cache the moment a session ends (belt and suspenders alongside
+  // the host page's own logout handling).
+  window.addEventListener('hass:logout', function () { try { HassStore.clearAll(); } catch (e) {} });
+})();
+</script>

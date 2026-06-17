@@ -11,24 +11,35 @@ Router.register('tickets', function (el, params) {
       '<thead><tr><th>Ticket #</th><th>Subject</th><th>Customer</th><th>Priority</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
       '<tbody id="tktBody"></tbody></table></div></div>';
 
+  // Idempotent render (stale-while-revalidate may call it twice).
+  function renderTickets(rows) {
+    if (!rows.length) { setHTML('tktBody', emptyRow(7, 'No tickets.')); return; }
+    setHTML('tktBody', rows.map(function (r) {
+      var tid = esc(r.ticket_id);
+      return '<tr style="cursor:pointer" onclick="viewTicket(\'' + tid + '\')"><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
+             '<td>' + esc(r.company_name || r.customer_id) + '</td>' +
+             '<td>' + statusBadge(r.priority) + '</td><td>' + statusBadge(r.status) + '</td>' +
+             '<td>' + fmtDate(r.created_at) + '</td>' +
+             '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewTicket(\'' + tid + '\')">View</button></td></tr>';
+    }).join(''));
+  }
+
   function load() {
-    setHTML('tktBody', loadingRow(7));
     var params = { limit: 50 };
     var s = document.getElementById('tktStatus').value;
     var p = document.getElementById('tktPriority').value;
     if (s) params.status = s;
     if (p) params.priority = p;
-    API.call('tickets', 'list', params).then(function (rows) {
-      if (!rows.length) { setHTML('tktBody', emptyRow(7, 'No tickets.')); return; }
-      setHTML('tktBody', rows.map(function (r) {
-        var tid = esc(r.ticket_id);
-        return '<tr style="cursor:pointer" onclick="viewTicket(\'' + tid + '\')"><td>' + esc(r.ticket_number) + '</td><td>' + esc(r.subject) + '</td>' +
-               '<td>' + esc(r.company_name || r.customer_id) + '</td>' +
-               '<td>' + statusBadge(r.priority) + '</td><td>' + statusBadge(r.status) + '</td>' +
-               '<td>' + fmtDate(r.created_at) + '</td>' +
-               '<td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewTicket(\'' + tid + '\')">View</button></td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('tktBody', errorRow(7, e, load)); });
+    if (API.swr) {
+      API.swr('tickets', 'list', params, renderTickets, {
+        onLoading: function () { setHTML('tktBody', loadingRow(7)); },
+        onError:   function (e) { setHTML('tktBody', errorRow(7, e, load)); }
+      });
+    } else {
+      setHTML('tktBody', loadingRow(7));
+      API.call('tickets', 'list', params).then(renderTickets)
+        .catch(function (e) { setHTML('tktBody', errorRow(7, e, load)); });
+    }
   }
 
   document.getElementById('tktStatus').onchange = load;
@@ -53,7 +64,7 @@ function viewTicket(id) {
       title: t.ticket_number + ': ' + t.subject,
       body: '<p>' + statusBadge(t.priority) + ' &nbsp; ' + statusBadge(t.status) + '</p>' +
             '<p style="font-size:13px;margin:8px 0">' + esc(t.description) + '</p>' +
-            '<div style="max-height:200px;overflow-y:auto;margin-bottom:10px">' + (comments || '<p style="color:#9ca3af;font-size:12px">No comments.</p>') + '</div>' +
+            '<div id="tktThread" style="max-height:200px;overflow-y:auto;margin-bottom:10px">' + (comments || '<p class="tkt-empty" style="color:#9ca3af;font-size:12px">No comments.</p>') + '</div>' +
             '<textarea class="form-control" id="tktComment" rows="3" placeholder="Add a comment…"></textarea>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
               (can('ticket.view') ? '<button class="btn btn-primary btn-sm" onclick="addTicketComment(\'' + id + '\')">Add Comment</button>' : '') +
@@ -64,11 +75,45 @@ function viewTicket(id) {
 }
 
 function addTicketComment(id) {
-  var content = document.getElementById('tktComment').value.trim();
+  var ta = document.getElementById('tktComment');
+  var content = (ta && ta.value || '').trim();
   if (!content) return;
-  API.call('tickets', 'addComment', { ticketId: id, content: content })
-    .then(function () { Modal.close(); Toast.success('Comment added.'); })
-    .catch(function (e) { Toast.error(e.message); });
+
+  // Layer 3: optimistic write. The comment appears in the thread immediately
+  // (dimmed = pending), the box clears, and the save goes out in the background.
+  // On success it settles to full opacity; on failure it is removed and the text
+  // is handed back so nothing is lost. Adding a comment is safe to reverse, so it
+  // qualifies for optimistic UI (irreversible actions stay synchronous).
+  if (!API.optimistic) {
+    API.call('tickets', 'addComment', { ticketId: id, content: content })
+      .then(function () { Modal.close(); Toast.success('Comment added.'); })
+      .catch(function (e) { Toast.error(e.message); });
+    return;
+  }
+
+  var thread = document.getElementById('tktThread');
+  var bubble = null;
+  API.optimistic({
+    service: 'tickets', action: 'addComment', params: { ticketId: id, content: content },
+    apply: function () {
+      if (!thread) return null;
+      var empty = thread.querySelector('.tkt-empty');
+      if (empty) empty.remove();
+      bubble = document.createElement('div');
+      bubble.style.cssText = 'padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:12px;opacity:.6';
+      bubble.innerHTML = '<strong>You</strong> &middot; ' + esc(fmtDateTime(new Date().toISOString())) +
+                         '<p style="margin:4px 0 0">' + esc(content) + '</p>';
+      thread.appendChild(bubble);
+      thread.scrollTop = thread.scrollHeight;
+      if (ta) ta.value = '';
+      return bubble;
+    },
+    rollback: function (b) {
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+      if (ta) ta.value = content;   // restore the unsaved text
+    },
+    onDone: function () { if (bubble) bubble.style.opacity = ''; }
+  });
 }
 
 function resolveTicket(id) {

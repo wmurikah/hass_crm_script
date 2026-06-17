@@ -16,17 +16,23 @@ function _brandingGet_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scopeCode = String(params.scope_code || ctx.session.countryCode || 'GLOBAL').trim().toUpperCase();
 
-  // Try country-specific first, then fall back to GLOBAL.
-  var rows = TursoClient.select(
-    'SELECT * FROM branding WHERE scope_code = ? LIMIT 1', [scopeCode]
-  );
-  if (!rows.length && scopeCode !== 'GLOBAL') {
-    rows = TursoClient.select(
-      "SELECT * FROM branding WHERE scope_code = 'GLOBAL' LIMIT 1", []
+  // Layer 6: branding is reference data served from cache, keyed by scope. Any
+  // branding.update bumps the 'branding' namespace, which invalidates every scope
+  // at once (including country scopes that fall back to GLOBAL), so an edit shows
+  // immediately. A NotFound from the loader is propagated, never cached.
+  return AggCache.getOrSet('branding', scopeCode, 300, function () {
+    // Try country-specific first, then fall back to GLOBAL.
+    var rows = TursoClient.select(
+      'SELECT * FROM branding WHERE scope_code = ? LIMIT 1', [scopeCode]
     );
-  }
-  if (!rows.length) throw new Errors.NotFound('Branding configuration not found.');
-  return rows[0];
+    if (!rows.length && scopeCode !== 'GLOBAL') {
+      rows = TursoClient.select(
+        "SELECT * FROM branding WHERE scope_code = 'GLOBAL' LIMIT 1", []
+      );
+    }
+    if (!rows.length) throw new Errors.NotFound('Branding configuration not found.');
+    return rows[0];
+  });
 }
 
 // ── branding.update ───────────────────────────────────────────────────────────
@@ -71,6 +77,8 @@ function _brandingUpdate_(ctx, params) {
     entity: 'branding', entityId: scopeCode,
     before: before, after: params,
   });
+  // Invalidate the cached branding (all scopes) so the edit appears at once.
+  try { AggCache.bump('branding'); } catch (_) {}
   return { success: true, scope_code: scopeCode };
 }
 

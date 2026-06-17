@@ -295,31 +295,22 @@ var Customers = (function () {
     var scope    = _scopeData_(session);
     _assertRowScope_(customer, 'customer', customerId, scope, session);
 
-    // Six queries — no N+1.
-    var contacts = TursoClient.select(
-      "SELECT * FROM contacts WHERE customer_id = ? AND status != 'DELETED' ORDER BY created_at ASC",
-      [customerId]
-    );
-
-    var deliveryLocations = TursoClient.select(
-      'SELECT * FROM delivery_locations WHERE customer_id = ? ORDER BY created_at ASC',
-      [customerId]
-    );
-
-    var recentOrders = TursoClient.select(
-      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10',
-      [customerId]
-    );
-
-    var recentTickets = TursoClient.select(
-      'SELECT * FROM tickets WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10',
-      [customerId]
-    );
-
-    var outstandingInvoices = TursoClient.select(
-      "SELECT * FROM invoices WHERE customer_id = ? AND status != 'PAID' ORDER BY due_date ASC",
-      [customerId]
-    );
+    // Layer 5: the five related-record reads are independent, so they cross the
+    // network once as a single Turso pipeline batch instead of five sequential
+    // round-trips. Same SQL, same args, same ordering, same decoded rows; only
+    // the number of HTTP calls changes (six reads collapse to two).
+    var rs = TursoClient.batch([
+      { sql: "SELECT * FROM contacts WHERE customer_id = ? AND status != 'DELETED' ORDER BY created_at ASC", args: [customerId] },
+      { sql: 'SELECT * FROM delivery_locations WHERE customer_id = ? ORDER BY created_at ASC', args: [customerId] },
+      { sql: 'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10', args: [customerId] },
+      { sql: 'SELECT * FROM tickets WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10', args: [customerId] },
+      { sql: "SELECT * FROM invoices WHERE customer_id = ? AND status != 'PAID' ORDER BY due_date ASC", args: [customerId] }
+    ]);
+    var contacts            = rs[0].rows;
+    var deliveryLocations   = rs[1].rows;
+    var recentOrders        = rs[2].rows;
+    var recentTickets       = rs[3].rows;
+    var outstandingInvoices = rs[4].rows;
 
     var creditLimit = parseFloat(customer.credit_limit || 0);
     var creditUsed  = parseFloat(customer.credit_used  || 0);

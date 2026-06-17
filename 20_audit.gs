@@ -55,6 +55,15 @@ var Audit = (function () {
     } catch (e) {
       Log.error({ service: 'Audit', action: 'log', msg: e.message });
     }
+
+    // Performance hook (Layer 7): a data-changing audit event invalidates the
+    // dashboard aggregate cache so the next read recomputes. Best-effort and
+    // fully isolated: it never changes what is logged or what this returns.
+    try {
+      if (typeof AggCache !== 'undefined' && AggCache.onAudit) {
+        AggCache.onAudit(entry && entry.action);
+      }
+    } catch (_) {}
   }
 
   return { log: log };

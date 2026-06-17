@@ -38,14 +38,17 @@ function _catalogGetProduct_(ctx, params) {
 
 function _catalogListDepots_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var sql  = 'SELECT * FROM depots WHERE 1=1';
-  var args = [];
-  if (params.country_code) {
-    sql += ' AND country_code = ?';
-    args.push(params.country_code);
-  }
-  sql += ' AND is_active = 1 ORDER BY depot_name';
-  return TursoClient.select(sql, args);
+  // Layer 6: depots are static reference data, filtered only by the country_code
+  // param (never by session), so the result is shared by a short-TTL cache keyed
+  // on that param.
+  var cc = String(params.country_code || '');
+  return AppCache.getOrSet('ref:depots:' + cc, 600, function () {
+    var sql  = 'SELECT * FROM depots WHERE 1=1';
+    var args = [];
+    if (cc) { sql += ' AND country_code = ?'; args.push(cc); }
+    sql += ' AND is_active = 1 ORDER BY depot_name';
+    return TursoClient.select(sql, args);
+  });
 }
 
 function _catalogListPriceLists_(ctx, params) {
@@ -82,14 +85,18 @@ function _catalogGetPriceListItems_(ctx, params) {
 
 function _catalogListSegments_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'customer.view');
-  // The segments label column may be `name` or `segment_name` depending on the
-  // physical schema; discover it so the ORDER BY can never reference a missing
-  // column. Also expose it as `segment_name` so existing readers keep working.
-  var nameCol = SchemaIntrospect.pick('segments', ['name', 'segment_name', 'segment', 'title']) || 'segment_id';
-  var sql = 'SELECT s.*';
-  if (nameCol.toLowerCase() !== 'segment_name') sql += ', s.' + nameCol + ' AS segment_name';
-  sql += ' FROM segments s ORDER BY s.' + nameCol;
-  return TursoClient.select(sql);
+  // Layer 6: segments are global, static reference data; serve from a short-TTL
+  // cache. The same list is returned to every caller, so one cache entry serves all.
+  return AppCache.getOrSet('ref:segments', 600, function () {
+    // The segments label column may be `name` or `segment_name` depending on the
+    // physical schema; discover it so the ORDER BY can never reference a missing
+    // column. Also expose it as `segment_name` so existing readers keep working.
+    var nameCol = SchemaIntrospect.pick('segments', ['name', 'segment_name', 'segment', 'title']) || 'segment_id';
+    var sql = 'SELECT s.*';
+    if (nameCol.toLowerCase() !== 'segment_name') sql += ', s.' + nameCol + ' AS segment_name';
+    sql += ' FROM segments s ORDER BY s.' + nameCol;
+    return TursoClient.select(sql);
+  });
 }
 
 // ── Registration ──────────────────────────────────────────────────────────────

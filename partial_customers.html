@@ -13,25 +13,39 @@ Router.register('customers', function (el) {
       '<tbody id="custBody"></tbody></table></div>' +
     '<div id="custPager" style="padding:8px 16px"></div></div>';
 
+  // Render is idempotent: stale-while-revalidate may call it twice (cache then
+  // fresh-if-changed), and setHTML no-ops if the user has navigated away.
+  function renderCustomers(rows) {
+    if (!rows.length) { setHTML('custBody', emptyRow(7, 'No customers found.')); return; }
+    setHTML('custBody', rows.map(function (r) {
+      var cid = esc(r.customer_id);
+      var actions = '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button>';
+      if (can('customers.edit'))       actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editCustomer(\'' + cid + '\')">Edit</button>';
+      if (can('customers.set_credit')) actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();customerCreditModal(\'' + cid + '\')">Credit</button>';
+      return '<tr style="cursor:pointer" onclick="viewCustomer(\'' + cid + '\')"><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
+             '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
+             '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
+             '<td class="actions">' + actions + '</td></tr>';
+    }).join(''));
+  }
+
   function load() {
-    setHTML('custBody', loadingRow(7));
     var params = { limit: perPage };
     if (searchQ) params.search = searchQ;
     var s = document.getElementById('custStatus').value;
     if (s) params.status = s;
-    API.call('customers', 'list', params).then(function (rows) {
-      if (!rows.length) { setHTML('custBody', emptyRow(7, 'No customers found.')); return; }
-      setHTML('custBody', rows.map(function (r) {
-        var cid = esc(r.customer_id);
-        var actions = '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();viewCustomer(\'' + cid + '\')">View</button>';
-        if (can('customers.edit'))       actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editCustomer(\'' + cid + '\')">Edit</button>';
-        if (can('customers.set_credit')) actions += ' <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();customerCreditModal(\'' + cid + '\')">Credit</button>';
-        return '<tr style="cursor:pointer" onclick="viewCustomer(\'' + cid + '\')"><td>' + esc(r.account_number) + '</td><td>' + esc(r.company_name) + '</td>' +
-               '<td>' + esc(r.country_code) + '</td><td>' + esc(r.customer_type) + '</td>' +
-               '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
-               '<td class="actions">' + actions + '</td></tr>';
-      }).join(''));
-    }).catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
+    // Stale-while-revalidate: paint last-known instantly, refetch, repaint only
+    // if it changed. Falls back to a plain fetch if the perf layer is absent.
+    if (API.swr) {
+      API.swr('customers', 'list', params, renderCustomers, {
+        onLoading: function () { setHTML('custBody', loadingRow(7)); },
+        onError:   function (e) { setHTML('custBody', errorRow(7, e, load)); }
+      });
+    } else {
+      setHTML('custBody', loadingRow(7));
+      API.call('customers', 'list', params).then(renderCustomers)
+        .catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
+    }
   }
 
   document.getElementById('custSearch').oninput = function () { searchQ = this.value; load(); };

@@ -33,6 +33,11 @@ var Jobs = (function () {
     // unless the integration is enabled and configured (see runOracleApprovalsSync).
     { fn: 'runOracleApprovalsSync',  type: 'minutes', value: 10  },
     { fn: 'keepWarm',                type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
+    // Precompute the heavy GLOBAL aggregate blobs (dashboard + approval
+    // leaderboards) so the common case reads a warm cache (Layer 7). Optional:
+    // correctness comes from read-through + write invalidation; this only keeps
+    // the GLOBAL blobs hot. Activated by re-running installAllTriggers().
+    { fn: 'precomputeAggregates',    type: 'minutes', value: 5   },
   ];
 
   function installAllTriggers() {
@@ -117,6 +122,11 @@ var Jobs = (function () {
         Log.warn({ service: 'jobs', msg: 'Job failed', data: { job_id: job.job_id, type: job.type, attempt: attempts, error: errMsg } });
       }
     });
+
+    // Background jobs (SLA sweep, integrations, recurring orders) can mutate data
+    // without going through an audited handler. If any job ran, invalidate the
+    // dashboard aggregate cache so those changes cannot be served stale (Layer 7).
+    if (rows && rows.length) { try { if (typeof AggCache !== 'undefined') AggCache.bump('dash'); } catch (_) {} }
   }
 
   // ── Job type dispatcher ────────────────────────────────────────────────────
@@ -306,6 +316,29 @@ function runDailyMaintenance() {
     } catch (_) {}
   });
   Jobs.runJobs();
+}
+
+// ── precomputeAggregates: warm the heavy GLOBAL aggregate blobs (Layer 7) ─────
+//
+// The dashboard summary/charts/SLA and the PO/SO approval charts + leaderboard
+// are precomputed for the GLOBAL scope and stored in AggCache so the common case
+// reads a warm cache instead of grinding the aggregation. This is best-effort and
+// purely an accelerator: the read-through cache plus write invalidation already
+// guarantee correctness, so a failure here is silent and harmless. Each piece is
+// isolated so one failing compute never blocks the others.
+function precomputeAggregates() {
+  if (typeof AggCache === 'undefined') return;
+  var G = { isGlobal: true, countries: [] };
+
+  // Dashboard GLOBAL blobs.
+  try { if (typeof _dashSummaryCompute_ === 'function') AggCache.set('dash.summary', 'G', _dashSummaryCompute_(G), 600); } catch (e) {}
+  try { if (typeof _dashChartsCompute_  === 'function') AggCache.set('dash.charts',  'G', _dashChartsCompute_(G),  600); } catch (e) {}
+  try { if (typeof _dashSlaCompute_     === 'function') AggCache.set('dash.sla',     'G', _dashSlaCompute_(G),     600); } catch (e) {}
+
+  // Approvals GLOBAL blobs. Charts default has no stage filter, so its signature
+  // is 'G|s=' (matching _oaCharts_ with no params); the leaderboard is 'G'.
+  try { if (typeof _oaChartsCompute_      === 'function') AggCache.set('oa.charts',      'G|s=', _oaChartsCompute_(G, {}),  900); } catch (e) {}
+  try { if (typeof _oaLeaderboardCompute_ === 'function') AggCache.set('oa.leaderboard', 'G',    _oaLeaderboardCompute_(G), 900); } catch (e) {}
 }
 
 // ── keepWarm: anti-cold-start ping ────────────────────────────────────────────

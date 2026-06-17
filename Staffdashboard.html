@@ -78,6 +78,10 @@
 
 <?!= HtmlService.createHtmlOutputFromFile('js_api').getContent(); ?>
 <?!= HtmlService.createHtmlOutputFromFile('js_app').getContent(); ?>
+<!-- Performance layer: per-user SWR cache, prefetch, optimistic writes, batch.
+     A transparent speed layer over API.call; loads after js_api/js_app so it can
+     wrap API.call and read the Router/HassCache it builds on. -->
+<?!= HtmlService.createHtmlOutputFromFile('js_perf').getContent(); ?>
 
 <!-- Load all staff module partials -->
 <?!= HtmlService.createHtmlOutputFromFile('partial_dashboard').getContent(); ?>
@@ -251,6 +255,11 @@
     var bundle  = me.bundle || {};
     var cacheNs = me.userId || me.email || 'staff';   // per-user cache namespace
 
+    // Bind the persistent SWR cache to THIS user before any data call runs. If a
+    // different user signed in on this browser, setUser purges the prior owner's
+    // cache first, so one user can never read another's cached data.
+    try { if (window.HassStore) HassStore.setUser(cacheNs); } catch (e) {}
+
     // Resolved permission union delivered by auth.me. The menu arrives already
     // filtered server-side, but loading the set here lets sections/actions gate
     // client-side via HassPerms.has(code) (server still enforces every call).
@@ -323,6 +332,7 @@
     // Logout.
     document.getElementById('logoutBtn').onclick = function () {
       try { HassCache.clearAll(); } catch (e) {}
+      try { if (window.HassStore) HassStore.clearAll(); } catch (e) {}
       API.logout().catch(function () {}).finally(function () {
         loadLoginPage();
       });
@@ -335,6 +345,25 @@
     // init bundle it is already authoritative, so pass that; otherwise the async
     // freshMenu()/catch above drives the landing once the menu resolves.
     goLanding(menuIsFinal);
+
+    // ── Predictive prefetch ── warm the SWR cache for the few most likely next
+    // pages so the first navigation paints instantly. The params MUST match each
+    // page's own first load() so the cache key lines up. Prefetch is low priority:
+    // it never starts while a user-initiated call is in flight (see js_perf).
+    try {
+      if (window.Prefetch) {
+        Prefetch.register('customers', [{ service: 'customers', action: 'list',         params: { limit: 20 } }]);
+        Prefetch.register('orders',    [{ service: 'orders',    action: 'list',         params: { limit: 50 } }]);
+        Prefetch.register('tickets',   [{ service: 'tickets',   action: 'list',         params: { limit: 50 } }]);
+        Prefetch.register('invoices',  [{ service: 'invoices',  action: 'list',         params: { limit: 50 } }]);
+        Prefetch.register('catalog',   [{ service: 'catalog',   action: 'listProducts', params: { limit: 50 } }]);
+        // Only warm pages this role can actually open (and skip the one we landed on).
+        var likely = ['customers', 'orders', 'tickets', 'invoices', 'catalog'].filter(function (r) {
+          return r !== Router.current() && _menuItems.some(function (i) { return i.id === r; });
+        });
+        Prefetch.warmLikely(likely);
+      }
+    } catch (e) {}
 
     // ── Perf marker: login-click → dashboard-usable ──
     // Login.html stashes the click time; by now the first screen has painted
@@ -497,12 +526,17 @@
     });
 
     // Nav items navigate; on mobile, selecting one closes the off-canvas drawer.
+    // Hovering or focusing an item prefetches that page's data (low priority) so
+    // the click resolves from cache. Prefetch never delays a user action.
     nav.querySelectorAll('.nav-item').forEach(function (el) {
       el.addEventListener('click', function () {
         document.getElementById('pageTitle').textContent = el.dataset.label;
         Router.navigate(el.dataset.route, {});
         closeDrawer();
       });
+      var warm = function () { try { if (window.Prefetch) Prefetch.warm(el.dataset.route); } catch (e) {} };
+      el.addEventListener('mouseenter', warm);
+      el.addEventListener('focus', warm);
     });
   }
 

@@ -18,39 +18,66 @@ Router.register('catalog', function (el) {
     });
   });
 
-  function loadCat() {
-    setHTML('catContent', spinnerHTML(24));
-    if (_active === 'products') {
-      API.call('catalog', 'listProducts', { limit: 50 }).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Unit</th><th>Status</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.sku || '—') + '</td><td>' + esc(r.name) + '</td>' +
-                   '<td>' + esc(r.category || '—') + '</td><td>' + esc(r.unit_of_measure || '—') + '</td>' +
-                   '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td></tr>';
-          }).join('') : emptyRow(5, 'No products.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
-    } else if (_active === 'depots') {
-      API.call('catalog', 'listDepots', {}).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>Depot</th><th>Country</th><th>Status</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.depot_name || r.name) + '</td><td>' + esc(r.country_code) + '</td><td>' + statusBadge(r.status || 'ACTIVE') + '</td></tr>';
-          }).join('') : emptyRow(3, 'No depots.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
+  function renderProducts(rows) {
+    setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Unit</th><th>Status</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (r) {
+        return '<tr><td>' + esc(r.sku || '-') + '</td><td>' + esc(r.name) + '</td>' +
+               '<td>' + esc(r.category || '-') + '</td><td>' + esc(r.unit_of_measure || '-') + '</td>' +
+               '<td>' + statusBadge(r.is_active ? 'ACTIVE' : 'INACTIVE') + '</td></tr>';
+      }).join('') : emptyRow(5, 'No products.')) +
+      '</tbody></table></div></div>');
+  }
+  function renderDepots(rows) {
+    setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Depot</th><th>Country</th><th>Status</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (r) {
+        return '<tr><td>' + esc(r.depot_name || r.name) + '</td><td>' + esc(r.country_code) + '</td><td>' + statusBadge(r.status || 'ACTIVE') + '</td></tr>';
+      }).join('') : emptyRow(3, 'No depots.')) +
+      '</tbody></table></div></div>');
+  }
+  function renderSegments(rows) {
+    setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Segment</th><th>Description</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (r) {
+        return '<tr><td>' + esc(r.segment_name || r.name) + '</td><td>' + esc(r.description || '-') + '</td></tr>';
+      }).join('') : emptyRow(2, 'No segments.')) +
+      '</tbody></table></div></div>');
+  }
+
+  // Each tab is a stale-while-revalidate read: instant from cache (warmed by the
+  // batch below), then a quiet background refresh.
+  function swrTab(action, params, render) {
+    if (API.swr) {
+      API.swr('catalog', action, params, render, {
+        onLoading: function () { setHTML('catContent', spinnerHTML(24)); },
+        onError:   function (e) { setHTML('catContent', errorCard(e, loadCat)); }
+      });
     } else {
-      API.call('catalog', 'listSegments', {}).then(function (rows) {
-        setHTML('catContent', '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-          '<thead><tr><th>Segment</th><th>Description</th></tr></thead><tbody>' +
-          (rows.length ? rows.map(function (r) {
-            return '<tr><td>' + esc(r.segment_name || r.name) + '</td><td>' + esc(r.description || '—') + '</td></tr>';
-          }).join('') : emptyRow(2, 'No segments.')) +
-          '</tbody></table></div></div>');
-      }).catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
+      setHTML('catContent', spinnerHTML(24));
+      API.call('catalog', action, params).then(render)
+        .catch(function (e) { setHTML('catContent', errorCard(e, loadCat)); });
     }
   }
-  loadCat();
+
+  function loadCat() {
+    if (_active === 'products')     swrTab('listProducts', { limit: 50 }, renderProducts);
+    else if (_active === 'depots')  swrTab('listDepots',   {},            renderDepots);
+    else                            swrTab('listSegments', {},            renderSegments);
+  }
+
+  // Layer 4: fetch all three reference datasets in ONE round-trip and seed the
+  // SWR cache, so the first tab paints from that single response and switching
+  // tabs is instant. Falls back to per-tab fetching if the batch path is absent.
+  if (API.batchWarm) {
+    setHTML('catContent', spinnerHTML(24));
+    API.batchWarm([
+      { service: 'catalog', action: 'listProducts', params: { limit: 50 } },
+      { service: 'catalog', action: 'listDepots',   params: {} },
+      { service: 'catalog', action: 'listSegments', params: {} }
+    ]).then(loadCat).catch(loadCat);
+  } else {
+    loadCat();
+  }
 });
 </script>
