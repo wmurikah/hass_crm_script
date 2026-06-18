@@ -1140,3 +1140,160 @@ function smokeOracleApprovals() {
   results.push(summary);
   return results;
 }
+
+// =============================================================================
+// smokeNotifications  -  NOT-1..4 flush job, templates, recipient resolution
+// =============================================================================
+//
+// Run smokeNotifications() from the GAS IDE. It exercises the notification path
+// WITHOUT sending a real email: it drives the flush's own helpers (claim,
+// dispatch, mark) on a single isolated row whose recipient is deliberately
+// unresolvable, so dispatch returns false and the row goes FAILED. Template
+// resolution and customer-email resolution are checked directly. A full
+// end-to-end SENT via the real sender is the manual checklist item (it would
+// send an actual email), so it is intentionally not asserted here.
+function smokeNotifications() {
+  var results = [];
+  var passed  = 0;
+  var failed  = 0;
+
+  function check(name, fn) {
+    try {
+      fn();
+      results.push('PASS  ' + name);
+      Logger.log('PASS  ' + name);
+      passed++;
+    } catch (e) {
+      results.push('FAIL  ' + name + '\n      ' + (e.message || String(e)));
+      Logger.log('FAIL  ' + name + ': ' + (e.message || String(e)));
+      failed++;
+    }
+  }
+
+  var seed         = seedAll();
+  var superAdminId = seed.userId;
+  var saToken      = Session.create(superAdminId, 'STAFF', 'SUPER_ADMIN',
+                                    '127.0.0.1', 'smoke-notif', 'KE').token;
+
+  var TAG = 'SMOKE-NOTIF';
+  var createdCustomers = [];
+  var custWithContact  = null;
+  var custNoContact    = null;
+
+  function cleanup() {
+    try { TursoClient.write('DELETE FROM notifications WHERE entity_id = ?', [TAG]); } catch (_) {}
+    try { TursoClient.write("DELETE FROM notification_templates WHERE template_code = 'SMOKE_EVENT'"); } catch (_) {}
+    createdCustomers.forEach(function (cid) {
+      try { TursoClient.write('DELETE FROM contacts WHERE customer_id = ?', [cid]); } catch (_) {}
+      try { TursoClient.write('DELETE FROM customers WHERE customer_id = ?', [cid]); } catch (_) {}
+    });
+  }
+  cleanup();
+
+  // ── 1. Template rendering is literal substitution; unknowns blank out ───────
+  check('1. _notifRenderTemplate_ substitutes {{vars}} and blanks unknowns (NOT-3)', function () {
+    var out = _notifRenderTemplate_('Order {{n}} total {{amt}}', { n: 'ORD-9', amt: '100' });
+    if (out !== 'Order ORD-9 total 100') throw new Error('got: ' + out);
+    if (_notifRenderTemplate_('Hi {{missing}}!', {}) !== 'Hi !') throw new Error('unknown var not blanked');
+  });
+
+  // ── 2. Authored template overrides the message; fallback when none (NOT-3) ──
+  check('2. template overrides caller subject/body; fallback used when none (NOT-3)', function () {
+    var up = processRequest({ service: 'notificationTemplates', action: 'upsert', sessionToken: saToken,
+      params: { template_code: 'SMOKE_EVENT', channel: 'IN_APP',
+                subject_template: 'Tpl: {{order_number}}', body_template: 'Body {{order_number}}' } });
+    if (!up.ok) throw new Error('upsert failed: ' + JSON.stringify(up.error));
+
+    var id1 = _notifyEmit_({ recipient_id: superAdminId, recipient_type: 'STAFF', channel: 'IN_APP',
+      event_key: 'SMOKE_EVENT', vars: { order_number: 'ORD-7' },
+      subject: 'FALLBACK', body: 'FALLBACK', entity_type: 'smoke', entity_id: TAG });
+    if (!id1) throw new Error('emit returned null');
+    var row1 = TursoClient.select('SELECT subject, body FROM notifications WHERE notification_id = ?', [id1])[0];
+    if (!row1 || row1.subject !== 'Tpl: ORD-7') throw new Error('template subject not used: ' + (row1 && row1.subject));
+    if (row1.body !== 'Body ORD-7') throw new Error('template body not used: ' + row1.body);
+
+    var id2 = _notifyEmit_({ recipient_id: superAdminId, recipient_type: 'STAFF', channel: 'IN_APP',
+      event_key: 'NO_SUCH_TEMPLATE', subject: 'FALLBACK SUBJ', body: 'FALLBACK BODY',
+      entity_type: 'smoke', entity_id: TAG });
+    var row2 = TursoClient.select('SELECT subject, body FROM notifications WHERE notification_id = ?', [id2])[0];
+    if (!row2 || row2.subject !== 'FALLBACK SUBJ') throw new Error('fallback subject not used: ' + (row2 && row2.subject));
+    if (row2.body !== 'FALLBACK BODY') throw new Error('fallback body not used: ' + row2.body);
+  });
+
+  // ── 3. CUSTOMER email resolves via the contact; missing -> null (NOT-4) ─────
+  check('3. CUSTOMER resolves to contact email; unresolvable -> null (NOT-4)', function () {
+    var c1 = processRequest({ service: 'customers', action: 'create', sessionToken: saToken,
+      params: { company_name: 'Smoke Notif Ltd', account_number: 'SMKN-' + Date.now(),
+                customer_type: 'B2B', country_code: 'KE' } });
+    if (!c1.ok) throw new Error('customer create failed: ' + JSON.stringify(c1.error));
+    custWithContact = c1.data.customer_id;
+    createdCustomers.push(custWithContact);
+
+    var ct = processRequest({ service: 'contacts', action: 'create', sessionToken: saToken,
+      params: { customer_id: custWithContact, first_name: 'Pat', last_name: 'Smoke',
+                email: 'pat.smoke@example.com', portal_role: 'MANAGER' } });
+    if (!ct.ok) throw new Error('contact create failed: ' + JSON.stringify(ct.error));
+
+    var email = _resolveRecipientEmail_(custWithContact, 'CUSTOMER');
+    if (email !== 'pat.smoke@example.com') throw new Error('expected contact email, got: ' + email);
+
+    var c2 = processRequest({ service: 'customers', action: 'create', sessionToken: saToken,
+      params: { company_name: 'Smoke NoEmail Ltd', account_number: 'SMKNE-' + Date.now(),
+                customer_type: 'B2B', country_code: 'KE' } });
+    if (!c2.ok) throw new Error('customer create failed: ' + JSON.stringify(c2.error));
+    custNoContact = c2.data.customer_id;
+    createdCustomers.push(custNoContact);
+
+    if (_resolveRecipientEmail_(custNoContact, 'CUSTOMER') !== null) {
+      throw new Error('expected null for customer with no contact');
+    }
+  });
+
+  // ── 4. Flush mechanics on one isolated row (NOT-1) ──────────────────────────
+  check('4. claim is single-winner; failure -> FAILED w/ attempts; SENT marks (NOT-1)', function () {
+    if (!custNoContact) throw new Error('custNoContact not set (step 3 failed)');
+    var id = _notifyEmit_({ recipient_id: custNoContact, recipient_type: 'CUSTOMER', channel: 'EMAIL',
+      subject: 'Smoke send', body: 'Smoke body', entity_type: 'smoke', entity_id: TAG });
+    if (!id) throw new Error('emit returned null');
+
+    var cols = _notifFlushColumns_();
+    var row = TursoClient.select(
+      'SELECT notification_id, recipient_id, recipient_type, channel, subject, body, status, updated_at ' +
+      'FROM notifications WHERE notification_id = ?', [id])[0];
+
+    if (!_notifFlushClaim_(row, cols)) throw new Error('first claim should win');
+    if (_notifFlushClaim_(row, cols))  throw new Error('second claim should lose (no double send)');
+
+    if (_notifDispatch_(row) !== false) throw new Error('dispatch should fail for unresolvable recipient');
+    _notifFlushMarkFailed_(row, cols, 'forced smoke failure');
+    var after = TursoClient.select(
+      'SELECT status' + (cols.attempts ? ', ' + cols.attempts + ' AS att' : '') +
+      ' FROM notifications WHERE notification_id = ?', [id])[0];
+    if (after.status !== 'FAILED') throw new Error('expected FAILED, got ' + after.status);
+    if (cols.attempts && parseInt(after.att, 10) < 1) throw new Error('attempts not incremented at claim');
+
+    _notifFlushMarkSent_(row, cols);
+    var sent = TursoClient.select('SELECT status FROM notifications WHERE notification_id = ?', [id])[0];
+    if (sent.status !== 'SENT') throw new Error('expected SENT after markSent, got ' + sent.status);
+
+    var cnt = TursoClient.select('SELECT COUNT(*) AS n FROM notifications WHERE notification_id = ?', [id])[0];
+    if (parseInt(cnt.n, 10) !== 1) throw new Error('duplicate rows for one notification id');
+  });
+
+  // ── 5. NOTIF_FLUSH job type + runNotifFlush trigger are wired (NOT-1) ───────
+  check('5. jobNotifFlush, runNotifFlush, and installAllTriggers are present (NOT-1)', function () {
+    if (typeof jobNotifFlush !== 'function') throw new Error('jobNotifFlush missing');
+    if (typeof runNotifFlush !== 'function') throw new Error('runNotifFlush missing');
+    if (typeof Jobs === 'undefined' || !Jobs.installAllTriggers) throw new Error('installAllTriggers missing');
+  });
+
+  cleanup();
+  try { Session.invalidate(saToken); } catch (_) {}
+
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeNotifications: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary);
+  results.push(summary);
+  return results;
+}

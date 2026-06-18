@@ -244,6 +244,17 @@ var Tickets = (function () {
       before: { assigned_to: before.assigned_to },
       after:  { assigned_to: assignedTo },
     });
+    // NOT-2: notify the assignee. Best-effort; never blocks the assignment.
+    try {
+      Notify.emit({
+        recipient_id: assignedTo, recipient_type: 'STAFF',
+        channel: 'EMAIL', event_key: 'TICKET_ASSIGNED',
+        vars: { ticket_number: before.ticket_number, subject: before.subject, ticket_id: ticketId },
+        subject: 'Ticket assigned to you: ' + (before.ticket_number || ticketId),
+        body:    'Ticket ' + (before.ticket_number || ticketId) + ' (' + (before.subject || '') + ') has been assigned to you.',
+        entity_type: 'tickets', entity_id: ticketId, country_code: before.country_code,
+      });
+    } catch (_) {}
     return { success: true };
   }
 
@@ -380,6 +391,18 @@ var Tickets = (function () {
       before: { status: before.status },
       after:  { status: 'RESOLVED', resolution_type: resolutionType, resolution_summary: summary },
     });
+    // NOT-2: notify the requester (the staff member who logged the ticket).
+    // Best-effort; never blocks the resolution.
+    try {
+      Notify.emit({
+        recipient_id: before.created_by, recipient_type: 'STAFF',
+        channel: 'EMAIL', event_key: 'TICKET_RESOLVED',
+        vars: { ticket_number: before.ticket_number, resolution_summary: summary, ticket_id: ticketId },
+        subject: 'Ticket resolved: ' + (before.ticket_number || ticketId),
+        body:    'Ticket ' + (before.ticket_number || ticketId) + ' has been resolved. Resolution: ' + summary,
+        entity_type: 'tickets', entity_id: ticketId, country_code: before.country_code,
+      });
+    } catch (_) {}
     return { success: true, status: 'RESOLVED' };
   }
 

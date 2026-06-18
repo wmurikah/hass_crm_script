@@ -11,6 +11,7 @@
  *   runDailyMaintenance()   — daily at 02:00 (SESSION_SWEEP, AUDIT_LOG_RETENTION, MFA_CHALLENGE_SWEEP)
  *   runHourlyApproval()     — hourly (ORACLE_SYNC)
  *   runSlaBreachSweep()     — every 15 min (SLA_BREACH_SWEEP)
+ *   runNotifFlush()         - every 5 min (NOTIF_FLUSH: drain PENDING notifications)
  *
  * job_queue columns: job_id, type, status, priority, next_run_at,
  *   attempts, max_attempts, payload, completed_at, created_at, updated_at
@@ -28,6 +29,10 @@ var Jobs = (function () {
     { fn: 'runDailyMaintenance',     type: 'hour',    value: 2   },
     { fn: 'runHourlyApproval',       type: 'minutes', value: 60  },
     { fn: 'runSlaBreachSweep',       type: 'minutes', value: 15  },
+    // Drain PENDING notifications on a short schedule (NOT-1). The actual send
+    // (claim, dispatch, mark SENT/FAILED) lives in jobNotifFlush; this just runs
+    // the NOTIF_FLUSH job type frequently. No-ops cleanly when the queue is empty.
+    { fn: 'runNotifFlush',           type: 'minutes', value: 5   },
     // Near-real-time Oracle approvals pull. Apps Script has no push, so a short
     // interval scheduled pull is the closest equivalent; it no-ops silently
     // unless the integration is enabled and configured (see runOracleApprovalsSync).
@@ -136,6 +141,7 @@ var Jobs = (function () {
     try { payload = JSON.parse(job.payload || '{}'); } catch (_) {}
 
     switch (job.type) {
+      case 'NOTIF_FLUSH':           return _handleNotifFlush_(payload);
       case 'ORACLE_SYNC':           return _handleOracleSync_(payload);
       case 'ORACLE_APPROVALS_SYNC': return _handleOracleApprovalsSync_(payload);
       case 'MPESA_RECON':           return _handleMpesaRecon_(payload);
@@ -152,6 +158,18 @@ var Jobs = (function () {
   }
 
   // ── Job handlers ───────────────────────────────────────────────────────────
+
+  // NOT-1: drain PENDING notifications through the channel senders. The flush is
+  // idempotent (it claims each row before sending) and caps its own per-row
+  // retries, so a failed batch never double-sends and never loops forever. The
+  // core lives in 60_integ_notifications.gs so the emit and send paths stay
+  // cleanly reusable.
+  function _handleNotifFlush_(payload) {
+    if (typeof jobNotifFlush !== 'function') {
+      throw new Error('NOTIF_FLUSH: jobNotifFlush is not available');
+    }
+    return jobNotifFlush(payload || {});
+  }
 
   function _handleOracleSync_(payload) {
     OracleInteg.sync();
@@ -192,15 +210,21 @@ var Jobs = (function () {
       "AND d.expiry_date >= date('now') LIMIT 200"
     );
     docs.forEach(function (doc) {
-      try {
-        TursoClient.write(
-          "INSERT INTO notifications (notification_id,recipient_id,recipient_type,channel,subject,body,status,entity_type,entity_id,country_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-          [Utilities.getUuid(), doc.customer_id, 'CUSTOMER', 'EMAIL',
-           'Document expiring soon: ' + doc.document_type,
-           'Your document (' + doc.document_type + ') expires on ' + doc.expiry_date + '. Please renew.',
-           'PENDING', 'documents', doc.document_id, doc.country_code, nowIso(), nowIso()]
-        );
-      } catch (_) {}
+      // Best-effort emit through the shared helper so the recipient resolves
+      // correctly (NOT-4: CUSTOMER -> customer's contact email) and a template
+      // can override the message (NOT-3). Recipient stays the customer.
+      _notifyEmit_({
+        recipient_id:   doc.customer_id,
+        recipient_type: 'CUSTOMER',
+        channel:        'EMAIL',
+        event_key:      'DOCUMENT_EXPIRING',
+        vars:           { document_type: doc.document_type, expiry_date: doc.expiry_date, document_id: doc.document_id },
+        subject:        'Document expiring soon: ' + doc.document_type,
+        body:           'Your document (' + doc.document_type + ') expires on ' + doc.expiry_date + '. Please renew.',
+        entity_type:    'documents',
+        entity_id:      doc.document_id,
+        country_code:   doc.country_code,
+      });
     });
   }
 
@@ -280,6 +304,31 @@ var Jobs = (function () {
 function runJobs()              { Jobs.runJobs(); }
 function runSlaBreachSweep()    { Jobs.runJobs(); }  // same runner, SLA jobs inserted separately
 function runHourlyApproval()    { Jobs.runJobs(); }
+
+/**
+ * runNotifFlush - short-interval notification drain (NOT-1). Enqueues a single
+ * NOTIF_FLUSH job (deduped, so the queue never piles up if a run is slow) and
+ * then drains the queue now, so the flush runs through the audited job_queue path
+ * with its retry/backoff. The per-notification claim and SENT/FAILED bookkeeping
+ * live in jobNotifFlush (60_integ_notifications.gs). Never throws.
+ */
+function runNotifFlush() {
+  try {
+    var pending = TursoClient.select(
+      "SELECT job_id FROM job_queue WHERE type = 'NOTIF_FLUSH' AND status IN ('PENDING','RUNNING') LIMIT 1"
+    );
+    if (!pending.length) {
+      var now = nowIso();
+      TursoClient.write(
+        'INSERT INTO job_queue (job_id,type,status,priority,next_run_at,attempts,max_attempts,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'NOTIF_FLUSH', 'PENDING', 5, now, 0, 3, '{}', now, now]
+      );
+    }
+  } catch (e) {
+    try { Logger.log('[runNotifFlush] enqueue failed: ' + (e && e.message ? e.message : e)); } catch (_) {}
+  }
+  Jobs.runJobs();
+}
 
 /**
  * runOracleApprovalsSync - short-interval pull for the Oracle PO/SO/LA timing

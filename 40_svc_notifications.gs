@@ -47,8 +47,25 @@ function _notifScopeData_(session) {
 }
 
 // ── Shared: enqueue a notification (internal helper, no auth required) ────────
+//
+// Fix 3 (NOT-3): when the caller supplies an event_key, the subject and body are
+// rendered from the matching notification_templates row (resolved by template
+// code) and the caller-supplied subject/body are used only as a fallback when no
+// active template matches. Authoring a template therefore changes the message
+// with no code change.
 
 function _enqueueNotification_(opts) {
+  opts = opts || {};
+  var channel = String(opts.channel || 'IN_APP').toUpperCase();
+
+  var subject = String(opts.subject || '');
+  var body    = String(opts.body    || '');
+  var tpl = _notifResolveTemplate_(opts.event_key);
+  if (tpl) {
+    if (tpl.subject_template) subject = _notifRenderTemplate_(tpl.subject_template, opts.vars);
+    if (tpl.body_template)    body    = _notifRenderTemplate_(tpl.body_template,    opts.vars);
+  }
+
   var notifId = genId('NTF');
   var now     = nowIso();
   TursoClient.write(
@@ -60,9 +77,9 @@ function _enqueueNotification_(opts) {
       notifId,
       String(opts.recipient_id   || ''),
       String(opts.recipient_type || 'STAFF'),
-      String(opts.channel        || 'IN_APP').toUpperCase(),
-      String(opts.subject        || ''),
-      String(opts.body           || ''),
+      channel,
+      subject,
+      body,
       'PENDING',
       String(opts.entity_type    || ''),
       String(opts.entity_id      || ''),
@@ -72,6 +89,131 @@ function _enqueueNotification_(opts) {
   );
   return notifId;
 }
+
+// ── Template resolution (NOT-3) ───────────────────────────────────────────────
+//
+// The event key IS the template_code: the live notification_templates table keys
+// on template_code and has no separate event column (confirmed by introspection),
+// so an event such as ORDER_APPROVED resolves the template whose template_code is
+// 'ORDER_APPROVED'. A missing or inactive template resolves to null and the
+// caller subject/body are used unchanged.
+//
+// Canonical event keys emitted by the business paths (author a template under any
+// of these codes to override its message):
+//   ORDER_SUBMITTED, ORDER_APPROVED, ORDER_REJECTED, PAYMENT_APPROVED,
+//   TICKET_ASSIGNED, TICKET_RESOLVED, DOCUMENT_EXPIRING
+
+function _notifResolveTemplate_(eventKey) {
+  var code = String(eventKey || '').trim().toUpperCase();
+  if (!code) return null;
+  try {
+    var rows = TursoClient.select(
+      'SELECT subject_template, body_template, channel FROM notification_templates ' +
+      'WHERE template_code = ? AND is_active = 1 LIMIT 1',
+      [code]
+    );
+    return rows.length ? rows[0] : null;
+  } catch (_) { return null; }
+}
+
+// Render a {{var}} template against a flat vars map. Unknown placeholders render
+// as empty so a partially-populated vars map can never leak '{{...}}' to a user.
+function _notifRenderTemplate_(tplStr, vars) {
+  var v = vars || {};
+  return String(tplStr || '').replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, function (m, key) {
+    return (v[key] !== undefined && v[key] !== null) ? String(v[key]) : '';
+  });
+}
+
+// ── Reusable emit helpers (NOT-2) ─────────────────────────────────────────────
+//
+// Every emit is best-effort: a notification failure can never block, delay, or
+// fail the business action it accompanies. These thin, uniform helpers are the
+// single surface the order/ticket/payment/document paths call today, and the one
+// the later SLA, approvals and signup work should reuse. Nothing here sends; the
+// flush job (jobNotifFlush, 60_integ_notifications.gs) is the only sender.
+
+function _notifyEmit_(opts) {
+  try {
+    opts = opts || {};
+    if (!opts.recipient_id) return null;
+    return _enqueueNotification_({
+      recipient_id:   opts.recipient_id,
+      recipient_type: opts.recipient_type || 'STAFF',
+      channel:        opts.channel || 'EMAIL',
+      event_key:      opts.event_key || '',
+      vars:           opts.vars || {},
+      subject:        opts.subject || '',
+      body:           opts.body || '',
+      entity_type:    opts.entity_type || '',
+      entity_id:      opts.entity_id || '',
+      country_code:   opts.country_code || '',
+    });
+  } catch (e) {
+    try { Log.warn({ service: 'notify', action: 'emit', msg: (e && e.message) || String(e) }); } catch (_) {}
+    return null;
+  }
+}
+
+// Emit one notification per recipient. `recipients` is an array of either plain
+// ids or { recipient_id, recipient_type } objects; `opts` carries the shared
+// channel/event_key/vars/subject/body. Returns the ids actually enqueued.
+function _notifyEmitMany_(recipients, opts) {
+  var ids = [];
+  try {
+    (recipients || []).forEach(function (r) {
+      var rid = (r && (r.recipient_id || r.user_id)) || (typeof r === 'string' ? r : null);
+      if (!rid) return;
+      var rtype = (r && r.recipient_type) || (opts && opts.recipient_type) || 'STAFF';
+      var merged = Object.assign({}, opts || {}, { recipient_id: rid, recipient_type: rtype });
+      var id = _notifyEmit_(merged);
+      if (id) ids.push(id);
+    });
+  } catch (e) {
+    try { Log.warn({ service: 'notify', action: 'emitMany', msg: (e && e.message) || String(e) }); } catch (_) {}
+  }
+  return ids;
+}
+
+// Resolve the staff who can approve an order, scoped to the order's country and
+// excluding the creator (separation of duties mirrors _approveHandler_). The
+// approval permission tier matches the amount thresholds the approve handler
+// enforces. Best-effort: returns [] on any error so a submit can never be blocked
+// by approver lookup.
+function _notifyResolveOrderApprovers_(order) {
+  try {
+    if (!order) return [];
+    var amount = parseFloat(order.total_amount) || 0;
+    var perm = amount <= 100000 ? 'order.approve_low'
+             : (amount <= 1000000 ? 'order.approve_mid' : 'order.approve_high');
+    var cc = String(order.country_code || '');
+    var rows = TursoClient.select(
+      'SELECT DISTINCT u.user_id FROM users u ' +
+      'JOIN user_roles ur ON ur.user_id = u.user_id ' +
+      'JOIN role_permissions rp ON rp.role_code = ur.role_code ' +
+      'LEFT JOIN roles r ON r.role_code = ur.role_code ' +
+      'WHERE rp.permission_code IN (?, ?) ' +
+      "AND UPPER(COALESCE(u.status,'ACTIVE')) = 'ACTIVE' " +
+      'AND u.user_id != ? ' +
+      "AND (UPPER(COALESCE(r.scope,'')) = 'GLOBAL' OR u.country_code = ? " +
+      "OR (',' || COALESCE(u.countries_access,'') || ',') LIKE ?) " +
+      'LIMIT 25',
+      [perm, '*', String(order.created_by_id || ''), cc, '%,' + cc + ',%']
+    );
+    return rows.map(function (r) { return { recipient_id: r.user_id, recipient_type: 'STAFF' }; });
+  } catch (e) {
+    try { Log.warn({ service: 'notify', action: 'resolveApprovers', msg: (e && e.message) || String(e) }); } catch (_) {}
+    return [];
+  }
+}
+
+// Single reusable surface for the cross-cutting emit helpers.
+var Notify = {
+  emit:                  _notifyEmit_,
+  emitMany:              _notifyEmitMany_,
+  resolveOrderApprovers: _notifyResolveOrderApprovers_,
+  enqueue:               _enqueueNotification_,
+};
 
 // ── notifications.list ────────────────────────────────────────────────────────
 
