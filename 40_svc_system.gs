@@ -1,5 +1,5 @@
 /**
- * 40_svc_system.gs  —  Hass CMS rebuild  (Stage 5G)
+ * 40_svc_system.gs  -  Hass CMS rebuild  (Stage 5G)
  *
  * System health and diagnostics endpoints.
  *
@@ -8,7 +8,7 @@
  * All handlers require order.view except ping (public via dispatcher).
  */
 
-// ── system.ping  —  liveness check, no auth ───────────────────────────────────
+// ── system.ping  -  liveness check, no auth ───────────────────────────────────
 
 function _systemPing_(ctx, params) {
   return { pong: true, ts: nowIso() };
@@ -57,7 +57,7 @@ function _systemDbStats_(ctx, params) {
     'users', 'customers', 'contacts', 'orders', 'order_lines',
     'tickets', 'ticket_comments', 'invoices', 'payment_uploads',
     'approval_requests', 'audit_log', 'sessions',
-    'sla_policies', 'sla_breaches', 'notifications',
+    'sla_config', 'sla_data', 'notifications',
     'knowledge_articles', 'knowledge_categories',
   ];
   var stats = {};
