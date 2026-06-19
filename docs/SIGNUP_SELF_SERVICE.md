@@ -21,66 +21,65 @@ self-contained block that never touches the login handler.
 
 ## Introspection results (`signup_requests`)
 
-The Turso credentials live in Apps Script Script Properties (`TURSO_URL`,
-`TURSO_TOKEN`) and are only reachable from the deployed GAS runtime, so the live
-`PRAGMA table_info(signup_requests)` runs **inside the new code at request time**
-(`_signupReqLiveColumns_`), exactly like the existing `SchemaIntrospect` and the
-additive ALTER pattern in `40_svc_signups.gs`. The column and value names below were
-confirmed by cross-referencing every piece of code that already reads or writes the
-table.
+The live columns are authoritative. Run `smokeSignupSchema()` from the Apps Script
+IDE to print `PRAGMA table_info(signup_requests)` (the credentials live in Script
+Properties `TURSO_URL` / `TURSO_TOKEN` and are reachable only from the deployed GAS
+runtime); the same introspection backs `migrateSignupStatusDefault()`. The canonical
+DDL is in `003_signup_requests_schema.sql`.
 
-Base columns (from `auth.signup`, `signupRequests.list`, `signupRequests.approve`,
-and the notifications emit):
+Confirmed columns:
 
 - `request_id` (PK, `TABLES.signup_requests` / `PK.signup_requests = request_id`)
-- `email`, `first_name`, `last_name`, `phone`
-- `status`, `submitted_at`, `created_at`, `updated_at`
-- review/bookkeeping columns added by `_signupEnsureColumns_`: `reviewed_by`,
-  `reviewed_at`, `decision_reason`, `provisioned_id`, `provisioned_type`
+- identity / KYC: `company_name`, `first_name`, `last_name`, `email`, `phone`,
+  `job_title`, `account_type`, `customer_id`, `country_code`, `tax_pin`,
+  `registration_number`, `certificate_of_incorporation`, `dealer_code`,
+  `station_name`, `card_number`, `kra_pin`, `account_number`, `company_address`
+- credential placeholder: `pending_password_hash` (left null at signup)
+- lifecycle: `kyc_status` (default `PENDING`), `status` (default `PENDING_APPROVAL`)
+- review: `approved_by`, `approved_at`, `rejection_reason`, `rejected_at`
+- timestamp: `submitted_at` (default `datetime('now')`)
 
-Pending status value (confirmed): **`PENDING_APPROVAL`**. This is the exact value
-`signupRequests.list` filters on by default (`40_svc_signups.gs`), so a new row shows
-under "Pending review" in the admin page.
+There is **no** `created_at`, `updated_at`, `reviewed_by`, `reviewed_at`,
+`decision_reason`, `provisioned_id`, `provisioned_type`, `contact_name`,
+`contact_role`, or `metadata` column. PR #160 assumed several of those; this PR
+repoints every read/write onto the real columns and removes the best-effort
+`ALTER TABLE ... ADD COLUMN` helpers so no duplicate column can ever be created.
 
-### Columns this feature adds (additive, idempotent)
+Pending status value: **`PENDING_APPROVAL`**. This is the value `signupRequests.list`
+filters on by default (`40_svc_signups.gs`), so a new row shows under "Pending
+review". Both producers (`auth.signup`, `signupRequests.create`) write it explicitly,
+and the column default is moved from `PENDING` to `PENDING_APPROVAL` by
+`migrateSignupStatusDefault()` so the default agrees with the queue.
 
-Added through the same guarded `ALTER TABLE signup_requests ADD COLUMN ...` helper
-used elsewhere (a column that already exists makes the ALTER a no-op):
+### Columns the producer writes (all already exist; nothing is created)
 
-| Column | Holds |
+`signupRequests.create` maps its inputs onto existing columns only:
+
+| Input | Column |
 | --- | --- |
-| `company_name` | Company or trading name |
-| `country_code` | Market code, one of `KE UG TZ RW DRC SS SO ZM MW` |
-| `tax_pin` | Tax PIN or VAT number |
-| `registration_number` | Business registration number |
-| `contact_name` | Contact person full name (also split into `first_name`/`last_name`) |
-| `contact_role` | Contact person role/title |
-| `metadata` | JSON: optional fields + consent record |
+| Company or trading name | `company_name` |
+| Country/market (`KE UG TZ RW DRC SS SO ZM MW`) | `country_code` |
+| Tax PIN or VAT number | `tax_pin` |
+| Business registration number | `registration_number` |
+| Contact person name | split into `first_name` / `last_name` |
+| Role | `job_title` |
+| Work email | `email` |
+| Phone | `phone` |
+| (constant) | `status` = `PENDING_APPROVAL` |
+| (constant) | `submitted_at` |
 
-The single contact name is also split into the existing `first_name`/`last_name`
-columns so the admin list (which renders `first_name + last_name`) and the approve
-flow (which reads `req.first_name` / `req.last_name`) keep working unchanged.
+The INSERT names only columns that physically exist (`_signupReqLiveColumns_`
+filters the candidate against `PRAGMA table_info`), so the producer can never add a
+column. No password is collected, so `pending_password_hash` stays null, and
+`kyc_status` is left to its own default.
 
-### Metadata JSON shape
+### Consent, products, notes
 
-```json
-{
-  "products_of_interest": ["AGO", "LPG"],
-  "notes": "approx 30,000 L/month, credit terms preferred",
-  "market_label": "Kenya",
-  "consent": {
-    "given": true,
-    "version": "self-signup-v1-2026-06",
-    "accepted_at": "2026-06-19T08:30:00.000Z",
-    "statement": "Authorised to request an account for the business and consents to processing of the submitted details for verification."
-  },
-  "source": "login_self_signup"
-}
-```
-
-Consent is captured as a flag, a version string, and a timestamp, per requirement.
-Bump `_SIGNUP_CONSENT_VERSION_` whenever the consent wording or the linked privacy
-notice changes.
+Consent remains a required gate (validated client- and server-side), but the live
+schema has no column to persist it, so it is not stored. The optional "products of
+interest" and "notes" fields likewise have no column and are not persisted. The
+modal still collects them (the modal is unchanged apart from the scroll fix); the
+server simply ignores anything without a real column.
 
 ## Form fields (light KYC only)
 
@@ -138,10 +137,17 @@ trapping, escape-to-close, backdrop/Cancel close, and a fully responsive layout.
    "Request received" confirmation explaining credentials arrive by email after review.
    In the admin app, open Sign-up Requests, filter Pending review, and confirm the new
    row shows (email, name, phone, status PENDING_APPROVAL, submitted time).
-5. **Consent recorded**: inspect the new row's `metadata` JSON and confirm
-   `consent.given = true`, a `version`, and an `accepted_at` timestamp; confirm the
-   first-class columns (`company_name`, `country_code`, `tax_pin`,
-   `registration_number`, `contact_name`, `contact_role`) are populated.
+5. **Real columns populated**: inspect the new row and confirm the existing columns
+   `company_name`, `country_code`, `tax_pin`, `registration_number`, `first_name`,
+   `last_name`, and `job_title` (the contact role) are populated, `status` is
+   `PENDING_APPROVAL`, and `pending_password_hash` is null. (Consent is a required
+   gate but has no column to persist; products/notes have no column either.)
+5b. **Approve/reject write the real columns**: approve a request and confirm
+   `status='APPROVED'`, `approved_by`, and `approved_at` are set (and `customer_id`
+   when provisioning a portal contact); reject another and confirm `status='REJECTED'`,
+   `rejection_reason`, and `rejected_at` are set. Confirm no `reviewed_*`,
+   `decision_reason`, or `provisioned_*` columns were added (`smokeSignupSchema()`
+   asserts this automatically).
 6. **Duplicate handled gracefully**: submit again with the same email. A quiet,
    specific "already under review" message shows and the form stays usable. No second
    row is created. The message never indicates whether a real account exists.

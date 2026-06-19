@@ -1373,3 +1373,126 @@ function smokeStep3() {
   results.push(summary);
   return results;
 }
+
+// =============================================================================
+// smokeSignupSchema  -  signup_requests reconciliation (introspection + e2e)
+//   DB-touching: run from the GAS IDE. Prints the live PRAGMA table_info
+//   introspection (paste it into the PR), asserts the REAL columns exist and the
+//   drifted ones (created_at/updated_at/reviewed_*/decision_reason/provisioned_*/
+//   contact_*/metadata) do NOT, then runs a non-invasive create -> list ->
+//   verify -> cleanup so a new request shows under Pending review and the real
+//   columns are written with NO duplicate columns added. The approve/reject
+//   target columns are verified at the column level here; the full provisioning
+//   flow (which creates a user/contact and emails credentials) is a manual UI
+//   test in the checklist.
+// =============================================================================
+function smokeSignupSchema() {
+  var results = [], passed = 0, failed = 0;
+  function check(name, fn) {
+    try { fn(); results.push('PASS  ' + name); Logger.log('PASS  ' + name); passed++; }
+    catch (e) { results.push('FAIL  ' + name + '\n      ' + (e.message || String(e))); Logger.log('FAIL  ' + name + ': ' + (e.message || String(e))); failed++; }
+  }
+  function liveCols() { return TursoClient.select('PRAGMA table_info(signup_requests)').map(function (c) { return String(c.name); }); }
+  function hasCol(set, name) { var lc = name.toLowerCase(); return set.some(function (c) { return c.toLowerCase() === lc; }); }
+
+  // 1) Introspection output (authoritative live schema), logged in full for the PR.
+  var info = TursoClient.select('PRAGMA table_info(signup_requests)');
+  Logger.log('signup_requests PRAGMA table_info:\n' + JSON.stringify(info, null, 2));
+  var colSet = info.map(function (c) { return String(c.name); });
+
+  var DRIFT = ['created_at', 'updated_at', 'reviewed_by', 'reviewed_at', 'decision_reason',
+               'provisioned_id', 'provisioned_type', 'contact_name', 'contact_role', 'metadata'];
+
+  check('Real review columns present (status, approved_by, approved_at, rejection_reason, rejected_at, customer_id)', function () {
+    ['status', 'approved_by', 'approved_at', 'rejection_reason', 'rejected_at', 'customer_id'].forEach(function (c) {
+      if (!hasCol(colSet, c)) throw new Error('missing real column: ' + c);
+    });
+  });
+  check('Real producer columns present (company_name, country_code, tax_pin, registration_number, job_title)', function () {
+    ['company_name', 'country_code', 'tax_pin', 'registration_number', 'job_title'].forEach(function (c) {
+      if (!hasCol(colSet, c)) throw new Error('missing real column: ' + c);
+    });
+  });
+  check('No drifted columns exist (PR #160 drift fully reconciled)', function () {
+    var present = DRIFT.filter(function (c) { return hasCol(colSet, c); });
+    if (present.length) throw new Error('drifted columns still present: ' + present.join(', '));
+  });
+  check('status column default is PENDING_APPROVAL (else run migrateSignupStatusDefault())', function () {
+    var s = info.filter(function (c) { return String(c.name).toLowerCase() === 'status'; })[0];
+    var d = s && s.dflt_value != null ? String(s.dflt_value) : '';
+    if (d.indexOf('PENDING_APPROVAL') === -1) {
+      throw new Error('status default is ' + (d || '(none)') + '; run migrateSignupStatusDefault() during deploy');
+    }
+  });
+
+  // 2) End-to-end create -> list -> verify -> cleanup (non-invasive: no provisioning).
+  var seed      = seedAll();
+  var saToken   = Session.create(seed.userId, 'STAFF', 'SUPER_ADMIN', '127.0.0.1', 'smoke-signups', 'KE').token;
+  var testEmail = 'smoke.signup+' + Date.now() + '@example.com';
+  var beforeCols = liveCols();
+  var createdId  = null;
+
+  check('signupRequests.create (public, no session) accepts a valid request', function () {
+    var r = processRequest({ service: 'signupRequests', action: 'create', params: {
+      company_name: 'Smoke Signup Ltd', country_code: 'KE', tax_pin: 'A123', registration_number: 'BRS-1',
+      contact_name: 'Test User', contact_role: 'Procurement Manager',
+      email: testEmail, phone: '+254700000000', consent: true,
+    }});
+    if (!r || r.ok !== true || !r.data || r.data.received !== true || r.data.duplicate === true) {
+      throw new Error('unexpected create result: ' + JSON.stringify(r));
+    }
+  });
+
+  check('Row written on the REAL columns; status PENDING_APPROVAL; no password stored', function () {
+    var rows = TursoClient.select('SELECT * FROM signup_requests WHERE LOWER(email) = ? LIMIT 1', [testEmail]);
+    if (!rows.length) throw new Error('created row not found');
+    var row = rows[0]; createdId = row.request_id;
+    if (String(row.status) !== 'PENDING_APPROVAL')                  throw new Error('status not PENDING_APPROVAL: ' + row.status);
+    if (String(row.company_name) !== 'Smoke Signup Ltd')           throw new Error('company_name not written');
+    if (String(row.country_code) !== 'KE')                          throw new Error('country_code not written');
+    if (String(row.job_title || '') !== 'Procurement Manager')     throw new Error('role not mapped to job_title');
+    if (String(row.first_name || '') !== 'Test')                   throw new Error('contact name not split into first_name');
+    if (row.pending_password_hash != null)                         throw new Error('pending_password_hash must be null at signup');
+  });
+
+  check('Create added NO new (duplicate) columns to signup_requests', function () {
+    var afterCols = liveCols();
+    if (afterCols.length !== beforeCols.length) {
+      throw new Error('column count changed ' + beforeCols.length + ' -> ' + afterCols.length + ' (a column was added)');
+    }
+  });
+
+  check('New request appears under Pending review (signupRequests.list default)', function () {
+    var r = processRequest({ service: 'signupRequests', action: 'list', sessionToken: saToken, params: { status: 'PENDING_APPROVAL', limit: 200 } });
+    if (!r || r.ok !== true) throw new Error('list failed: ' + JSON.stringify(r && r.error));
+    var found = (r.data || []).some(function (x) { return String(x.email).toLowerCase() === testEmail; });
+    if (!found) throw new Error('test request not listed under PENDING_APPROVAL');
+  });
+
+  check('Real review columns accept the approve then reject writes (column-level)', function () {
+    if (!createdId) throw new Error('no created row to update');
+    var now = nowIso();
+    TursoClient.write('UPDATE signup_requests SET status = ?, approved_by = ?, approved_at = ?, customer_id = ? WHERE request_id = ?',
+                      ['APPROVED', seed.userId, now, 'CUST-SMOKE', createdId]);
+    var a = TursoClient.select('SELECT status, approved_by, approved_at, customer_id FROM signup_requests WHERE request_id = ?', [createdId])[0];
+    if (!a || a.status !== 'APPROVED' || !a.approved_by || !a.approved_at || a.customer_id !== 'CUST-SMOKE') {
+      throw new Error('approve columns not set: ' + JSON.stringify(a));
+    }
+    TursoClient.write('UPDATE signup_requests SET status = ?, rejection_reason = ?, rejected_at = ? WHERE request_id = ?',
+                      ['REJECTED', 'smoke reason', now, createdId]);
+    var b = TursoClient.select('SELECT status, rejection_reason, rejected_at FROM signup_requests WHERE request_id = ?', [createdId])[0];
+    if (!b || b.status !== 'REJECTED' || !b.rejection_reason || !b.rejected_at) {
+      throw new Error('reject columns not set: ' + JSON.stringify(b));
+    }
+  });
+
+  // Cleanup: drop the test row and the session so the test leaves no residue.
+  try { if (createdId) TursoClient.write('DELETE FROM signup_requests WHERE request_id = ?', [createdId]); } catch (_) {}
+  try { Session.invalidate(saToken); } catch (_) {}
+
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeSignupSchema: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary); results.push(summary);
+  return results;
+}
