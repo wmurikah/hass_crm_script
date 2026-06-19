@@ -96,6 +96,38 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // ── Inbound M-Pesa STK callback (INTG-1) ─────────────────────────────────────
+  // The Daraja STK push result is an EXTERNAL callback, not app UI data, so it is
+  // the sanctioned exception to the google.script.run rule: a deliberate doPost
+  // webhook gated by a shared secret carried in the callback URL
+  // (?hook=mpesa&secret=...). It activates ONLY when hook/source=mpesa AND the
+  // ?secret= param matches MPESA_CALLBACK_SECRET, and MpesaInteg.callback writes
+  // solely to the payment table (payment_uploads). Every other request falls
+  // through to the unchanged processRequest path below.
+  try {
+    var mp      = (e && e.parameter) || {};
+    var isMpesa = (mp.hook === 'mpesa' || mp.source === 'mpesa');
+    if (isMpesa) {
+      var mpSecret = PropertiesService.getScriptProperties().getProperty('MPESA_CALLBACK_SECRET') || '';
+      if (!mpSecret || String(mp.secret || '') !== mpSecret) {
+        return _routerJson_({ ResultCode: 1, ResultDesc: 'Rejected' });
+      }
+      var mpRaw  = e && e.postData ? e.postData.contents : '';
+      var mpBody = {};
+      if (mpRaw) { try { mpBody = JSON.parse(mpRaw); } catch (_) {} }
+      try {
+        if (typeof MpesaInteg !== 'undefined') MpesaInteg.callback(mpBody);
+      } catch (cbErr) {
+        Log.error({ service: 'router', action: 'mpesaCallback', msg: cbErr.message });
+      }
+      // Daraja expects ResultCode 0 to acknowledge receipt and stop retrying; the
+      // reconcile job is the recovery path for anything not matched here.
+      return _routerJson_({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }
+  } catch (mpHookErr) {
+    return _routerJson_({ ResultCode: 0, ResultDesc: 'Accepted' });
+  }
+
   var result = processRequest(e && e.postData ? e.postData.contents : '{}');
   return ContentService
     .createTextOutput(JSON.stringify(result))

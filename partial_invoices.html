@@ -64,10 +64,29 @@ function viewInvoice(id) {
             '<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead>' +
             '<tbody>' + (payments || '<tr><td colspan="5" style="color:#9ca3af">No payments.</td></tr>') + '</tbody></table>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              (inv.status === 'ISSUED' && inv.payment_status !== 'PAID' && can('invoice.view')
+                ? '<button class="btn btn-primary btn-sm" onclick="mpesaStkPush(\'' + esc(inv.invoice_id) + '\',' + (parseFloat(inv.total_amount) || 0) + ')">M-Pesa STK</button>' : '') +
               (inv.status === 'ISSUED' && can('invoice.cancel')
                 ? '<button class="btn btn-danger btn-sm" onclick="cancelInvoice(\'' + esc(inv.invoice_id) + '\')">Cancel Invoice</button>' : ''),
     });
   }).catch(function (e) { Loader.hide(l); Toast.error(e.message); });
+}
+
+// INTG-1: start an M-Pesa STK push for an invoice, wired to the payments
+// initiateMpesa action (MpesaInteg.initiate server-side). retries:0 - a charge
+// must never be auto-retried by the API client.
+function mpesaStkPush(invoiceId, amount) {
+  var phone = window.prompt('Customer M-Pesa phone (e.g. 2547XXXXXXXX):');
+  if (!phone) return;
+  var amt = window.prompt('Amount to charge:', amount || '');
+  if (!amt) return;
+  API.call('payments', 'initiateMpesa',
+           { invoiceId: invoiceId, phone: phone, amount: amt }, { retries: 0 })
+    .then(function (r) {
+      Modal.close();
+      Toast.success('STK push sent. Checkout ' + (r.checkout_request_id || r.upload_id || ''));
+    })
+    .catch(function (e) { Toast.error(e.message); });
 }
 
 // Cancel affordance, wired to the existing invoices.cancel action (gated

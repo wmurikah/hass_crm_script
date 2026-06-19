@@ -43,6 +43,10 @@ var Jobs = (function () {
     // correctness comes from read-through + write invalidation; this only keeps
     // the GLOBAL blobs hot. Activated by re-running installAllTriggers().
     { fn: 'precomputeAggregates',    type: 'minutes', value: 5   },
+    // Reconcile charged-but-unmatched M-Pesa STK payments (INTG-1). Approves
+    // PENDING_REVIEW uploads the Daraja query API confirms paid, then settles the
+    // linked invoice/order. No-ops cleanly when M-Pesa is not configured.
+    { fn: 'runMpesaRecon',           type: 'minutes', value: 15  },
   ];
 
   function installAllTriggers() {
@@ -449,6 +453,31 @@ function runOracleApprovalsSync() {
       );
     } catch (_) {}
   }
+}
+
+/**
+ * runMpesaRecon - the 15-minute M-Pesa reconcile trigger (INTG-1). Enqueues a
+ * single MPESA_RECON job (deduped, so the queue never piles up if a run is slow)
+ * and then drains the queue, so the reconcile runs through the audited job_queue
+ * path with its retry/backoff. The actual query + approve + settle work lives in
+ * MpesaInteg.reconcile (via _handleMpesaRecon_). Never throws.
+ */
+function runMpesaRecon() {
+  try {
+    var pending = TursoClient.select(
+      "SELECT job_id FROM job_queue WHERE type = 'MPESA_RECON' AND status IN ('PENDING','RUNNING') LIMIT 1"
+    );
+    if (!pending.length) {
+      var now = nowIso();
+      TursoClient.write(
+        'INSERT INTO job_queue (job_id,type,status,priority,next_run_at,attempts,max_attempts,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'MPESA_RECON', 'PENDING', 5, now, 0, 3, '{}', now, now]
+      );
+    }
+  } catch (e) {
+    try { Logger.log('[runMpesaRecon] enqueue failed: ' + (e && e.message ? e.message : e)); } catch (_) {}
+  }
+  Jobs.runJobs();
 }
 
 function runDailyMaintenance() {
