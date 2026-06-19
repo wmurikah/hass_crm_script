@@ -1,16 +1,16 @@
 /**
- * 50_jobs.gs  —  Hass CMS rebuild  (Stage 9)
+ * 50_jobs.gs  -  Hass CMS rebuild  (Stage 9)
  *
  * Global job queue processor and trigger management.
  *
- * Jobs.runJobs()             — process up to 20 PENDING rows from job_queue
- * Jobs.installAllTriggers()  — (re)install all time-based triggers
+ * Jobs.runJobs()             - process up to 20 PENDING rows from job_queue
+ * Jobs.installAllTriggers()  - (re)install all time-based triggers
  *
  * Trigger entry points (called by GAS scheduler):
- *   runJobs()               — every 5 min
- *   runDailyMaintenance()   — daily at 02:00 (SESSION_SWEEP, AUDIT_LOG_RETENTION, MFA_CHALLENGE_SWEEP)
- *   runHourlyApproval()     — hourly (ORACLE_SYNC)
- *   runSlaBreachSweep()     — every 15 min (SLA_BREACH_SWEEP)
+ *   runJobs()               - every 5 min
+ *   runDailyMaintenance()   - daily at 02:00 (SESSION_SWEEP, AUDIT_LOG_RETENTION, MFA_CHALLENGE_SWEEP)
+ *   runHourlyApproval()     - hourly (ORACLE_SYNC)
+ *   runSlaBreachSweep()     - every 15 min (SLA_BREACH_SWEEP)
  *   runNotifFlush()         - every 5 min (NOTIF_FLUSH: drain PENDING notifications)
  *
  * job_queue columns: job_id, type, status, priority, next_run_at,
@@ -81,7 +81,7 @@ var Jobs = (function () {
         "ORDER BY priority ASC, next_run_at ASC LIMIT 20"
       );
     } catch (e) {
-      Logger.log('runJobs: failed to query job_queue — ' + e.message);
+      Logger.log('runJobs: failed to query job_queue - ' + e.message);
       return;
     }
 
@@ -234,7 +234,7 @@ var Jobs = (function () {
     );
     schedules.forEach(function (sched) {
       try {
-        // Enqueue ETIMS/order creation logic — delegate to order service if present.
+        // Enqueue ETIMS/order creation logic - delegate to order service if present.
         var orderId = Utilities.getUuid();
         var now = nowIso();
         TursoClient.write(
@@ -254,15 +254,88 @@ var Jobs = (function () {
     });
   }
 
+  // SLA-2 / TKT-3: find open tickets past a stamped deadline that are not yet
+  // flagged, flag the breach (response and/or resolve), notify the current owner
+  // through the step-1 emit path, and trigger real escalation (reassign + notify
+  // the new owner) via the shared ticket core. Each ticket is flagged once per
+  // breach type, so a flagged ticket drops out of the next sweep and is never
+  // re-escalated for the same breach.
   function _handleSlaBreachSweep_(payload) {
     var now = nowIso();
-    // Mark tickets where sla_resolve_by has passed and not yet flagged.
-    TursoClient.write(
-      "UPDATE tickets SET sla_resolve_breached=1, updated_at=? " +
-      "WHERE status IN ('NEW','OPEN') AND sla_resolve_by IS NOT NULL AND sla_resolve_by < ? AND sla_resolve_breached=0",
-      [now, now]
-    );
-    // Mark orders similarly if they have an sla column.
+    var rows;
+    try {
+      rows = TursoClient.select(
+        "SELECT ticket_id, ticket_number, subject, priority, status, country_code, " +
+        "assigned_to, created_by, escalation_level, sla_response_by, sla_resolve_by, " +
+        "sla_response_breached, sla_resolve_breached " +
+        "FROM tickets WHERE status IN ('NEW','OPEN') AND (" +
+        "(sla_response_by IS NOT NULL AND sla_response_by < ? AND sla_response_breached = 0) OR " +
+        "(sla_resolve_by  IS NOT NULL AND sla_resolve_by  < ? AND sla_resolve_breached  = 0)) " +
+        "ORDER BY sla_resolve_by ASC LIMIT 50",
+        [now, now]
+      );
+    } catch (e) {
+      Log.warn({ service: 'jobs', msg: 'SLA sweep query failed', data: { error: e.message } });
+      rows = [];
+    }
+
+    rows.forEach(function (t) {
+      var respBreach = t.sla_response_by && t.sla_response_by < now && parseInt(t.sla_response_breached, 10) !== 1;
+      var resBreach  = t.sla_resolve_by  && t.sla_resolve_by  < now && parseInt(t.sla_resolve_breached,  10) !== 1;
+      if (!respBreach && !resBreach) return;
+
+      var sets = [];
+      var args = [];
+      if (respBreach) sets.push('sla_response_breached = 1');
+      if (resBreach)  sets.push('sla_resolve_breached = 1');
+      sets.push('updated_at = ?'); args.push(now);
+      args.push(t.ticket_id);
+      try {
+        TursoClient.write('UPDATE tickets SET ' + sets.join(', ') + ' WHERE ticket_id = ?', args);
+      } catch (e) {
+        Log.warn({ service: 'jobs', msg: 'SLA flag write failed', data: { ticket_id: t.ticket_id, error: e.message } });
+        return;   // could not flag; skip notify + escalation for this ticket this run
+      }
+
+      try {
+        Audit.log({
+          actor: 'SYSTEM', action: 'TICKET_SLA_BREACHED', entity: 'tickets', entityId: t.ticket_id,
+          after: { response_breach: !!respBreach, resolve_breach: !!resBreach,
+                   sla_response_by: t.sla_response_by, sla_resolve_by: t.sla_resolve_by },
+        });
+      } catch (_) {}
+
+      // Notify the current owner (or the requester if unassigned) of the breach
+      // through the SAME step-1 emit helper used everywhere else.
+      try {
+        var notifyId = t.assigned_to || t.created_by;
+        if (notifyId) {
+          _notifyEmit_({
+            recipient_id: notifyId, recipient_type: 'STAFF', channel: 'EMAIL',
+            event_key: 'TICKET_SLA_BREACH',
+            vars: { ticket_number: t.ticket_number, subject: t.subject, ticket_id: t.ticket_id,
+                    breach_type: resBreach ? 'RESOLUTION' : 'RESPONSE' },
+            subject: 'SLA breach: ' + (t.ticket_number || t.ticket_id),
+            body: 'Ticket ' + (t.ticket_number || t.ticket_id) + ' (' + (t.subject || '') +
+                  ') has breached its ' + (resBreach ? 'resolution' : 'response') + ' SLA.',
+            entity_type: 'tickets', entity_id: t.ticket_id, country_code: t.country_code,
+          });
+        }
+      } catch (_) {}
+
+      // Trigger real escalation (reassign + notify the new owner) via the shared
+      // ticket core, so the breach actually moves the ticket up a tier.
+      try {
+        if (typeof Tickets !== 'undefined' && Tickets.escalateCore) {
+          Tickets.escalateCore(t, 'SYSTEM', { reason: 'SLA_BREACH', notifyRequester: true });
+        }
+      } catch (e) {
+        Log.warn({ service: 'jobs', msg: 'SLA escalation failed', data: { ticket_id: t.ticket_id, error: e.message } });
+      }
+    });
+
+    // Orders: keep the existing best-effort flag (unchanged; orders may not have
+    // these columns). Order business logic is intentionally not modified here.
     try {
       TursoClient.write(
         "UPDATE orders SET sla_resolve_breached=1, updated_at=? " +
@@ -289,7 +362,7 @@ var Jobs = (function () {
 
   function _handleMfaChallengeSweep_(payload) {
     var now = nowIso();
-    // Mark expired, unconsumed MFA challenges — no-op if already expired.
+    // Mark expired, unconsumed MFA challenges - no-op if already expired.
     TursoClient.write(
       "DELETE FROM mfa_challenges WHERE expires_at < ? AND consumed_at IS NULL",
       [now]
@@ -302,8 +375,33 @@ var Jobs = (function () {
 // ── Trigger entry point functions (top-level, callable by GAS scheduler) ──────
 
 function runJobs()              { Jobs.runJobs(); }
-function runSlaBreachSweep()    { Jobs.runJobs(); }  // same runner, SLA jobs inserted separately
 function runHourlyApproval()    { Jobs.runJobs(); }
+
+/**
+ * runSlaBreachSweep - the 15-minute SLA trigger. Enqueues a single
+ * SLA_BREACH_SWEEP job (deduped, so the queue never piles up if a run is slow)
+ * and then drains the queue, so the sweep runs through the audited job_queue
+ * path with its retry/backoff. The actual flag + escalate + notify work lives in
+ * _handleSlaBreachSweep_. Never throws. (SLA-2 / TRG-3: previously this only
+ * called runJobs() and never enqueued the named job, so it did nothing.)
+ */
+function runSlaBreachSweep() {
+  try {
+    var pending = TursoClient.select(
+      "SELECT job_id FROM job_queue WHERE type = 'SLA_BREACH_SWEEP' AND status IN ('PENDING','RUNNING') LIMIT 1"
+    );
+    if (!pending.length) {
+      var now = nowIso();
+      TursoClient.write(
+        'INSERT INTO job_queue (job_id,type,status,priority,next_run_at,attempts,max_attempts,payload,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'SLA_BREACH_SWEEP', 'PENDING', 5, now, 0, 3, '{}', now, now]
+      );
+    }
+  } catch (e) {
+    try { Logger.log('[runSlaBreachSweep] enqueue failed: ' + (e && e.message ? e.message : e)); } catch (_) {}
+  }
+  Jobs.runJobs();
+}
 
 /**
  * runNotifFlush - short-interval notification drain (NOT-1). Enqueues a single
@@ -394,16 +492,16 @@ function precomputeAggregates() {
 //
 // GAS spins down idle web-app instances; the first request after a quiet spell
 // then pays a V8 cold-start (seconds). A frequent, trivial time trigger keeps an
-// instance — and the Turso HTTP path — warm so real users land on a hot runtime.
+// instance - and the Turso HTTP path - warm so real users land on a hot runtime.
 
-// GAS time triggers only accept minute intervals of 1, 5, 10, 15, or 30 — there
+// GAS time triggers only accept minute intervals of 1, 5, 10, 15, or 30 - there
 // is no "every 2 minutes". 1 minute is used because it reliably prevents
 // cold starts; raise to 5 if you'd rather spend fewer executions from your daily
 // trigger-runtime quota (at a small cold-start risk).
 var KEEP_WARM_MINUTES = 1;
 
 /**
- * keepWarm — the trivial server function the time trigger pings. A single 1-row
+ * keepWarm - the trivial server function the time trigger pings. A single 1-row
  * read warms both the runtime and the Turso connection. Never throws.
  */
 function keepWarm() {
@@ -415,7 +513,7 @@ function keepWarm() {
 }
 
 /**
- * installKeepWarmTrigger — (re)install ONLY the keepWarm trigger, leaving the
+ * installKeepWarmTrigger - (re)install ONLY the keepWarm trigger, leaving the
  * other managed triggers untouched.
  *
  * HOW TO INSTALL (one time):
@@ -423,7 +521,7 @@ function keepWarm() {
  *   2. In the function dropdown choose  installKeepWarmTrigger  and press Run.
  *   3. Authorise the script.app scope if prompted (already in appsscript.json).
  *   4. Verify under Triggers (clock icon): a time-driven "keepWarm", every
- *      minute. Re-running this is safe — it removes any old keepWarm trigger
+ *      minute. Re-running this is safe - it removes any old keepWarm trigger
  *      first, so it never stacks duplicates.
  */
 function installKeepWarmTrigger() {

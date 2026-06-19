@@ -15,7 +15,7 @@ Router.register('sla', function (el) {
     '</div>' +
 
     '<div class="card">' +
-      '<div style="font-weight:600;font-size:13px;margin-bottom:12px">SLA Breach Report (last 30 days)</div>' +
+      '<div style="font-weight:600;font-size:13px;margin-bottom:12px">SLA Breach Report</div>' +
       '<div class="table-wrapper"><table class="data-table">' +
         '<thead><tr><th>Ticket #</th><th>Subject</th><th>Priority</th><th>Breached At</th><th>Status</th></tr></thead>' +
         '<tbody id="slaBreachBody"></tbody>' +
@@ -28,16 +28,31 @@ Router.register('sla', function (el) {
                      MEDIUM:   { res: 8,  resolve: 48 },
                      LOW:      { res: 24, resolve: 72 } };
 
+  // sla_id of the existing sla_config row for each priority (when one exists),
+  // so Save can update in place instead of inserting a duplicate.
+  var slaIdByPriority = {};
+
+  function minutesToHours(min, fallbackHours) {
+    var n = Number(min);
+    if (!isFinite(n) || n <= 0) return fallbackHours;
+    return Math.round(n / 60);
+  }
+
   function loadConfig() {
     setHTML('slaTbody', loadingRow(3));
-    API.call('config', 'list', { group: 'sla' }).then(function (rows) {
-      var map = {};
-      (rows || []).forEach(function (r) { map[r.config_key] = r.config_value; });
+    // SLA-3: real registered action against sla_config (was config.list).
+    API.call('sla', 'listPolicies', {}).then(function (rows) {
+      slaIdByPriority = {};
+      var byPriority = {};
+      (rows || []).forEach(function (r) {
+        var p = String(r.priority || '').toUpperCase();
+        byPriority[p] = r;
+        if (r.sla_id) slaIdByPriority[p] = r.sla_id;
+      });
       setHTML('slaTbody', priorities.map(function (p) {
-        var resKey  = 'sla_response_' + p.toLowerCase();
-        var resVal  = map[resKey]  || defaults[p].res;
-        var solKey  = 'sla_resolve_' + p.toLowerCase();
-        var solVal  = map[solKey]  || defaults[p].resolve;
+        var row    = byPriority[p];
+        var resVal = row ? minutesToHours(row.response_minutes, defaults[p].res)     : defaults[p].res;
+        var solVal = row ? minutesToHours(row.resolve_minutes,  defaults[p].resolve) : defaults[p].resolve;
         return '<tr>' +
           '<td><span class="badge">' + esc(p) + '</span></td>' +
           '<td><input class="form-control" style="width:80px" id="slaR_' + p + '" type="number" min="1" value="' + esc(String(resVal)) + '"></td>' +
@@ -49,14 +64,17 @@ Router.register('sla', function (el) {
 
   function loadBreaches() {
     setHTML('slaBreachBody', loadingRow(5));
-    API.call('tickets', 'list', { sla_breached: true, limit: 50 }).then(function (rows) {
-      if (!rows.length) { setHTML('slaBreachBody', emptyRow(5, 'No SLA breaches in the last 30 days.')); return; }
+    // SLA-3: read breaches from the real ticket-flag model (sla.listBreaches),
+    // not an unsupported tickets.list filter.
+    API.call('sla', 'listBreaches', { limit: 50 }).then(function (rows) {
+      if (!rows || !rows.length) { setHTML('slaBreachBody', emptyRow(5, 'No SLA breaches.')); return; }
       setHTML('slaBreachBody', rows.map(function (r) {
+        var breachedAt = r.sla_resolve_by || r.sla_response_by || r.created_at;
         return '<tr>' +
           '<td>' + esc(r.ticket_number) + '</td>' +
           '<td>' + esc(r.subject) + '</td>' +
           '<td>' + statusBadge(r.priority) + '</td>' +
-          '<td>' + fmtDateTime(r.sla_resolve_by) + '</td>' +
+          '<td>' + fmtDateTime(breachedAt) + '</td>' +
           '<td>' + statusBadge(r.status) + '</td>' +
         '</tr>';
       }).join(''));
@@ -65,20 +83,28 @@ Router.register('sla', function (el) {
 
   var slaSaveBtn = document.getElementById('slaSaveBtn');
   if (slaSaveBtn) slaSaveBtn.onclick = function () {
-    var updates = {};
-    priorities.forEach(function (p) {
-      updates['sla_response_' + p.toLowerCase()] = document.getElementById('slaR_' + p).value;
-      updates['sla_resolve_'  + p.toLowerCase()] = document.getElementById('slaS_' + p).value;
-    });
-    var keys = Object.keys(updates);
+    // SLA-3: persist each priority threshold to sla_config through the real
+    // registered actions (createPolicy / updatePolicy), in minutes. Hours in the
+    // UI are converted to minutes for storage.
     var chain = Promise.resolve();
-    keys.forEach(function (k) {
+    priorities.forEach(function (p) {
+      var resHrs = parseInt(document.getElementById('slaR_' + p).value, 10) || 0;
+      var solHrs = parseInt(document.getElementById('slaS_' + p).value, 10) || 0;
+      var responseMinutes = resHrs * 60;
+      var resolveMinutes  = solHrs * 60;
       chain = chain.then(function () {
-        return API.call('config', 'set', { key: k, value: updates[k] });
+        var id = slaIdByPriority[p];
+        if (id) {
+          return API.call('sla', 'updatePolicy',
+            { sla_id: id, response_minutes: responseMinutes, resolve_minutes: resolveMinutes });
+        }
+        return API.call('sla', 'createPolicy',
+          { priority: p, response_minutes: responseMinutes, resolve_minutes: resolveMinutes })
+          .then(function (res) { if (res && res.sla_id) slaIdByPriority[p] = res.sla_id; });
       });
     });
-    chain.then(function () { Toast.success('SLA config saved.'); })
-         .catch(function (e) { Toast.error(e.message); });
+    chain.then(function () { Toast.success('SLA config saved.'); loadConfig(); })
+         .catch(function (e) { Toast.error(e.message || 'Save failed.'); });
   };
 
   loadConfig();
