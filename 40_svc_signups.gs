@@ -6,10 +6,9 @@
  * auth.signup (40_svc_auth.gs) writes a signup_requests row at PENDING_APPROVAL
  * and stops there. This service is the missing consumer: an admin reviews the
  * request and either provisions the applicant (a staff user OR a portal contact),
- * assigns a role, marks the request APPROVED and sends a welcome through the
- * step-1 notification emit; or rejects it with a reason and notifies the
- * applicant. Either way the request leaves PENDING_APPROVAL, so the
- * signup-to-verified-user chain completes.
+ * assigns a role, marks the request APPROVED and emails a welcome; or rejects it
+ * with a reason and emails the outcome. Either way the request leaves
+ * PENDING_APPROVAL, so the signup-to-verified-user chain completes.
  *
  *   signupRequests.{ list, get, approve, reject }
  *
@@ -19,8 +18,11 @@
  * additionally requires contacts.manage. So a reviewer can only grant what they
  * are themselves entitled to grant.
  *
- * Notifications reuse the step-1 emit (Notify.emit) only; no second notifier is
- * built here.
+ * Email goes directly through the Graph path (EmailInteg.send), not the step-1
+ * notification queue, so the welcome/rejection is delivered as part of the action
+ * and does not depend on the notifications flush job. EmailInteg.send has its own
+ * MailApp fallback and is best-effort here: provisioning and the status change are
+ * committed first, so a mail hiccup never undoes an approval or a rejection.
  */
 
 var _SIGNUP_COLS_READY_ = false;
@@ -55,6 +57,18 @@ function _signupActor_(ctx) {
   return (ctx.session && (ctx.session.userId || ctx.session.user_id)) || ctx.actor || 'SYSTEM';
 }
 
+// Minimal HTML escape for values interpolated into the HTML email body. The
+// applicant email comes from the (untrusted) signup form and the reason from the
+// reviewer, so escape both before they land in markup.
+function _signupEsc_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── list ──────────────────────────────────────────────────────────────────────
 
 function _signupsList_(ctx, params) {
@@ -65,7 +79,11 @@ function _signupsList_(ctx, params) {
   // Default to the actionable queue; allow an explicit status filter.
   if (params.status) { sql += ' AND status = ?'; args.push(String(params.status).toUpperCase()); }
   else               { sql += " AND status = 'PENDING_APPROVAL'"; }
-  sql += ' ORDER BY COALESCE(submitted_at, created_at) DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
+  // Newest first, paginated. limit/offset are integer-coerced (never interpolated
+  // from raw input) so the LIMIT/OFFSET clause cannot be injected.
+  var limit  = Math.min(Math.max(parseInt(params.limit, 10) || 100, 1), 500);
+  var offset = Math.max(parseInt(params.offset, 10) || 0, 0);
+  sql += ' ORDER BY COALESCE(submitted_at, created_at) DESC LIMIT ' + limit + ' OFFSET ' + offset;
   return TursoClient.select(sql, args);
 }
 
@@ -105,9 +123,13 @@ function _signupsApprove_(ctx, params) {
   if (provisionAs === 'PORTAL') provisionAs = 'CONTACT';
 
   var tempPassword = String(params.password || '').trim() || _signupTempPassword_();
+  // Same password rules as the rest of auth for this credential-set path. The
+  // generated temp password always passes; a reviewer-supplied one is enforced
+  // here before anything is provisioned (the STAFF path also re-checks inside
+  // _usersCreate_). No userId yet, so this is the length/complexity check.
+  Password.validatePolicy(tempPassword);
   var actor        = _signupActor_(ctx);
   var provisioned  = { id: '', type: provisionAs };
-  var welcome;
 
   if (provisionAs === 'STAFF') {
     // Reuse the canonical staff-create path: it validates the role set, enforces
@@ -122,12 +144,6 @@ function _signupsApprove_(ctx, params) {
       password:    tempPassword,
     });
     provisioned.id = created.userId;
-    welcome = {
-      recipient_id:   created.userId,
-      recipient_type: 'STAFF',
-      entity_type:    'users',
-      country_code:   String(params.country_code || params.countryCode || ''),
-    };
 
   } else if (provisionAs === 'CONTACT') {
     // Portal contact: belongs to a customer and carries a portal_role.
@@ -164,12 +180,6 @@ function _signupsApprove_(ctx, params) {
         );
       } catch (__) {}
     }
-    welcome = {
-      recipient_id:   contact.contact_id,
-      recipient_type: 'CONTACT',
-      entity_type:    'contacts',
-      country_code:   '',
-    };
 
   } else {
     throw new Errors.Validation('provision_as must be STAFF or CONTACT.');
@@ -196,28 +206,30 @@ function _signupsApprove_(ctx, params) {
     after:  { status: 'APPROVED', provisioned_type: provisioned.type, provisioned_id: provisioned.id },
   });
 
-  // Welcome through the step-1 emit (best-effort; never blocks provisioning). The
-  // applicant now exists as the provisioned user/contact, so the emit resolves
-  // their email by id. The temp password is single-use: must_change_password is
-  // set so it has to be changed on first use.
+  // Welcome the applicant directly via the Graph email path (EmailInteg.send), so
+  // delivery is part of this action and does not depend on the step-1 notification
+  // queue/flush job. Best-effort: the user/contact is provisioned and the request
+  // is already marked APPROVED above, so a mail failure must not undo the approval.
+  // The temp password is effectively single-use because must_change_password is
+  // set, so it has to be changed on first sign-in.
+  var subject  = 'Your Hass CMS account is ready';
+  var textBody =
+    'Welcome to Hass CMS. Your account has been approved.\n\n' +
+    'Sign in with this email (' + email + ') and the temporary password below, ' +
+    'then set a new password from your profile:\n\n' +
+    'Temporary password: ' + tempPassword + '\n\n' +
+    'For your security, change this password as soon as you sign in.';
+  var htmlBody =
+    '<p>Welcome to Hass CMS. Your account has been approved.</p>' +
+    '<p>Sign in with this email (<strong>' + _signupEsc_(email) + '</strong>) and the ' +
+    'temporary password below, then set a new password from your profile:</p>' +
+    '<p>Temporary password: <strong>' + _signupEsc_(tempPassword) + '</strong></p>' +
+    '<p>For your security, change this password as soon as you sign in.</p>';
   try {
-    Notify.emit({
-      recipient_id:   welcome.recipient_id,
-      recipient_type: welcome.recipient_type,
-      channel:        'EMAIL',
-      event_key:      'SIGNUP_APPROVED',
-      vars:           { email: email, temp_password: tempPassword },
-      subject:        'Your Hass CMS account is ready',
-      body:           'Welcome to Hass CMS. Your account has been approved.\n\n' +
-                      'Sign in with this email (' + email + ') and the temporary password below, ' +
-                      'then set a new password from your profile:\n\n' +
-                      'Temporary password: ' + tempPassword + '\n\n' +
-                      'For your security, change this password as soon as you sign in.',
-      entity_type:    welcome.entity_type,
-      entity_id:      welcome.recipient_id,
-      country_code:   welcome.country_code,
-    });
-  } catch (_) {}
+    EmailInteg.send(email, subject, htmlBody, textBody);
+  } catch (mailErr) {
+    try { Log.warn({ service: 'svc_signups', action: 'approve', msg: 'welcome email failed: ' + mailErr.message }); } catch (_) {}
+  }
 
   return { success: true, status: 'APPROVED', provisioned: provisioned };
 }
@@ -259,24 +271,26 @@ function _signupsReject_(ctx, params) {
     before: { status: 'PENDING_APPROVAL' }, after: { status: 'REJECTED', reason: reason },
   });
 
-  // Notify the applicant through the step-1 emit. The applicant has no user or
-  // contact record, so the recipient is the signup request itself (resolved to
-  // its email by _resolveRecipientEmail_'s SIGNUP type).
-  try {
-    Notify.emit({
-      recipient_id:   requestId,
-      recipient_type: 'SIGNUP',
-      channel:        'EMAIL',
-      event_key:      'SIGNUP_REJECTED',
-      vars:           { email: req.email || '', reason: reason },
-      subject:        'Update on your Hass CMS sign-up',
-      body:           'Thank you for your interest in Hass CMS. After review, your sign-up request ' +
-                      'could not be approved at this time.\n\nReason: ' + reason,
-      entity_type:    'signup_requests',
-      entity_id:      requestId,
-      country_code:   '',
-    });
-  } catch (_) {}
+  // Email the outcome directly via the Graph email path (EmailInteg.send). The
+  // applicant has no user/contact record yet, so we send to the email captured on
+  // the signup request itself. Best-effort: the request is already REJECTED above,
+  // so a mail failure must not reopen it.
+  var rejectTo = String(req.email || '').trim();
+  if (rejectTo) {
+    var subject  = 'Update on your Hass CMS sign-up';
+    var textBody =
+      'Thank you for your interest in Hass CMS. After review, your sign-up request ' +
+      'could not be approved at this time.\n\nReason: ' + reason;
+    var htmlBody =
+      '<p>Thank you for your interest in Hass CMS. After review, your sign-up ' +
+      'request could not be approved at this time.</p>' +
+      '<p>Reason: ' + _signupEsc_(reason) + '</p>';
+    try {
+      EmailInteg.send(rejectTo, subject, htmlBody, textBody);
+    } catch (mailErr) {
+      try { Log.warn({ service: 'svc_signups', action: 'reject', msg: 'rejection email failed: ' + mailErr.message }); } catch (_) {}
+    }
+  }
 
   return { success: true, status: 'REJECTED' };
 }
