@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hass CMS — MFA Enrolment</title>
+  <title>Hass CMS - MFA Enrolment</title>
   <?!= HtmlService.createHtmlOutputFromFile('css_theme').getContent(); ?>
 </head>
 <body>
@@ -11,9 +11,9 @@
   <div class="mfa-card">
     <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">Set up two-factor authentication</h2>
     <p style="font-size:13px;color:#6b7280;margin-bottom:20px">
-      Scan the QR code below with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.
+      Add this account to your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.
     </p>
-    <div id="qrArea" style="text-align:center;margin-bottom:16px">
+    <div id="qrArea" style="margin-bottom:16px">
       <span class="spinner dark"></span>
     </div>
     <div class="form-group">
@@ -38,15 +38,38 @@
   var btn    = document.getElementById('verifyBtn');
   var inputs = document.querySelectorAll('#otpInputs input');
 
-  // Load QR.
-  API.call('auth', 'mfaEnroll', {})
+  // The enrol challenge minted at login (after the password step) is injected by
+  // the server. It is the partial pre-MFA token: the mid-login user has no full
+  // session yet, so enrolment is resumed from this challenge id.
+  var challengeId = '<?= challengeId ?>';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // Load the enrolment secret. We render the otpauth link (which authenticator
+  // apps open directly) and the secret for manual entry. We deliberately do NOT
+  // send the TOTP secret to a third-party QR image service.
+  API.call('auth', 'mfaEnroll', { challengeId: challengeId })
     .then(function (d) {
+      // The server returns the canonical challenge id to verify against; for the
+      // settings (already-logged-in) path this may differ from the injected one.
+      if (d && (d.challengeId || d.challenge_id)) challengeId = d.challengeId || d.challenge_id;
+      var uri    = (d && d.provisioning_uri) || '';
+      var secret = (d && d.secret) || '';
       document.getElementById('qrArea').innerHTML =
-        '<img src="' + d.qr_url + '" style="width:180px;height:180px;border-radius:4px">' +
-        '<p style="font-size:11px;color:#6b7280;margin-top:6px">Secret: ' + d.secret + '</p>';
+        '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px">' +
+          '<p style="font-size:12px;color:#6b7280;margin:0 0 6px">In your authenticator app, choose "Add account" then "Enter a setup key", or open this link on your phone:</p>' +
+          (uri ? '<p style="margin:0 0 10px;word-break:break-all"><a href="' + esc(uri) + '">' + esc(uri) + '</a></p>' : '') +
+          '<p style="font-size:12px;color:#6b7280;margin:0 0 4px">Setup key (secret):</p>' +
+          '<code style="display:block;font-size:14px;letter-spacing:1px;word-break:break-all">' + esc(secret) + '</code>' +
+        '</div>';
     })
-    .catch(function () {
-      document.getElementById('qrArea').innerHTML = '<p style="color:#dc2626">Failed to load QR code.</p>';
+    .catch(function (e) {
+      document.getElementById('qrArea').innerHTML =
+        '<p style="color:#dc2626">Failed to start enrolment: ' + esc(e && e.message ? e.message : e) + '</p>';
     });
 
   // OTP inputs: auto-advance.
@@ -64,7 +87,7 @@
     if (code.length < 6) { errDiv.textContent = 'Enter all 6 digits.'; errDiv.style.display = 'block'; return; }
     errDiv.style.display = 'none';
     btn.disabled = true;
-    API.call('auth', 'mfaVerifyEnroll', { code: code })
+    API.call('auth', 'mfaVerifyEnroll', { challengeId: challengeId, code: code })
       .then(function (d) {
         var token = (d && d.token) || API.getToken();
         if (d && d.token) {

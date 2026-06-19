@@ -3,34 +3,54 @@ Router.register('approvals', function (el) {
   el.innerHTML =
     '<div class="filter-bar">' +
       '<select class="form-control" id="appMode"><option value="inbox">My inbox</option><option value="all">All requests</option></select>' +
-      '<select class="form-control" id="appStatus"><option value="">All statuses</option><option>PENDING</option><option>APPROVED</option><option>REJECTED</option></select>' +
+      '<select class="form-control" id="appStatus"><option value="">All statuses</option><option>SUBMITTED</option><option>APPROVED</option><option>REJECTED</option></select>' +
     '</div>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
-      '<thead><tr><th>Entity</th><th>Type</th><th>Country</th><th>Required Role</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
+      '<thead><tr><th>Order</th><th>Customer</th><th>Amount</th><th>Country</th><th>Tier</th><th>Status</th><th>Submitted</th><th></th></tr></thead>' +
       '<tbody id="appBody"></tbody></table></div></div>';
 
+  function tierLabel(perm) {
+    if (perm === 'order.approve_high') return 'High';
+    if (perm === 'order.approve_mid')  return 'Mid';
+    if (perm === 'order.approve_low')  return 'Low';
+    return perm || '-';
+  }
+
+  function fmtAmount(r) {
+    var n = Number(r.amount || 0);
+    return (r.currency_code || '') + ' ' + n.toLocaleString();
+  }
+
   function load() {
-    setHTML('appBody', loadingRow(7));
+    setHTML('appBody', loadingRow(8));
     var mode   = document.getElementById('appMode').value;
     var status = document.getElementById('appStatus').value;
+    // The status filter only applies to the "All requests" view; the inbox is the
+    // actionable SUBMITTED backlog by definition.
     var action = mode === 'inbox' ? 'inbox' : 'list';
     var params = { limit: 50 };
-    if (status) params.status = status;
+    if (status && mode === 'all') params.status = status;
     API.call('approvalRequests', action, params).then(function (rows) {
-      if (!rows.length) { setHTML('appBody', emptyRow(7, 'No approval requests.')); return; }
+      if (!rows.length) { setHTML('appBody', emptyRow(8, 'No pending approvals.')); return; }
       setHTML('appBody', rows.map(function (r) {
         var rid = esc(r.request_id);
-        return '<tr style="cursor:pointer" onclick="viewApproval(\'' + rid + '\')"><td style="font-size:11px">' + esc(r.entity_id) + '</td><td>' + esc(r.entity_type) + '</td>' +
-               '<td>' + esc(r.country_code || '—') + '</td><td>' + esc(r.required_approver_role || '—') + '</td>' +
-               '<td>' + statusBadge(r.status) + '</td><td>' + fmtDate(r.created_at) + '</td>' +
+        var canAct = r.status === 'SUBMITTED' && r.actionable;
+        return '<tr style="cursor:pointer" onclick="viewApproval(\'' + rid + '\')">' +
+               '<td>' + esc(r.order_number || r.entity_id) + '</td>' +
+               '<td>' + esc(r.company_name || '-') + '</td>' +
+               '<td>' + esc(fmtAmount(r)) + '</td>' +
+               '<td>' + esc(r.country_code || '-') + '</td>' +
+               '<td>' + esc(tierLabel(r.required_approver_role)) + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.created_at) + '</td>' +
                '<td class="actions">' +
-               (r.status === 'PENDING' && can('order.approve_low')
+               (canAct
                  ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'reject\')">Reject</button>' +
                    '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();approvalAction(\'' + rid + '\',\'approve\')">Approve</button>'
                  : '') +
                '</td></tr>';
       }).join(''));
-    }).catch(function (e) { setHTML('appBody', errorRow(7, e, load)); });
+    }).catch(function (e) { setHTML('appBody', errorRow(8, e, load)); });
   }
 
   document.getElementById('appMode').onchange = load;
@@ -42,18 +62,20 @@ function viewApproval(requestId) {
   var l = Loader.show();
   API.call('approvalRequests', 'get', { requestId: requestId }).then(function (a) {
     Loader.hide(l);
+    var canAct = a.status === 'SUBMITTED' && a.actionable;
     Modal.open({
-      title: 'Approval Request',
+      title: 'Order approval',
       body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
-            '<dt style="color:#6b7280">Entity</dt><dd>' + esc(a.entity_type) + ' / ' + esc(a.entity_id) + '</dd>' +
-            '<dt style="color:#6b7280">Country</dt><dd>' + esc(a.country_code || '—') + '</dd>' +
-            '<dt style="color:#6b7280">Required Role</dt><dd>' + esc(a.required_approver_role || '—') + '</dd>' +
-            '<dt style="color:#6b7280">Workflow</dt><dd>' + esc(a.workflow_name || '—') + '</dd>' +
+            '<dt style="color:#6b7280">Order</dt><dd>' + esc(a.order_number || a.entity_id) + '</dd>' +
+            '<dt style="color:#6b7280">Customer</dt><dd>' + esc(a.company_name || '-') + '</dd>' +
+            '<dt style="color:#6b7280">Amount</dt><dd>' + esc((a.currency_code || '') + ' ' + Number(a.amount || 0).toLocaleString()) + '</dd>' +
+            '<dt style="color:#6b7280">Country</dt><dd>' + esc(a.country_code || '-') + '</dd>' +
+            '<dt style="color:#6b7280">Approval tier</dt><dd>' + esc(a.required_approver_role || '-') + '</dd>' +
             '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(a.status) + '</dd>' +
-            '<dt style="color:#6b7280">Created</dt><dd>' + fmtDateTime(a.created_at) + '</dd>' +
+            '<dt style="color:#6b7280">Submitted</dt><dd>' + fmtDateTime(a.created_at) + '</dd>' +
             '</dl>',
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
-              (a.status === 'PENDING' && can('order.approve_low')
+              (canAct
                 ? '<button class="btn btn-danger btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'reject\')">Reject</button>' +
                   '<button class="btn btn-primary btn-sm" onclick="Modal.close();approvalAction(\'' + esc(a.request_id) + '\',\'approve\')">Approve</button>'
                 : ''),
@@ -70,7 +92,7 @@ function approvalAction(requestId, action) {
     params.comment = window.prompt('Comment (optional):') || '';
   }
   API.call('approvalRequests', action, params)
-    .then(function (r) { Toast.success('Request ' + r.status + '.'); Router.navigate('approvals', {}); })
+    .then(function (r) { Toast.success('Order ' + (r.status || 'updated') + '.'); Router.navigate('approvals', {}); })
     .catch(function (e) { Toast.error(e.message); });
 }
 </script>

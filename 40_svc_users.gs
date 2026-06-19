@@ -327,6 +327,37 @@ function _usersSetRoles_(ctx, params) {
   return { success: true, roles: roleCodes };
 }
 
+// Self-service profile update (AUTH-3). The caller updates only their OWN record,
+// resolved from the session, so no target id is accepted and no admin permission
+// is needed (session-gated only). Works for staff (users) and portal contacts
+// (contacts); email is intentionally not editable here (it is the login identity,
+// changed only through the admin users.update path with its uniqueness check).
+function _usersUpdateProfile_(ctx, params) {
+  var sess = ctx.session;
+  if (!sess || !(sess.userId || sess.user_id)) {
+    throw new Errors.PermissionDenied('Authentication required.');
+  }
+  var userId   = sess.userId || sess.user_id;
+  var userType = String(sess.userType || sess.user_type || 'STAFF').toUpperCase();
+  var table    = (userType === 'CUSTOMER') ? 'contacts'   : 'users';
+  var idCol    = (userType === 'CUSTOMER') ? 'contact_id' : 'user_id';
+
+  var allowed = ['first_name', 'last_name', 'phone'];
+  var patch   = {};
+  allowed.forEach(function (k) { if (params[k] !== undefined) patch[k] = String(params[k]); });
+  if (!Object.keys(patch).length) throw new Errors.Validation('No updatable fields provided.');
+  patch.updated_at = nowIso();
+
+  var sets = Object.keys(patch).map(function (k) { return k + ' = ?'; }).join(', ');
+  var args = Object.keys(patch).map(function (k) { return patch[k]; });
+  args.push(userId);
+  TursoClient.write('UPDATE ' + table + ' SET ' + sets + ' WHERE ' + idCol + ' = ?', args);
+
+  Audit.log({ actor: userId, action: 'PROFILE_UPDATED', entity: table,
+              entityId: userId, after: patch, metadata: { self: true } });
+  return { success: true };
+}
+
 // ── Registration ──────────────────────────────────────────────────────────────
 
 (function _registerUsers_() {
@@ -339,4 +370,6 @@ function _usersSetRoles_(ctx, params) {
   register({ service: 'users', action: 'resetPassword', permission: 'user.reset_password', handler: _usersResetPassword_ });
   register({ service: 'users', action: 'invite',        permission: 'user.create',       handler: _usersInvite_ });
   register({ service: 'users', action: 'setRoles',      permission: 'role.assign',       handler: _usersSetRoles_ });
+  // AUTH-3: self-service profile update (session-gated, own record only).
+  register({ service: 'users', action: 'updateProfile', permission: null,                handler: _usersUpdateProfile_ });
 })();

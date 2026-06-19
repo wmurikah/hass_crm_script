@@ -97,7 +97,10 @@ function _dashSummaryCompute_(scope) {
     { sql: "SELECT COUNT(*) AS n FROM orders WHERE status IN ('SUBMITTED','APPROVED')" + sc.clause, args: sc.args },
     { sql: "SELECT COUNT(*) AS n FROM invoices WHERE payment_status = 'UNPAID' AND status != 'CANCELLED'" + sc.clause, args: sc.args },
     { sql: "SELECT COALESCE(SUM(total_amount),0) AS s FROM invoices WHERE payment_status = 'UNPAID' AND status != 'CANCELLED'" + sc.clause, args: sc.args },
-    { sql: "SELECT COUNT(*) AS n FROM approval_requests WHERE status = 'PENDING'" + sc.clause, args: sc.args },
+    // APR-3: the real approval backlog is orders awaiting their tier decision
+    // (status SUBMITTED), the same set the unified approvals inbox surfaces. The
+    // legacy approval_requests table had no producer and always read 0.
+    { sql: "SELECT COUNT(*) AS n FROM orders WHERE status = 'SUBMITTED'" + sc.clause, args: sc.args },
     { sql: "SELECT COUNT(*) AS n FROM customers WHERE status = 'ACTIVE'" + sc.clause, args: sc.args }
   ]);
 

@@ -1,19 +1,33 @@
 /**
- * 40_svc_approvals.gs  —  Hass CMS rebuild  (Stage 9)
+ * 40_svc_approvals.gs  -  Hass CMS rebuild  (Stage 9, unified)
  *
- * Approval inbox and action endpoints.
- * Reads approval_requests rows (created by workflow engine or by order/credit submit flows).
+ * Unified approvals inbox and action endpoints.
  *
- * approvalRequests.{inbox,get,approve,reject,list}
+ * UNIFICATION (APR-1/APR-2/APR-3): orders already approve through an inline path
+ * (orders.approve / orders.reject) that is the single source of truth for an
+ * order's status and the only place the amount tiers + SoD are enforced. This
+ * service therefore does NOT maintain a parallel approval_requests decision
+ * path (which had no producer and always read empty). Instead it:
+ *   - surfaces the REAL pending backlog: orders in SUBMITTED awaiting their tier
+ *     approval, scoped to the caller's country; and
+ *   - routes approve/reject straight to the SAME order handlers the inline path
+ *     uses, so there is exactly one decision point and the decision updates the
+ *     order (APPROVED / REJECTED), never just a request row.
  *
- * NOTE: registered under the `approvalRequests.*` service. The `approvals.*`
- * namespace is owned by the PO/SO approval-timing analytics feature
- * (40_svc_oracle_approvals.gs). The client route id for this inbox is unchanged
- * (Router.register('approvals', ...) in partial_approvals.html), only the
- * dispatcher service key moved, so behaviour and navigation are identical.
+ * The approval_requests / approval_workflows tables are intentionally left
+ * unused here: the order state machine is the driver and audit_log is the
+ * decision log. Introspection (documented in the PR) found no other
+ * approval-bearing pending state to surface: credit-limit change, customer
+ * onboarding and price overrides are all direct, immediately-applied actions in
+ * this codebase, not gated work items, so there is nothing pending to queue for
+ * them. If such a gated path is added later, surface it here too and route it
+ * through its own inline handler the same way.
+ *
+ * Registered under the `approvalRequests.*` service (client route id `approvals`
+ * in partial_approvals.html). Service keys and permissions are unchanged.
  *
  * Country scope enforced: GLOBAL roles see all; COUNTRY roles see their scope.
- * SoD: approver must not equal the created_by field of the approval_request.
+ * SoD and the amount tiers are enforced by the order handlers, unchanged.
  */
 
 // ── Scope helper ──────────────────────────────────────────────────────────────
@@ -43,149 +57,138 @@ function _approvalScopeData_(session) {
   return { isGlobal: false, countries: countries };
 }
 
-// ── inbox: pending approvals for the caller ───────────────────────────────────
+// Country clause for the orders table (alias `o`), mirroring the orders service.
+function _approvalOrderScopeClause_(scope) {
+  if (scope.isGlobal) return { clause: '', args: [] };
+  if (!scope.countries.length) return { clause: ' AND 1=0', args: [] };
+  var ph = scope.countries.map(function () { return '?'; }).join(',');
+  return { clause: ' AND o.country_code IN (' + ph + ')', args: scope.countries.slice() };
+}
+
+// The amount-tier permission an order needs, identical to _approveHandler_'s
+// thresholds in 40_svc_orders.gs. Tiers are NOT changed here, only read so the
+// inbox can show which items the caller can act on.
+function _approvalOrderTierPerm_(order) {
+  var amount = parseFloat(order.total_amount) || 0;
+  if (amount <= 100000)       return 'order.approve_low';
+  else if (amount <= 1000000) return 'order.approve_mid';
+  else                        return 'order.approve_high';
+}
+
+// Shape a raw order row into the approval-item the UI expects. request_id maps to
+// the order_id so the existing approve/reject/get calls act on the order.
+function _approvalOrderToItem_(o, callerPerms) {
+  var perm       = _approvalOrderTierPerm_(o);
+  var actionable = callerPerms.indexOf('*') !== -1 || callerPerms.indexOf(perm) !== -1;
+  return {
+    request_id:             o.order_id,
+    entity_type:            'ORDER',
+    entity_id:              o.order_id,
+    order_number:           o.order_number || o.order_id,
+    amount:                 parseFloat(o.total_amount) || 0,
+    currency_code:          o.currency_code || 'KES',
+    country_code:           o.country_code || '',
+    company_name:           o.company_name || '',
+    required_approver_role: perm,
+    status:                 o.status,
+    submitted_by:           o.created_by_id || '',
+    actionable:             actionable,
+    created_at:             o.submitted_at || o.created_at || '',
+  };
+}
+
+// ── inbox: real pending approvals actionable by the caller ────────────────────
+//
+// SUBMITTED orders in the caller's scope, excluding the caller's own orders
+// (SoD: an approver may not approve what they created) and limited to the tiers
+// the caller is actually permitted to approve. This is the actionable queue.
 
 function _approvalsInbox_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.approve_low');
   var scope = _approvalScopeData_(ctx.session);
-  var sql   = "SELECT ar.*, aw.name AS workflow_name, aw.entity_type AS workflow_entity_type " +
-              "FROM approval_requests ar " +
-              "LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id " +
-              "WHERE ar.status = 'PENDING' " +
-              "AND (ar.required_role_codes = ? OR ar.assigned_to = ?)";
-  var args  = [ctx.session.role || '', ctx.session.userId];
-
-  if (!scope.isGlobal && scope.countries.length) {
-    var ph = scope.countries.map(function () { return '?'; }).join(',');
-    sql += ' AND ar.country_code IN (' + ph + ')';
-    args = args.concat(scope.countries);
-  }
-  sql += ' ORDER BY ar.created_at DESC LIMIT ' + (parseInt(params.limit, 10) || 50);
-  return TursoClient.select(sql, args);
+  var sc    = _approvalOrderScopeClause_(scope);
+  var sql   = 'SELECT o.*, c.company_name FROM orders o ' +
+              'LEFT JOIN customers c ON c.customer_id = o.customer_id ' +
+              "WHERE o.status = 'SUBMITTED'" + sc.clause +
+              ' AND (o.created_by_id IS NULL OR o.created_by_id != ?)' +
+              ' ORDER BY COALESCE(o.submitted_at, o.created_at) ASC LIMIT ' +
+              (parseInt(params.limit, 10) || 50);
+  var args  = sc.args.concat([ctx.session.userId]);
+  var rows  = TursoClient.select(sql, args);
+  var perms = Rbac.userPermissions(ctx.session.userId) || [];
+  return rows
+    .map(function (o) { return _approvalOrderToItem_(o, perms); })
+    .filter(function (it) { return it.actionable; });
 }
 
-// ── list: all approval_requests (for managers/auditors) ──────────────────────
+// ── list: the broader approval backlog/history for managers and auditors ──────
 
 function _approvalsList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _approvalScopeData_(ctx.session);
-  var sql   = 'SELECT ar.*, aw.name AS workflow_name FROM approval_requests ar ' +
-              'LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id WHERE 1=1';
-  var args  = [];
-  if (!scope.isGlobal && scope.countries.length) {
-    var ph = scope.countries.map(function () { return '?'; }).join(',');
-    sql += ' AND ar.country_code IN (' + ph + ')';
-    args = args.concat(scope.countries);
+  var sc    = _approvalOrderScopeClause_(scope);
+  var sql   = 'SELECT o.*, c.company_name FROM orders o ' +
+              'LEFT JOIN customers c ON c.customer_id = o.customer_id WHERE 1=1' + sc.clause;
+  var args  = sc.args.slice();
+  if (params.status) {
+    sql += ' AND o.status = ?';
+    args.push(String(params.status).toUpperCase());
+  } else {
+    sql += " AND o.status IN ('SUBMITTED','APPROVED','REJECTED')";
   }
-  if (params.status)      { sql += ' AND ar.status = ?';      args.push(params.status); }
-  if (params.entity_type) { sql += ' AND ar.entity_type = ?'; args.push(params.entity_type); }
-  if (params.entity_id)   { sql += ' AND ar.entity_id = ?';   args.push(params.entity_id); }
-  sql += ' ORDER BY ar.created_at DESC LIMIT ' + (parseInt(params.limit, 10) || 100);
-  return TursoClient.select(sql, args);
+  sql += ' ORDER BY COALESCE(o.submitted_at, o.created_at) DESC LIMIT ' +
+         (parseInt(params.limit, 10) || 100);
+  var rows  = TursoClient.select(sql, args);
+  var perms = Rbac.userPermissions(ctx.session.userId) || [];
+  return rows.map(function (o) { return _approvalOrderToItem_(o, perms); });
 }
 
-// ── get ───────────────────────────────────────────────────────────────────────
+// ── get: one approval item (an order) by id ───────────────────────────────────
 
 function _approvalsGet_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
-  var requestId = String(params.requestId || '');
+  var requestId = String(params.requestId || params.orderId || '');
   if (!requestId) throw new Errors.Validation('requestId required.');
   var rows = TursoClient.select(
-    'SELECT ar.*, aw.name AS workflow_name FROM approval_requests ar ' +
-    'LEFT JOIN approval_workflows aw ON aw.workflow_id = ar.workflow_id ' +
-    'WHERE ar.request_id = ? LIMIT 1',
+    'SELECT o.*, c.company_name FROM orders o ' +
+    'LEFT JOIN customers c ON c.customer_id = o.customer_id WHERE o.order_id = ? LIMIT 1',
     [requestId]
   );
-  if (!rows.length) throw new Errors.NotFound('Approval request not found.');
-  var ar    = rows[0];
+  if (!rows.length) throw new Errors.NotFound('Approval item not found.');
+  var o     = rows[0];
   var scope = _approvalScopeData_(ctx.session);
-  if (!scope.isGlobal && ar.country_code && scope.countries.indexOf(ar.country_code) === -1) {
-    throw new Errors.NotFound('Approval request not found.');
+  if (!scope.isGlobal && o.country_code && scope.countries.indexOf(o.country_code) === -1) {
+    throw new Errors.NotFound('Approval item not found.');
   }
-  return ar;
+  var perms = Rbac.userPermissions(ctx.session.userId) || [];
+  return _approvalOrderToItem_(o, perms);
 }
 
-// ── approve ───────────────────────────────────────────────────────────────────
+// ── approve: route to the SAME inline order handler (single decision point) ────
 
 function _approvalsApprove_(ctx, params) {
-  var requestId = String(params.requestId || '');
-  var comment   = String(params.comment   || '').trim();
+  var requestId = String(params.requestId || params.orderId || '');
   if (!requestId) throw new Errors.Validation('requestId required.');
-  var rows = TursoClient.select(
-    'SELECT * FROM approval_requests WHERE request_id = ? LIMIT 1', [requestId]
-  );
-  if (!rows.length) throw new Errors.NotFound('Approval request not found.');
-  var ar    = rows[0];
-  var scope = _approvalScopeData_(ctx.session);
-  if (!scope.isGlobal && ar.country_code && scope.countries.indexOf(ar.country_code) === -1) {
-    throw new Errors.NotFound('Approval request not found.');
-  }
-  if (ar.status !== 'PENDING') throw new Errors.Validation('Approval request is not PENDING.');
-
-  // Check caller is an eligible approver.
-  var eligible = (ar.assigned_to === ctx.session.userId) ||
-                 Rbac.userHasPermission(ctx.session.userId, ar.required_role_codes);
-  if (!eligible) throw new Errors.PermissionDenied('Not an eligible approver for this request.');
-
-  // SoD: approver must not be the creator.
-  if (ar.submitted_by && ar.submitted_by === ctx.session.userId) {
-    throw new Errors.PermissionDenied('Approval creator cannot approve their own request.');
-  }
-
-  var now = nowIso();
-  TursoClient.write(
-    'UPDATE approval_requests SET status = ?, approved_by = ?, approved_at = ?, ' +
-    'comments = ?, updated_at = ? WHERE request_id = ?',
-    ['APPROVED', ctx.session.userId, now, comment, now, requestId]
-  );
-  Audit.log({
-    actor: ctx.session.userId, action: 'APPROVAL_APPROVED',
-    entity: 'approval_requests', entityId: requestId,
-    before: { status: ar.status }, after: { status: 'APPROVED', approver: ctx.session.userId },
+  // Delegate to the inline order approve handler: it enforces SoD, the amount
+  // tier, the SUBMITTED guard and the notifications, and it updates the order to
+  // APPROVED. No parallel approval state is written.
+  return Orders._approveHandler_(ctx, {
+    orderId: requestId,
+    notes:   String(params.comment || params.notes || ''),
   });
-  return { success: true, status: 'APPROVED' };
 }
 
-// ── reject ────────────────────────────────────────────────────────────────────
+// ── reject: route to the SAME inline order handler ────────────────────────────
 
 function _approvalsReject_(ctx, params) {
-  var requestId = String(params.requestId || '');
-  var reason    = String(params.reason    || '').trim();
+  var requestId = String(params.requestId || params.orderId || '');
+  var reason    = String(params.reason || '').trim();
   if (!requestId) throw new Errors.Validation('requestId required.');
   if (!reason)    throw new Errors.Validation('reason required.');
-  var rows = TursoClient.select(
-    'SELECT * FROM approval_requests WHERE request_id = ? LIMIT 1', [requestId]
-  );
-  if (!rows.length) throw new Errors.NotFound('Approval request not found.');
-  var ar    = rows[0];
-  var scope = _approvalScopeData_(ctx.session);
-  if (!scope.isGlobal && ar.country_code && scope.countries.indexOf(ar.country_code) === -1) {
-    throw new Errors.NotFound('Approval request not found.');
-  }
-  if (ar.status !== 'PENDING') throw new Errors.Validation('Approval request is not PENDING.');
-
-  var eligible = (ar.assigned_to === ctx.session.userId) ||
-                 Rbac.userHasPermission(ctx.session.userId, ar.required_role_codes);
-  if (!eligible) throw new Errors.PermissionDenied('Not an eligible approver for this request.');
-  if (ar.submitted_by && ar.submitted_by === ctx.session.userId) {
-    throw new Errors.PermissionDenied('Approval creator cannot reject their own request.');
-  }
-
-  var now = nowIso();
-  TursoClient.write(
-    'UPDATE approval_requests SET status = ?, rejected_by = ?, rejected_at = ?, ' +
-    'rejection_reason = ?, comments = ?, updated_at = ? WHERE request_id = ?',
-    ['REJECTED', ctx.session.userId, now, reason, String(params.comment || ''), now, requestId]
-  );
-  Audit.log({
-    actor: ctx.session.userId, action: 'APPROVAL_REJECTED',
-    entity: 'approval_requests', entityId: requestId,
-    before: { status: ar.status }, after: { status: 'REJECTED', reason: reason },
-  });
-  return { success: true, status: 'REJECTED' };
+  return Orders._rejectHandler_(ctx, { orderId: requestId, reason: reason });
 }
 
-// ── Registration ──────────────────────────────────────────────────────────────
+// ── Registration (service keys and permissions unchanged) ─────────────────────
 
 (function _registerApprovals_() {
   register({ service: 'approvalRequests', action: 'inbox',   permission: 'order.approve_low', handler: _approvalsInbox_ });

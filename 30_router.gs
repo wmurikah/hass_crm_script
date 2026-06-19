@@ -49,6 +49,10 @@ function doGet(e) {
     // Staffdashboard) never throw a ReferenceError during evaluate().
     tmpl.sessionToken = String(params.token || '');
     tmpl.userEmail    = '';
+    // Default so MFA templates that reference challengeId never throw during
+    // evaluate() when reached via a direct doGet (the real flow injects it via
+    // _renderPage_ / getMfaEnrollPage).
+    tmpl.challengeId  = String(params.challengeId || '');
     return tmpl
       .evaluate()
       .setTitle(ENV.APP_NAME)
@@ -123,6 +127,10 @@ function _renderPage_(templateName, vars) {
   var tmpl = HtmlService.createTemplateFromFile(templateName);
   tmpl.sessionToken = (vars && vars.sessionToken) || '';
   tmpl.userEmail    = (vars && vars.userEmail)    || '';
+  // The MFA enrol/verify pages need the challenge minted at login (the partial
+  // pre-MFA token). Inject it so the page can pass it back to the server; other
+  // pages simply ignore the unused value.
+  tmpl.challengeId  = (vars && vars.challengeId)  || '';
   return tmpl.evaluate().getContent();
 }
 

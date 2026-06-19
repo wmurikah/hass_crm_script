@@ -24,8 +24,11 @@ function _reportsSummary_(ctx, params) {
   var openTickets = count(
     "SELECT COUNT(*) AS n FROM tickets WHERE status IN ('NEW','OPEN')" + sc.clause, sc.args
   );
+  // APR-3: count the real approval backlog (orders awaiting their tier decision),
+  // matching the unified approvals inbox and the dashboard summary. The legacy
+  // approval_requests table had no producer and always read 0.
   var pendingApprovals = count(
-    "SELECT COUNT(*) AS n FROM approval_requests WHERE status = 'PENDING'" + sc.clause, sc.args
+    "SELECT COUNT(*) AS n FROM orders WHERE status = 'SUBMITTED'" + sc.clause, sc.args
   );
   var unpaidInvoices = count(
     "SELECT COUNT(*) AS n FROM invoices WHERE payment_status = 'UNPAID' AND status != 'CANCELLED'" + sc.clause, sc.args
