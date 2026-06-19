@@ -4,8 +4,13 @@
  * M-Pesa Daraja API integration.
  *
  * MpesaInteg.initiate(params)        — initiate STK push payment
- * MpesaInteg.callback(payload)       — handle Daraja callback from doPost
- * MpesaInteg.reconcile()             — reconcile PENDING payment_uploads vs M-Pesa status API
+ * MpesaInteg.callback(payload)       - handle Daraja callback (routed from doPost)
+ * MpesaInteg.reconcile()             - reconcile pending payment_uploads vs M-Pesa status API
+ *
+ * INTG-1: the Daraja STK result is an EXTERNAL callback, so it is routed through
+ * doPost as a deliberate webhook gated by a shared secret carried in the callback
+ * URL (?hook=mpesa&secret=...). The webhook writes ONLY the payment table
+ * (payment_uploads); the invoice/order settlement runs in the reconcile JOB.
  *
  * Script Properties required:
  *   MPESA_ENV              — 'sandbox' | 'production'
@@ -13,7 +18,8 @@
  *   MPESA_CONSUMER_SECRET
  *   MPESA_SHORTCODE        — Lipa Na M-Pesa shortcode
  *   MPESA_PASSKEY          — from Daraja portal
- *   MPESA_CALLBACK_URL     — your /exec?source=mpesa URL
+ *   MPESA_CALLBACK_URL     - your /exec?hook=mpesa&secret=<MPESA_CALLBACK_SECRET> URL
+ *   MPESA_CALLBACK_SECRET  - shared secret doPost checks against the ?secret= param
  *
  * Every call writes one row to integration_log.
  * Throws Errors.Integration on failure so the job runner can retry.
@@ -104,14 +110,16 @@ var MpesaInteg = (function () {
     _logInteg_('initiate', 'SUCCESS', 'phone=' + params.phone + ' amount=' + params.amount,
                'CheckoutRequestID=' + result.CheckoutRequestID, null);
 
-    // Record CheckoutRequestID against upload for callback matching.
+    // Record CheckoutRequestID against the upload for callback matching. INTG-1:
+    // this match-key write is NOT swallowed - losing it silently would leave a
+    // charged payment unmatchable. The CheckoutRequestID is also captured in the
+    // integration_log SUCCESS row above, so even a failure here leaves a trail
+    // the reconcile job can recover from.
     if (params.upload_id && result.CheckoutRequestID) {
-      try {
-        TursoClient.write(
-          "UPDATE payment_uploads SET reference=?, updated_at=? WHERE upload_id=?",
-          [result.CheckoutRequestID, nowIso(), params.upload_id]
-        );
-      } catch (_) {}
+      TursoClient.write(
+        "UPDATE payment_uploads SET reference=?, updated_at=? WHERE upload_id=?",
+        [result.CheckoutRequestID, nowIso(), params.upload_id]
+      );
     }
 
     return result;
@@ -126,7 +134,7 @@ var MpesaInteg = (function () {
     var meta    = {};
     metaArr.forEach(function (item) { meta[item.Name] = item.Value; });
 
-    var success = code === 0;
+    var success = code === 0 || code === '0';
     Audit.log({
       actor: 'MPESA', action: success ? 'MPESA_PAYMENT_SUCCESS' : 'MPESA_PAYMENT_FAILED',
       entity: 'payment_uploads', entityId: checkId,
@@ -137,18 +145,28 @@ var MpesaInteg = (function () {
                'receipt=' + (meta.MpesaReceiptNumber || '') + ' amount=' + (meta.Amount || ''),
                success ? null : 'ResultCode=' + code);
 
-    if (success && meta.MpesaReceiptNumber) {
+    // Match the upload by its stored CheckoutRequestID (the reference key set at
+    // initiate) and record the result. The webhook writes ONLY the payment table
+    // (payment_uploads); invoice/order settlement is the reconcile JOB's job, so
+    // the boundary "the webhook touches only payment tables" holds. Idempotent:
+    // an already-APPROVED upload is left untouched, so a Daraja retry is a no-op.
+    var matched = false;
+    if (success && checkId) {
       var matchRows = TursoClient.select(
-        "SELECT upload_id FROM payment_uploads WHERE reference=? LIMIT 1", [checkId]
+        "SELECT upload_id, status FROM payment_uploads WHERE reference=? LIMIT 1", [checkId]
       );
       if (matchRows.length) {
-        var now = nowIso();
-        TursoClient.write(
-          "UPDATE payment_uploads SET status='APPROVED',reviewed_by='MPESA',reviewed_at=?,updated_at=? WHERE upload_id=?",
-          [now, now, matchRows[0].upload_id]
-        );
+        matched = true;
+        if (matchRows[0].status !== 'APPROVED') {
+          var now = nowIso();
+          TursoClient.write(
+            "UPDATE payment_uploads SET status='APPROVED',reviewed_by='MPESA',reviewed_at=?,updated_at=? WHERE upload_id=?",
+            [now, now, matchRows[0].upload_id]
+          );
+        }
       }
     }
+    return { success: success, matched: matched, result_code: code };
   }
 
   function reconcile() {
@@ -157,14 +175,21 @@ var MpesaInteg = (function () {
     var passkey   = props.getProperty('MPESA_PASSKEY')   || '';
     if (!shortcode || !passkey) { _logInteg_('reconcile', 'SKIPPED', '', '', 'MPESA not configured'); return; }
 
+    // Uploads are created with status PENDING_REVIEW (the real upload status), so
+    // match that (plus legacy 'PENDING') and require a stored reference (the
+    // CheckoutRequestID set at initiate). The previous 'PENDING'-only filter
+    // never matched, so charged-but-unmatched payments were never recovered.
     var pending = TursoClient.select(
-      "SELECT upload_id, reference FROM payment_uploads WHERE status='PENDING' AND reference IS NOT NULL ORDER BY created_at LIMIT 50"
+      "SELECT upload_id, invoice_id, reference FROM payment_uploads " +
+      "WHERE status IN ('PENDING_REVIEW','PENDING') AND reference IS NOT NULL AND reference != '' " +
+      "ORDER BY created_at LIMIT 50"
     );
 
     var ts       = _timestamp_();
     var password = Utilities.base64Encode(shortcode + passkey + ts);
     var token    = _token_();
     var reconciled = 0;
+    var toSettle   = {};   // invoice_id -> 1 (dedupe the settlement pass)
 
     pending.forEach(function (row) {
       try {
@@ -183,13 +208,41 @@ var MpesaInteg = (function () {
             "UPDATE payment_uploads SET status='APPROVED',reviewed_by='MPESA_RECON',reviewed_at=?,updated_at=? WHERE upload_id=?",
             [now, now, row.upload_id]
           );
+          if (row.invoice_id) toSettle[row.invoice_id] = 1;
           reconciled++;
         }
       } catch (_) {}
     });
 
-    _logInteg_('reconcile', 'SUCCESS', 'checked=' + pending.length, 'reconciled=' + reconciled, null);
-    Logger.log('MpesaInteg.reconcile: checked=' + pending.length + ' reconciled=' + reconciled);
+    // Recovery: also settle invoices for M-Pesa uploads already APPROVED (by the
+    // callback webhook or by this job) but whose invoice has not yet reached PAID.
+    // This is the JOB path, so updating invoices/orders here is in bounds (the
+    // webhook itself never touches those tables). Settlement is idempotent.
+    try {
+      var approved = TursoClient.select(
+        "SELECT DISTINCT pu.invoice_id AS invoice_id FROM payment_uploads pu " +
+        "JOIN invoices i ON i.invoice_id = pu.invoice_id " +
+        "WHERE pu.status='APPROVED' AND pu.reviewed_by IN ('MPESA','MPESA_RECON') " +
+        "AND pu.invoice_id IS NOT NULL AND COALESCE(i.payment_status,'') != 'PAID' LIMIT 100"
+      );
+      approved.forEach(function (r) { if (r.invoice_id) toSettle[r.invoice_id] = 1; });
+    } catch (_) {}
+
+    var settled = 0;
+    Object.keys(toSettle).forEach(function (invoiceId) {
+      try {
+        if (typeof _settleInvoiceFromApprovedUploads_ === 'function') {
+          _settleInvoiceFromApprovedUploads_(invoiceId, 'MPESA_RECON');
+          settled++;
+        }
+      } catch (e) {
+        _logInteg_('reconcile', 'FAILED', 'settle invoice=' + invoiceId, '', e && e.message ? e.message : String(e));
+      }
+    });
+
+    _logInteg_('reconcile', 'SUCCESS', 'checked=' + pending.length,
+               'reconciled=' + reconciled + ' settled=' + settled, null);
+    Logger.log('MpesaInteg.reconcile: checked=' + pending.length + ' reconciled=' + reconciled + ' settled=' + settled);
   }
 
   return { initiate: initiate, callback: callback, reconcile: reconcile };

@@ -11,20 +11,22 @@ Router.register('payments', function (el) {
   function load() {
     setHTML('payBody', loadingRow(8));
     var s = document.getElementById('payStatus').value;
-    // List from audit log events as proxy for payment upload listing.
-    API.call('auditLog', 'list', { entity_type: 'payment_uploads', limit: 50 }).then(function (rows) {
+    // INV-5: read the real payment_uploads rows so the page shows the reference
+    // (the list query resolves the real reference column) and does not error.
+    var params = { limit: 50 };
+    if (s) params.status = s;
+    API.call('payments', 'list', params).then(function (rows) {
       if (!rows.length) { setHTML('payBody', emptyRow(8, 'No payment records.')); return; }
       setHTML('payBody', rows.map(function (r) {
-        var after = {};
-        try { after = JSON.parse(r.after_json || '{}'); } catch (_) {}
-        return '<tr><td style="font-size:11px">' + esc(r.entity_id) + '</td>' +
-               '<td>' + esc(after.invoice_id || '—') + '</td>' +
-               '<td>' + fmtMoney(after.amount) + '</td>' +
-               '<td>' + esc(after.payment_method || '—') + '</td>' +
-               '<td>—</td>' +
-               '<td>' + statusBadge(after.status || r.action.replace('PAYMENT_','')) + '</td>' +
+        var canReview = can('invoice.generate') && r.status === 'PENDING_REVIEW';
+        return '<tr><td style="font-size:11px">' + esc(r.upload_id) + '</td>' +
+               '<td>' + esc(r.invoice_id || '-') + '</td>' +
+               '<td>' + fmtMoney(r.amount) + '</td>' +
+               '<td>' + esc(r.payment_method || '-') + '</td>' +
+               '<td>' + esc(r.reference || '-') + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td>' +
                '<td>' + fmtDate(r.created_at) + '</td>' +
-               '<td>' + (can('invoice.generate') ? '<button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.entity_id) + '\')">Review</button>' : '') + '</td></tr>';
+               '<td>' + (canReview ? '<button class="btn btn-primary btn-sm" onclick="reviewPayment(\'' + esc(r.upload_id) + '\')">Review</button>' : '') + '</td></tr>';
       }).join(''));
     }).catch(function (e) { setHTML('payBody', errorRow(8, e, load)); });
   }

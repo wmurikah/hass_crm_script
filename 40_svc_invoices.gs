@@ -239,6 +239,60 @@ function _paymentUpload_(ctx, params) {
   return { upload_id: uploadId, status: 'PENDING_REVIEW' };
 }
 
+// INV-2 / INV-3 / INV-4: shared settlement. Sum every APPROVED upload for an
+// invoice and move the invoice payment_status to PAID (the approved total covers
+// the invoice total) or PARTIAL (some but not all), then move the linked order's
+// payment_status in step so order-side reporting reflects the payment. The writes
+// are HARD writes: a failed PAID write must SURFACE, never be swallowed into a
+// false success (INV-4 preserved). The recompute is idempotent, so both the
+// manual approve path and the M-Pesa reconcile JOB can call it safely. A missing
+// invoice is a no-op (nothing to settle); only real write failures propagate.
+function _settleInvoiceFromApprovedUploads_(invoiceId, actor) {
+  if (!invoiceId) return null;
+  var invRows = TursoClient.select(
+    'SELECT invoice_id, order_id, total_amount FROM invoices WHERE invoice_id = ? LIMIT 1',
+    [invoiceId]
+  );
+  if (!invRows.length) return null;
+  var inv   = invRows[0];
+  var total = parseFloat(inv.total_amount || 0);
+
+  var sumRows = TursoClient.select(
+    "SELECT COALESCE(SUM(amount), 0) AS paid FROM payment_uploads WHERE invoice_id = ? AND status = 'APPROVED'",
+    [invoiceId]
+  );
+  var paid = parseFloat((sumRows.length && sumRows[0].paid) || 0);
+
+  var now       = nowIso();
+  var newStatus = (total > 0 && paid >= total) ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'UNPAID');
+
+  // Invoice write surfaces on failure (INV-4). PAID also stamps paid_at.
+  if (newStatus === 'PAID') {
+    TursoClient.write(
+      'UPDATE invoices SET payment_status = ?, paid_at = ?, updated_at = ? WHERE invoice_id = ?',
+      ['PAID', now, now, invoiceId]
+    );
+  } else {
+    TursoClient.write(
+      'UPDATE invoices SET payment_status = ?, updated_at = ? WHERE invoice_id = ?',
+      [newStatus, now, invoiceId]
+    );
+  }
+
+  // INV-3: reflect the payment on the linked order. Only advance it for a real
+  // payment (PAID/PARTIAL); never downgrade an INVOICED order when nothing is
+  // approved yet.
+  if (inv.order_id && (newStatus === 'PAID' || newStatus === 'PARTIAL')) {
+    TursoClient.write(
+      'UPDATE orders SET payment_status = ?, updated_at = ? WHERE order_id = ?',
+      [newStatus, now, inv.order_id]
+    );
+  }
+
+  return { invoice_id: invoiceId, order_id: inv.order_id || null,
+           paid: paid, total: total, payment_status: newStatus };
+}
+
 function _paymentApprove_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'invoice.generate');
   var uploadId = String(params.uploadId || '');
@@ -255,28 +309,27 @@ function _paymentApprove_(ctx, params) {
     'UPDATE payment_uploads SET status = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE upload_id = ?',
     ['APPROVED', ctx.session.userId, now, now, uploadId]
   );
-  // Mark invoice as PAID if payment covers total.
-  try {
-    var invRows = TursoClient.select(
-      'SELECT total_amount FROM invoices WHERE invoice_id = ? LIMIT 1', [before.invoice_id]
-    );
-    if (invRows.length && parseFloat(before.amount) >= parseFloat(invRows[0].total_amount)) {
-      TursoClient.write(
-        'UPDATE invoices SET payment_status = ?, paid_at = ?, updated_at = ? WHERE invoice_id = ?',
-        ['PAID', now, now, before.invoice_id]
-      );
-    }
-  } catch (_) {}
+
+  // INV-2 / INV-3 / INV-4: sum ALL approved uploads against the invoice total so
+  // an invoice paid in two parts becomes PAID, move the linked order, and let any
+  // write failure SURFACE so the money path can never report a false success.
+  var settle = _settleInvoiceFromApprovedUploads_(before.invoice_id, ctx.session.userId);
 
   Audit.log({
     actor: ctx.session.userId, action: 'PAYMENT_APPROVED',
     entity: 'payment_uploads', entityId: uploadId,
-    before: before, after: { status: 'APPROVED', reviewed_by: ctx.session.userId },
+    before: before,
+    after: { status: 'APPROVED', reviewed_by: ctx.session.userId,
+             invoice_payment_status: settle && settle.payment_status },
   });
-  // NOT-2: notify the customer contact and the uploader. Best-effort; the
-  // payment is already approved and this can never undo or block that.
+  // NOT-2 / INV-3: notify the customer contact and the uploader through the
+  // step-1 emit path (Notify.emit -> notifications queue -> flush job).
+  // Best-effort: the payment is already approved and the invoice/order already
+  // settled, so a notification failure can never undo or block that.
   try {
-    var payVars = { amount: before.amount, currency_code: before.currency_code, invoice_id: before.invoice_id, upload_id: uploadId };
+    var payVars = { amount: before.amount, currency_code: before.currency_code,
+                    invoice_id: before.invoice_id, upload_id: uploadId,
+                    payment_status: settle && settle.payment_status };
     Notify.emit({
       recipient_id: before.customer_id, recipient_type: 'CUSTOMER',
       channel: 'EMAIL', event_key: 'PAYMENT_APPROVED', vars: payVars,
@@ -292,7 +345,8 @@ function _paymentApprove_(ctx, params) {
       entity_type: 'payment_uploads', entity_id: uploadId,
     });
   } catch (_) {}
-  return { success: true, status: 'APPROVED' };
+  return { success: true, status: 'APPROVED',
+           invoice_payment_status: settle && settle.payment_status };
 }
 
 function _paymentReject_(ctx, params) {
