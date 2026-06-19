@@ -633,6 +633,97 @@ function migrateAddSessionRole() {
   }
 }
 
+/**
+ * Run once from the IDE to change signup_requests.status DEFAULT from 'PENDING'
+ * to 'PENDING_APPROVAL' so the column default agrees with the producers and the
+ * admin queue filter. SQLite cannot ALTER a column default in place, so this
+ * rebuilds the table, preserving every column (name / type / NOT NULL / PRIMARY
+ * KEY / existing default, including kyc_status) via PRAGMA introspection and
+ * overriding ONLY the status default.
+ *
+ * SAFETY: refuses to run unless the table is EMPTY (the intended window), so no
+ * row data is ever migrated or lost. Idempotent: a no-op once the default is
+ * already PENDING_APPROVAL. The producers (auth.signup, signupRequests.create)
+ * write status explicitly, so the queue works whether or not this has been run;
+ * this only closes the trap for any future writer that relies on the default.
+ */
+function migrateSignupStatusDefault() {
+  var info;
+  try {
+    info = TursoClient.select('PRAGMA table_info(signup_requests)');
+  } catch (e) {
+    Logger.log('migrateSignupStatusDefault: cannot read schema: ' + e.message);
+    return { changed: false, error: e.message };
+  }
+  if (!info.length) {
+    Logger.log('migrateSignupStatusDefault: signup_requests not found.');
+    return { changed: false, error: 'table not found' };
+  }
+
+  var statusCol  = info.filter(function (c) { return String(c.name).toLowerCase() === 'status'; })[0];
+  var curDefault = statusCol && statusCol.dflt_value != null ? String(statusCol.dflt_value) : '';
+  if (curDefault.indexOf('PENDING_APPROVAL') !== -1) {
+    Logger.log('migrateSignupStatusDefault: status default already PENDING_APPROVAL; nothing to do.');
+    return { changed: false };
+  }
+
+  var cnt = TursoClient.select('SELECT COUNT(*) AS n FROM signup_requests');
+  var n   = cnt.length ? (parseInt(cnt[0].n, 10) || 0) : 0;
+  if (n > 0) {
+    var busy = 'signup_requests has ' + n + ' row(s); refusing to rebuild. Producers already ' +
+               'write status explicitly; migrate the default by hand if it is still required.';
+    Logger.log('migrateSignupStatusDefault: ' + busy);
+    return { changed: false, error: busy };
+  }
+
+  var pkCols = info.filter(function (c) { return parseInt(c.pk, 10) > 0; });
+  if (pkCols.length > 1) {
+    Logger.log('migrateSignupStatusDefault: composite primary key detected; rebuild by hand.');
+    return { changed: false, error: 'composite primary key' };
+  }
+
+  // Rebuild the column list, preserving each column and overriding only status's
+  // default. dflt_value comes back already in SQL-literal form ('PENDING',
+  // datetime('now'), ...), so it is re-emitted verbatim.
+  var defs = info.map(function (c) {
+    var name = String(c.name);
+    var def  = name + ' ' + String(c.type || 'TEXT');
+    if (parseInt(c.pk, 10) > 0)      def += ' PRIMARY KEY';
+    if (parseInt(c.notnull, 10) === 1) def += ' NOT NULL';
+    if (name.toLowerCase() === 'status') {
+      def += " DEFAULT 'PENDING_APPROVAL'";
+    } else if (c.dflt_value != null && String(c.dflt_value) !== '') {
+      def += ' DEFAULT ' + String(c.dflt_value);
+    }
+    return def;
+  });
+  var createNew = 'CREATE TABLE signup_requests__new (\n  ' + defs.join(',\n  ') + '\n)';
+
+  try {
+    TursoClient.batch([
+      { sql: 'BEGIN IMMEDIATE' },
+      { sql: createNew },
+      { sql: 'INSERT INTO signup_requests__new SELECT * FROM signup_requests' },
+      { sql: 'DROP TABLE signup_requests' },
+      { sql: 'ALTER TABLE signup_requests__new RENAME TO signup_requests' },
+      { sql: 'COMMIT' },
+    ]);
+  } catch (e) {
+    try { TursoClient.write('ROLLBACK'); } catch (_) {}
+    try { TursoClient.write('DROP TABLE IF EXISTS signup_requests__new'); } catch (_) {}
+    Logger.log('migrateSignupStatusDefault: rebuild failed (rolled back): ' + e.message);
+    return { changed: false, error: e.message };
+  }
+
+  var after = TursoClient.select('PRAGMA table_info(signup_requests)');
+  var ok = after.some(function (c) {
+    return String(c.name).toLowerCase() === 'status' &&
+           String(c.dflt_value || '').indexOf('PENDING_APPROVAL') !== -1;
+  });
+  Logger.log('migrateSignupStatusDefault: rebuilt; status default now PENDING_APPROVAL = ' + ok);
+  return { changed: true, verified: ok };
+}
+
 // ── Internal helper ───────────────────────────────────────────────────────────
 
 function _seedAddColumnIfMissing_(tableName, columnName, columnDef) {

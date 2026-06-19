@@ -227,12 +227,16 @@ function _authLogout_(ctx, params) {
 }
 
 function _authSignup_(ctx, params) {
-  // Lightweight implementation: create a signup_request row.
+  // Lightweight implementation: create a signup_request row. No password is
+  // collected at signup; credentials are issued by email only after an admin
+  // approves, so pending_password_hash stays null.
   var email = String(params.email || '').trim().toLowerCase();
   if (!email) throw new Errors.Validation('Email is required.');
-  Password.validatePolicy(String(params.password || ''));
   var existing = _findContactByEmail_(email);
   if (existing) throw new Errors.Validation('An account with this email already exists.');
+  // Map onto the real signup_requests columns. status is written explicitly
+  // (never relying on the column default) and submitted_at is the only timestamp
+  // this table carries (there is no created_at / updated_at).
   Repo.create('signup_requests', {
     request_id:   uuidv4(),
     email:        email,
@@ -241,8 +245,6 @@ function _authSignup_(ctx, params) {
     phone:        String(params.phone     || ''),
     status:       'PENDING_APPROVAL',
     submitted_at: nowIso(),
-    created_at:   nowIso(),
-    updated_at:   nowIso(),
   });
   Audit.log({ actor: '', action: 'SIGNUP_REQUESTED', entity: 'signup_requests',
               entityId: email, metadata: { email: email } });

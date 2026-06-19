@@ -244,13 +244,17 @@
     .hl-modal__dialog {
       position: relative; z-index: 1;
       width: min(640px, calc(100% - 32px));
-      max-height: calc(100vh - 48px);
-      margin: 24px auto; display: flex; flex-direction: column;
+      /* Constrain to the VISIBLE iframe height. The app renders inside the
+         Cloudflare iframe, whose top --banner-safe band is cropped off-screen,
+         so base the cap on (100vh - --banner-safe) and push the dialog below the
+         crop; otherwise the foot is pushed off the bottom of the viewport. */
+      max-height: calc(100vh - var(--banner-safe) - 32px);
+      margin: calc(var(--banner-safe) + 16px) auto 16px; display: flex; flex-direction: column;
       background: #fff; border-radius: 18px; border: 1px solid var(--hl-line);
       box-shadow: 0 30px 80px rgba(11,23,51,.45); overflow: hidden;
       animation: hl-fade-up .35s ease both;
     }
-    .hl-modal__head { position: relative; padding: 26px 30px 18px; border-bottom: 1px solid var(--hl-line); background: linear-gradient(180deg, #fbfcfe, #fff); }
+    .hl-modal__head { flex: 0 0 auto; position: relative; padding: 26px 30px 18px; border-bottom: 1px solid var(--hl-line); background: linear-gradient(180deg, #fbfcfe, #fff); }
     .hl-modal__title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 26px; line-height: 1.15; color: var(--hl-navy-900); margin: 2px 0 6px; }
     .hl-modal__intro { font-size: 13.5px; line-height: 1.5; color: var(--hl-muted); margin: 0; max-width: 56ch; }
     .hl-modal__x {
@@ -262,7 +266,13 @@
     .hl-modal__x:hover { background: #f1f3f9; color: var(--hl-ink); }
     .hl-modal__x:focus-visible { outline: 2px solid var(--hl-gold); outline-offset: 2px; }
 
-    .hl-modal__body { padding: 22px 30px; overflow-y: auto; }
+    /* The <form> is the flex child wrapping the scrollable body and the action
+       row, so it must itself be a flex column that fills the dialog; the body
+       then takes the remaining height and scrolls, while the head and the foot
+       (consent sits at the end of the body; Submit lives in the foot) stay
+       reachable and are never the part that gets clipped. */
+    #signupForm { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .hl-modal__body { flex: 1 1 auto; min-height: 0; padding: 22px 30px; overflow-y: auto; }
     .hl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
     .hl-col-2 { grid-column: 1 / -1; }
     .hl-modal .hl-label { margin-bottom: 6px; }
@@ -292,7 +302,7 @@
        some bots skip display:none inputs but still autofill positioned ones. */
     .hl-hp { position: absolute !important; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
 
-    .hl-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 30px 22px; border-top: 1px solid var(--hl-line); }
+    .hl-modal__foot { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 10px; padding: 16px 30px 22px; border-top: 1px solid var(--hl-line); }
     .hl-modal__foot .hl-btn { width: auto; margin: 0; animation: none; }
     .hl-btn--ghost { color: var(--hl-navy-700); background: #fff; border: 1px solid #d3d9e6; box-shadow: none; }
     .hl-btn--ghost:hover { background: #f1f3f9; filter: none; box-shadow: none; transform: none; }
@@ -310,7 +320,7 @@
 
     @media (max-width: 560px) {
       .hl-grid { grid-template-columns: 1fr; }
-      .hl-modal__dialog { width: calc(100% - 20px); margin: 12px auto; max-height: calc(100vh - 24px); }
+      .hl-modal__dialog { width: calc(100% - 20px); margin: calc(var(--banner-safe) + 8px) auto 8px; max-height: calc(100vh - var(--banner-safe) - 16px); }
       .hl-modal__head, .hl-modal__body, .hl-modal__foot { padding-left: 20px; padding-right: 20px; }
       .hl-modal__foot { flex-direction: column-reverse; }
       .hl-modal__foot .hl-btn { width: 100%; }

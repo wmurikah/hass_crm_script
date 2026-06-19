@@ -54,15 +54,21 @@ Columns relied on (proven by existing code/seed):
   `phone`, `portal_role`, `is_portal_user`, `password_hash`, `status`
   (`40_svc_contacts.gs`, `40_svc_auth.gs`).
 - `signup_requests`: `request_id`, `email`, `first_name`, `last_name`, `phone`,
-  `status`, `submitted_at`, `created_at`, `updated_at` (written by `auth.signup`).
+  `job_title`, `company_name`, `country_code`, `tax_pin`, `registration_number`,
+  `customer_id`, `status`, `submitted_at`, plus review columns `approved_by`,
+  `approved_at`, `rejection_reason`, `rejected_at`. There is no `created_at` /
+  `updated_at`; `submitted_at` is the only timestamp. The live columns are
+  authoritative (see `003_signup_requests_schema.sql` and `smokeSignupSchema()`).
 - `password_history`, `mfa_challenges`: as used by `20_password.gs` / `20_mfa.gs`.
 
-Best-effort schema adaptation added by this change (never fails the request):
+Schema notes:
 
-- `signup_requests`: optional review columns `reviewed_by`, `reviewed_at`,
-  `decision_reason`, `provisioned_id`, `provisioned_type` are added if missing;
-  if the ALTER cannot run, the handler falls back to setting only `status` +
-  `updated_at`.
+- `signup_requests`: approve writes `status='APPROVED'`, `approved_by`,
+  `approved_at` (and `customer_id` when provisioning a portal contact); reject
+  writes `status='REJECTED'`, `rejection_reason`, `rejected_at`. These columns
+  already exist, so there is no `ALTER` and no `reviewed_*` / `decision_reason` /
+  `provisioned_*` column is created. Who/what was provisioned is recorded in the
+  `SIGNUP_APPROVED` / `SIGNUP_REJECTED` audit entries, not on the request row.
 - `contacts.must_change_password` is set best-effort with a fallback that omits it.
 
 No other approval-bearing pending state exists to surface. Credit-limit change

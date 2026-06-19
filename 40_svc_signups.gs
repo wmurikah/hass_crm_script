@@ -25,24 +25,10 @@
  * committed first, so a mail hiccup never undoes an approval or a rejection.
  */
 
-var _SIGNUP_COLS_READY_ = false;
-
-// Best-effort: make sure the optional review/bookkeeping columns exist. Mirrors
-// the additive ALTER pattern used elsewhere (contacts.portal_role,
-// notifications.attempts). A column that already exists makes the ALTER a no-op.
-function _signupEnsureColumns_() {
-  if (_SIGNUP_COLS_READY_) return;
-  [
-    'reviewed_by TEXT',
-    'reviewed_at TEXT',
-    'decision_reason TEXT',
-    'provisioned_id TEXT',
-    'provisioned_type TEXT',
-  ].forEach(function (def) {
-    try { TursoClient.write('ALTER TABLE signup_requests ADD COLUMN ' + def); } catch (_) {}
-  });
-  _SIGNUP_COLS_READY_ = true;
-}
+// The review columns this service writes (status, approved_by, approved_at,
+// customer_id, rejection_reason, rejected_at) all already exist on the live
+// signup_requests table, so there is nothing to ALTER. The live columns are
+// authoritative; see 003_signup_requests_schema.sql for the canonical DDL.
 
 // A temporary password that always satisfies the password policy (upper, lower,
 // digit, special, length). Used when the reviewer does not set an explicit one.
@@ -73,17 +59,17 @@ function _signupEsc_(s) {
 
 function _signupsList_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.view');
-  _signupEnsureColumns_();
   var sql  = 'SELECT * FROM signup_requests WHERE 1=1';
   var args = [];
   // Default to the actionable queue; allow an explicit status filter.
   if (params.status) { sql += ' AND status = ?'; args.push(String(params.status).toUpperCase()); }
   else               { sql += " AND status = 'PENDING_APPROVAL'"; }
-  // Newest first, paginated. limit/offset are integer-coerced (never interpolated
-  // from raw input) so the LIMIT/OFFSET clause cannot be injected.
+  // Newest first, paginated. submitted_at is the table's only timestamp (there is
+  // no created_at). limit/offset are integer-coerced (never interpolated from raw
+  // input) so the LIMIT/OFFSET clause cannot be injected.
   var limit  = Math.min(Math.max(parseInt(params.limit, 10) || 100, 1), 500);
   var offset = Math.max(parseInt(params.offset, 10) || 0, 0);
-  sql += ' ORDER BY COALESCE(submitted_at, created_at) DESC LIMIT ' + limit + ' OFFSET ' + offset;
+  sql += ' ORDER BY submitted_at DESC LIMIT ' + limit + ' OFFSET ' + offset;
   return TursoClient.select(sql, args);
 }
 
@@ -102,7 +88,6 @@ function _signupsGet_(ctx, params) {
 
 function _signupsApprove_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.create');
-  _signupEnsureColumns_();
 
   var requestId = String(params.requestId || params.request_id || '');
   if (!requestId) throw new Errors.Validation('requestId required.');
@@ -130,6 +115,9 @@ function _signupsApprove_(ctx, params) {
   Password.validatePolicy(tempPassword);
   var actor        = _signupActor_(ctx);
   var provisioned  = { id: '', type: provisionAs };
+  // Captured for the portal-contact path so the approval can link the request to
+  // the customer via signup_requests.customer_id.
+  var customerId   = '';
 
   if (provisionAs === 'STAFF') {
     // Reuse the canonical staff-create path: it validates the role set, enforces
@@ -148,7 +136,7 @@ function _signupsApprove_(ctx, params) {
   } else if (provisionAs === 'CONTACT') {
     // Portal contact: belongs to a customer and carries a portal_role.
     Rbac.requirePermission(ctx.session, 'contacts.manage');
-    var customerId = String(params.customer_id || params.customerId || '').trim();
+    customerId = String(params.customer_id || params.customerId || '').trim();
     var portalRole = String(params.portal_role || params.portalRole || '').trim();
     if (!customerId) throw new Errors.Validation('customer_id is required to provision a portal contact.');
     if (!portalRole) throw new Errors.Validation('portal_role is required to provision a portal contact.');
@@ -185,25 +173,28 @@ function _signupsApprove_(ctx, params) {
     throw new Errors.Validation('provision_as must be STAFF or CONTACT.');
   }
 
-  // Mark the request APPROVED and record who/what/when (optional columns).
+  // Mark the request APPROVED on the real review columns: status, approved_by,
+  // approved_at. For a portal contact, also set customer_id to link the request
+  // to the customer. (There are no reviewed_*/provisioned_* columns; who/what was
+  // provisioned is recorded in the SIGNUP_APPROVED audit entry below.)
   var now = nowIso();
-  try {
+  if (provisionAs === 'CONTACT') {
     TursoClient.write(
-      'UPDATE signup_requests SET status = ?, reviewed_by = ?, reviewed_at = ?, ' +
-      'provisioned_id = ?, provisioned_type = ?, updated_at = ? WHERE request_id = ?',
-      ['APPROVED', actor, now, provisioned.id, provisioned.type, now, requestId]
+      'UPDATE signup_requests SET status = ?, approved_by = ?, approved_at = ?, customer_id = ? WHERE request_id = ?',
+      ['APPROVED', actor, now, customerId, requestId]
     );
-  } catch (_) {
+  } else {
     TursoClient.write(
-      'UPDATE signup_requests SET status = ?, updated_at = ? WHERE request_id = ?',
-      ['APPROVED', now, requestId]
+      'UPDATE signup_requests SET status = ?, approved_by = ?, approved_at = ? WHERE request_id = ?',
+      ['APPROVED', actor, now, requestId]
     );
   }
 
   Audit.log({
     actor: actor, action: 'SIGNUP_APPROVED', entity: 'signup_requests', entityId: requestId,
     before: { status: 'PENDING_APPROVAL' },
-    after:  { status: 'APPROVED', provisioned_type: provisioned.type, provisioned_id: provisioned.id },
+    // provisioned is audit context (what was created), not a signup_requests column.
+    after:  { status: 'APPROVED', provisioned: { type: provisioned.type, id: provisioned.id } },
   });
 
   // Welcome the applicant directly via the Graph email path (EmailInteg.send), so
@@ -238,7 +229,6 @@ function _signupsApprove_(ctx, params) {
 
 function _signupsReject_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'user.create');
-  _signupEnsureColumns_();
 
   var requestId = String(params.requestId || params.request_id || '');
   var reason    = String(params.reason || '').trim();
@@ -254,17 +244,13 @@ function _signupsReject_(ctx, params) {
 
   var actor = _signupActor_(ctx);
   var now   = nowIso();
-  try {
-    TursoClient.write(
-      'UPDATE signup_requests SET status = ?, decision_reason = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE request_id = ?',
-      ['REJECTED', reason, actor, now, now, requestId]
-    );
-  } catch (_) {
-    TursoClient.write(
-      'UPDATE signup_requests SET status = ?, updated_at = ? WHERE request_id = ?',
-      ['REJECTED', now, requestId]
-    );
-  }
+  // Reject on the real review columns: status, rejection_reason, rejected_at.
+  // There is no rejected_by column; the rejecting user is captured as the actor
+  // on the SIGNUP_REJECTED audit entry below.
+  TursoClient.write(
+    'UPDATE signup_requests SET status = ?, rejection_reason = ?, rejected_at = ? WHERE request_id = ?',
+    ['REJECTED', reason, now, requestId]
+  );
 
   Audit.log({
     actor: actor, action: 'SIGNUP_REJECTED', entity: 'signup_requests', entityId: requestId,

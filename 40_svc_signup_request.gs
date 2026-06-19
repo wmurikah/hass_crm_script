@@ -15,36 +15,27 @@
  * .approve flow in 40_svc_signups.gs, which this file deliberately does not
  * touch. The only table written here is signup_requests.
  *
- * Schema (confirmed by introspection of the code that already reads/writes the
- * table: auth.signup, signupRequests.list/approve, the notifications emit):
- *   base columns        request_id (PK), email, first_name, last_name, phone,
- *                       status, submitted_at, created_at, updated_at
- *   pending status      'PENDING_APPROVAL'  (the value signupRequests.list
- *                       filters on by default, so a new row shows under
- *                       "Pending review")
- * The identifying light-KYC fields (company, country, tax PIN, registration
- * number, contact name and role) are stored as first-class columns, added if
- * missing through the same additive ALTER helper used elsewhere. The optional
- * fields (products of interest, notes) and the consent record (flag, version,
- * timestamp) live in a metadata JSON column.
+ * Schema (the live signup_requests columns are authoritative; confirmed by
+ * PRAGMA table_info introspection - see migrateSignupStatusDefault and the
+ * canonical DDL in 003_signup_requests_schema.sql). The producer maps its inputs
+ * onto columns that already exist and creates NO new columns:
+ *   request_id (PK), company_name, country_code, tax_pin, registration_number,
+ *   first_name, last_name, job_title, email, phone, status, submitted_at.
+ * The single contact name is split into first_name/last_name and the contact's
+ * role maps onto job_title. status is written as 'PENDING_APPROVAL' explicitly
+ * (never relying on the column default) so the row shows under "Pending review".
+ * No password is collected at signup, so pending_password_hash stays null;
+ * credentials are emailed only after an admin approves. submitted_at is the only
+ * timestamp this table carries (there is no created_at / updated_at).
  */
-
-// Consent text version stamped onto every accepted request. Bump this when the
-// consent wording or the linked privacy notice changes, so older acceptances
-// stay attributable to the exact text the applicant agreed to.
-var _SIGNUP_CONSENT_VERSION_ = 'self-signup-v1-2026-06';
 
 // The nine Hass markets offered on the public form (code to label). Kept in sync
 // with the country dropdown in Login.html. Used to validate the submitted code
-// server-side and to stamp a human-readable label into the metadata.
+// server-side before it is written to country_code.
 var _SIGNUP_MARKETS_ = {
   KE: 'Kenya', UG: 'Uganda', TZ: 'Tanzania', RW: 'Rwanda', DRC: 'DR Congo',
   SS: 'South Sudan', SO: 'Somalia', ZM: 'Zambia', MW: 'Malawi',
 };
-
-// Optional products of interest. Whitelisted so the metadata only ever stores
-// known codes regardless of what the client posts.
-var _SIGNUP_PRODUCTS_ = { AGO: 1, PMS: 1, LPG: 1, LUBRICANTS: 1 };
 
 // Returned to an unauthenticated visitor, so the wording is deliberately neutral:
 // it never confirms or denies that an email already maps to a registered account.
@@ -56,31 +47,9 @@ var _SIGNUP_REQ_DUP_MSG_ =
   'A request for this email is already under review. We will be in touch by ' +
   'email once it has been assessed.';
 
-var _SIGNUP_REQ_COLS_READY_ = false;
-
-// Additive, idempotent column bootstrap. Mirrors _signupEnsureColumns_ in
-// 40_svc_signups.gs and the notifications.attempts migration: each ALTER is
-// wrapped so a column that already exists makes it a harmless no-op.
-function _signupReqEnsureColumns_() {
-  if (_SIGNUP_REQ_COLS_READY_) return;
-  [
-    'company_name TEXT',
-    'country_code TEXT',
-    'tax_pin TEXT',
-    'registration_number TEXT',
-    'contact_name TEXT',
-    'contact_role TEXT',
-    'metadata TEXT',
-  ].forEach(function (def) {
-    try { TursoClient.write('ALTER TABLE signup_requests ADD COLUMN ' + def); } catch (_) {}
-  });
-  _SIGNUP_REQ_COLS_READY_ = true;
-}
-
-// Live column set read straight from PRAGMA, NOT the per-invocation
-// SchemaIntrospect cache (which may predate the ALTERs above). Used so the
-// INSERT only ever names columns that physically exist, making the write robust
-// to schema variance.
+// Live column set read straight from PRAGMA. Used so the INSERT only ever names
+// columns that physically exist, making the write robust to schema variance and
+// guaranteeing this producer can never create a column. It never ALTERs.
 function _signupReqLiveColumns_() {
   try {
     var rows = TursoClient.select('PRAGMA table_info(signup_requests)');
@@ -106,13 +75,6 @@ function _signupReqRateLimited_(emailLc) {
     cache.put(key, '1', 30);
   } catch (_) {}
   return false;
-}
-
-function _signupReqAsArray_(v) {
-  if (v == null) return [];
-  if (Object.prototype.toString.call(v) === '[object Array]') return v;
-  if (typeof v === 'string') return v.split(',');
-  return [v];
 }
 
 /**
@@ -149,7 +111,8 @@ function _signupRequestCreate_(ctx, params) {
   var consent     = params.consent === true || params.consent === 'true' ||
                     params.consent === 1 || params.consent === '1' || params.consent === 'on';
 
-  // 3) Server-side validation (mirrors the client, never trusts it).
+  // 3) Server-side validation (mirrors the client, never trusts it). Consent is
+  // required as a gate even though the real schema has no column to persist it.
   if (!companyName) throw new Errors.Validation('Company or trading name is required.');
   if (!country || !_SIGNUP_MARKETS_[country]) throw new Errors.Validation('Select a valid country or market.');
   if (!taxPin) throw new Errors.Validation('Tax PIN or VAT number is required.');
@@ -161,24 +124,15 @@ function _signupRequestCreate_(ctx, params) {
   if (!phone) throw new Errors.Validation('Phone number is required.');
   if (!consent) throw new Errors.Validation('Please confirm you are authorised and consent to processing.');
 
-  // 4) Optional fields, whitelisted/clamped, for the metadata JSON.
-  var products = [];
-  _signupReqAsArray_(params.products_of_interest || params.products).forEach(function (p) {
-    var code = String(p || '').trim().toUpperCase();
-    if (_SIGNUP_PRODUCTS_[code] && products.indexOf(code) === -1) products.push(code);
-  });
-  var notes = String(params.notes || '').trim().slice(0, 2000);
-
-  // 5) Basic rate limit (per-email cooldown). Placed after validation so a human
+  // 4) Basic rate limit (per-email cooldown). Placed after validation so a human
   // correcting a validation error is never throttled.
   if (_signupReqRateLimited_(email)) {
     return { received: true, duplicate: true, message: _SIGNUP_REQ_DUP_MSG_ };
   }
 
-  // 6) Dedupe by email WITHOUT account enumeration. We look ONLY at pending
+  // 5) Dedupe by email WITHOUT account enumeration. We look ONLY at pending
   // signup_requests, never at users/contacts, so the response can never reveal
   // whether the email already belongs to a registered account.
-  _signupReqEnsureColumns_();
   var pending = TursoClient.select(
     "SELECT request_id FROM signup_requests WHERE LOWER(email) = ? AND status = 'PENDING_APPROVAL' LIMIT 1",
     [email]
@@ -187,51 +141,34 @@ function _signupRequestCreate_(ctx, params) {
     return { received: true, duplicate: true, message: _SIGNUP_REQ_DUP_MSG_ };
   }
 
-  // 7) Build the row. Split the single contact name into first/last so the
-  // existing admin list (renders first_name + last_name) and the approve flow
-  // (reads req.first_name / req.last_name) keep working unchanged.
+  // 6) Build the row on the REAL columns only. Split the single contact name into
+  // first/last so the admin list (renders first_name + last_name) and the approve
+  // flow (reads req.first_name / req.last_name) keep working; the role maps onto
+  // job_title. No password is collected, so pending_password_hash stays null, and
+  // kyc_status is left to its own default (a separate post-approval lifecycle).
   var nameParts = contactName.split(/\s+/);
   var firstName = nameParts.shift() || contactName;
   var lastName  = nameParts.join(' ');
 
-  var now = nowIso();
-  var metadata = {
-    products_of_interest: products,
-    notes: notes,
-    market_label: _SIGNUP_MARKETS_[country],
-    consent: {
-      given: true,
-      version: _SIGNUP_CONSENT_VERSION_,
-      accepted_at: now,
-      statement: 'Authorised to request an account for the business and consents ' +
-                 'to processing of the submitted details for verification.',
-    },
-    source: 'login_self_signup',
-  };
-
   var candidate = {
     request_id:          uuidv4(),
-    email:               email,
-    first_name:          firstName,
-    last_name:           lastName,
-    contact_name:        contactName,
-    contact_role:        contactRole,
     company_name:        companyName,
     country_code:        country,
     tax_pin:             taxPin,
     registration_number: regNumber,
+    first_name:          firstName,
+    last_name:           lastName,
+    job_title:           contactRole,
+    email:               email,
     phone:               phone,
-    metadata:            jsonStringify(metadata),
     status:              'PENDING_APPROVAL',
-    submitted_at:        now,
-    created_at:          now,
-    updated_at:          now,
+    submitted_at:        nowIso(),
   };
 
-  // Insert only the columns the table physically has after the ALTERs above,
-  // preserving each column's real on-disk spelling. If introspection comes back
-  // empty (a transient read issue), fall back to the full candidate and trust the
-  // additive ALTERs, the same posture auth.signup takes with its fixed column set.
+  // Insert only the columns the table physically has, preserving each column's
+  // real on-disk spelling. If introspection comes back empty (a transient read
+  // issue), fall back to the full candidate, the same posture auth.signup takes
+  // with its fixed column set. Either way no column is ever created here.
   var live = _signupReqLiveColumns_();
   var row;
   if (live.length) {
