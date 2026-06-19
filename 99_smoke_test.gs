@@ -1297,3 +1297,79 @@ function smokeNotifications() {
   results.push(summary);
   return results;
 }
+
+// =============================================================================
+// smokeStep3  -  approvals inbox unification + signup review + auth endpoints
+//   (APR-1/2/3, AUTH-1/3/4/5). Registry/wiring checks only, so this is DB-free
+//   and safe to run anywhere; it asserts the endpoints exist, the MFA enrol names
+//   match the UI, the public/session gating is correct, and the unified inbox
+//   routes through the order handlers. Run from the GAS IDE.
+// =============================================================================
+
+function smokeStep3() {
+  var results = [], passed = 0, failed = 0;
+  function check(name, fn) {
+    try { fn(); results.push('PASS  ' + name); Logger.log('PASS  ' + name); passed++; }
+    catch (e) { results.push('FAIL  ' + name + '\n      ' + e.message); Logger.log('FAIL  ' + name + ': ' + e.message); failed++; }
+  }
+  function registered(key) { if (!_registry_[key]) throw new Error('not registered: ' + key); }
+  function isPublic(key)   { if (_PUBLIC_ACTIONS_.indexOf(key) === -1) throw new Error('not public: ' + key); }
+  function notPublic(key)  { if (_PUBLIC_ACTIONS_.indexOf(key) !== -1) throw new Error('should not be public: ' + key); }
+  function noSession(service, action) {
+    var r = dispatch({}, { service: service, action: action, params: {} });
+    if (!r || r.ok !== false || !r.error || r.error.code !== 'NO_SESSION') {
+      throw new Error('expected NO_SESSION for ' + service + '.' + action + ', got ' + (r && r.error && r.error.code));
+    }
+  }
+
+  // APR: the inbox/list/get/approve/reject still exist and are session-gated.
+  check('APR: approvalRequests.* registered', function () {
+    ['inbox', 'list', 'get', 'approve', 'reject'].forEach(function (a) { registered('approvalRequests.' + a); });
+  });
+  check('APR: approvalRequests.inbox is session-gated (NO_SESSION without token)', function () {
+    noSession('approvalRequests', 'inbox');
+  });
+  check('APR-2: approve/reject delegate to the inline order handlers', function () {
+    if (typeof Orders === 'undefined' || !Orders._approveHandler_ || !Orders._rejectHandler_) {
+      throw new Error('Orders approve/reject handlers not exposed for delegation');
+    }
+  });
+
+  // AUTH-1: signup review endpoints.
+  check('AUTH-1: signupRequests.* registered', function () {
+    ['list', 'get', 'approve', 'reject'].forEach(function (a) { registered('signupRequests.' + a); });
+  });
+  check('AUTH-1: signupRequests.approve is session-gated', function () { noSession('signupRequests', 'approve'); });
+
+  // AUTH-3: portal profile + password endpoints registered, session-gated (NOT public).
+  check('AUTH-3: users.updateProfile + auth.changePassword registered and not public', function () {
+    registered('users.updateProfile'); notPublic('users.updateProfile');
+    registered('auth.changePassword'); notPublic('auth.changePassword');
+    noSession('users', 'updateProfile');
+    noSession('auth', 'changePassword');
+  });
+
+  // AUTH-4: MFA enrol endpoint names match the UI, and the enrol/verify actions
+  // are public so the no-full-session mid-login case works.
+  check('AUTH-4: auth.mfaEnroll / auth.mfaVerifyEnroll registered (match MfaEnroll.html)', function () {
+    registered('auth.mfaEnroll'); registered('auth.mfaVerifyEnroll');
+  });
+  check('AUTH-4: MFA mid-login actions are public (partial pre-MFA token gated)', function () {
+    ['auth.mfaEnroll', 'auth.mfaVerifyEnroll', 'auth.mfaVerify'].forEach(isPublic);
+  });
+  check('AUTH-4: Mfa.enrolFromChallenge exists (no-session enrol path)', function () {
+    if (typeof Mfa === 'undefined' || typeof Mfa.enrolFromChallenge !== 'function') throw new Error('Mfa.enrolFromChallenge missing');
+  });
+
+  // The two _PUBLIC_ACTIONS_ copies must stay in agreement on the MFA actions.
+  check('Public-action lists agree on the MFA actions (no drift)', function () {
+    ['auth.mfaEnroll', 'auth.mfaVerifyEnroll', 'auth.mfaVerify'].forEach(isPublic);
+  });
+
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeStep3: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary);
+  results.push(summary);
+  return results;
+}

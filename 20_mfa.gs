@@ -226,7 +226,33 @@ var Mfa = (function () {
     var uRows  = TursoClient.select('SELECT email FROM ' + table + ' WHERE ' + idCol + ' = ? LIMIT 1', [userId]);
     var email  = uRows.length ? (uRows[0].email || '') : '';
     var uri    = _provisioningUri_(email, secret, 'Hass Petroleum');
-    return { challenge_id: challengeId, provisioning_uri: uri };
+    return { challenge_id: challengeId, provisioning_uri: uri, secret: secret };
+  }
+
+  // Resume an enrolment from an EXISTING enroll-mode challenge, without needing a
+  // full session. The challenge row (created at login, after the password step)
+  // already carries the user_id / user_type, so the challengeId acts as a
+  // short-lived partial pre-MFA token. Reuses the row's pending_secret if present
+  // so the secret the user already scanned stays valid; generates one otherwise.
+  function enrolFromChallenge(challengeId) {
+    var ch = _getChallenge_(challengeId);
+    if (!ch) throw new Errors.Validation('MFA challenge expired or not found.');
+    if (ch.mode !== 'enroll') throw new Errors.Validation('Challenge mode mismatch.');
+    var secret = ch.pending_secret;
+    if (!secret) {
+      secret = _generateSecret_();
+      TursoClient.write(
+        'UPDATE mfa_challenges SET pending_secret = ? WHERE challenge_id = ?',
+        [secret, challengeId]
+      );
+    }
+    var table = (ch.user_type === 'CUSTOMER') ? 'contacts' : 'users';
+    var idCol = (ch.user_type === 'CUSTOMER') ? 'contact_id' : 'user_id';
+    var uRows = TursoClient.select('SELECT email FROM ' + table + ' WHERE ' + idCol + ' = ? LIMIT 1', [ch.user_id]);
+    var email = uRows.length ? (uRows[0].email || '') : '';
+    var uri   = _provisioningUri_(email, secret, 'Hass Petroleum');
+    return { challenge_id: challengeId, provisioning_uri: uri, secret: secret,
+             userId: ch.user_id, userType: ch.user_type };
   }
 
   function enrolVerify(challengeId, code) {
@@ -270,11 +296,12 @@ var Mfa = (function () {
   }
 
   return {
-    isRequiredFor: isRequiredFor,
-    enrolStart:    enrolStart,
-    enrolVerify:   enrolVerify,
-    startVerify:   startVerify,
-    verify:        verify,
+    isRequiredFor:     isRequiredFor,
+    enrolStart:        enrolStart,
+    enrolFromChallenge: enrolFromChallenge,
+    enrolVerify:       enrolVerify,
+    startVerify:       startVerify,
+    verify:            verify,
   };
 
 })();

@@ -71,6 +71,13 @@ function _clearLoginFails_(table, idCol, id) {
 var _PUBLIC_ACTIONS_ = [
   'auth.login', 'auth.signup', 'auth.verifyAccount',
   'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
+  // MFA mid-login actions: a user partway through login has no full session yet,
+  // only the challenge minted after the password step. These are gated by
+  // possession of a valid, unconsumed, unexpired challengeId (the partial pre-MFA
+  // token), so they are safe to expose without a session. auth.changePassword is
+  // deliberately NOT public: it requires a real session (own-account change).
+  'auth.mfaEnroll', 'auth.mfaVerifyEnroll',
+  'auth.mfaEnrollStart', 'auth.mfaEnrollVerify', 'auth.mfaVerify',
 ];
 
 /**
@@ -337,19 +344,120 @@ function _authSetNewPassword_(ctx, params) {
   return { success: true };
 }
 
+// MFA enrol start (AUTH-4). Registered under BOTH auth.mfaEnroll (the name the
+// UI calls) and auth.mfaEnrollStart (the prior name). Handles the no-full-session
+// case: a mid-login user has no session yet, only the enroll challenge minted at
+// login (after the password step). That challengeId is a short-lived partial
+// pre-MFA token bound to the user, so enrolment resumes from it. A logged-in user
+// enabling MFA from settings (has a session, no challengeId) uses the session.
 function _authMfaEnrollStart_(ctx, params) {
-  var sess = ctx.session;
-  if (!sess) throw new Errors.PermissionDenied('Authentication required.');
-  var enrol = Mfa.enrolStart(sess.userType, sess.userId);
-  return { challengeId: enrol.challenge_id, provisioning_uri: enrol.provisioning_uri };
+  var challengeId = String(params.challengeId || '');
+  var enrol;
+  if (challengeId) {
+    enrol = Mfa.enrolFromChallenge(challengeId);
+  } else {
+    // Settings path: a logged-in user enabling MFA. These actions are public (so
+    // the mid-login no-session case works), which means the dispatcher does not
+    // populate ctx.session; resolve the bearer token here instead.
+    var sess = ctx.session;
+    if (!sess && params && params.sessionToken) sess = Session.validate(params.sessionToken);
+    if (!sess) throw new Errors.PermissionDenied('Authentication required.');
+    enrol = Mfa.enrolStart(sess.userType, sess.userId);
+  }
+  return {
+    challengeId:      enrol.challenge_id,
+    challenge_id:     enrol.challenge_id,
+    provisioning_uri: enrol.provisioning_uri,
+    secret:           enrol.secret,
+  };
 }
 
+// MFA enrol verify (AUTH-4). Registered under BOTH auth.mfaVerifyEnroll and
+// auth.mfaEnrollVerify. When the enrolment is part of a login (no full session
+// yet), completing it completes the login, so a session is issued here, exactly
+// as auth.mfaVerify does. When a logged-in user enrols from settings, the
+// existing session stands and we just confirm success.
 function _authMfaEnrollVerify_(ctx, params) {
   var challengeId = String(params.challengeId || '');
   var code        = String(params.code        || '');
   var result = Mfa.enrolVerify(challengeId, code);
   Audit.log({ actor: result.userId, action: 'MFA_ENROLLED', entity: 'users',
               entityId: result.userId, metadata: { userType: result.userType } });
+
+  // These actions are public, so ctx.session is not set by the dispatcher;
+  // resolve any bearer token to tell the settings path (already logged in) from
+  // the mid-login path (no session yet, enrolment completes the login).
+  var existingSession = ctx.session;
+  if (!existingSession && params && params.sessionToken) existingSession = Session.validate(params.sessionToken);
+
+  if (!existingSession && result.userType === 'STAFF') {
+    var ip = String(params.ip || '');
+    var ua = String(params.ua || '');
+    var uRows = TursoClient.select('SELECT * FROM users WHERE user_id = ? LIMIT 1', [result.userId]);
+    if (!uRows.length) throw new Errors.NotFound('User not found.');
+    var u = uRows[0];
+    var rRows = TursoClient.select('SELECT role_code FROM user_roles WHERE user_id = ? LIMIT 1', [result.userId]);
+    var role  = rRows.length ? rRows[0].role_code : 'CS_AGENT';
+    var sessionResult = Session.create(result.userId, 'STAFF', role, ip, ua, u.country_code || '');
+    _clearLoginFails_('users', 'user_id', result.userId);
+    Audit.log({ actor: result.userId, action: 'MFA_LOGIN', entity: 'sessions',
+                entityId: sessionResult.session_id, ip: ip, ua: ua, metadata: { role: role, via: 'enroll' } });
+    return { success: true, token: sessionResult.token, role: role, userId: result.userId,
+             redirectUrl: '?page=staff&token=' + sessionResult.token };
+  }
+  return { success: true };
+}
+
+// Self-service password change (AUTH-3). Session required (any authenticated
+// user, staff or portal contact). Enforces the SAME rules as the rest of auth:
+// the current password must verify, and the new one must pass Password
+// .validatePolicy (length/complexity + the reuse-history check), the identical
+// path used by auth.setNewPassword and users.resetPassword.
+function _authChangePassword_(ctx, params) {
+  var sess = ctx.session;
+  if (!sess) throw new Errors.PermissionDenied('Authentication required.');
+  var userId   = sess.userId   || sess.user_id   || '';
+  var userType = String(sess.userType || sess.user_type || 'STAFF').toUpperCase();
+  var current  = String(params.currentPassword || params.current_password || '');
+  var newPass  = String(params.newPassword     || params.new_password     || '');
+  if (!current || !newPass) throw new Errors.Validation('Current and new password are required.');
+
+  var table       = (userType === 'CUSTOMER') ? 'contacts'   : 'users';
+  var idCol       = (userType === 'CUSTOMER') ? 'contact_id' : 'user_id';
+  var historyType = (userType === 'CUSTOMER') ? 'CUSTOMER'   : 'STAFF';
+
+  var rows = TursoClient.select('SELECT * FROM ' + table + ' WHERE ' + idCol + ' = ? LIMIT 1', [userId]);
+  if (!rows.length) throw new Errors.NotFound('Account not found.');
+  var row = rows[0];
+
+  if (!Password.verify(current, row.password_hash)) {
+    Audit.log({ actor: userId, action: 'PASSWORD_CHANGE_FAILED', entity: table,
+                entityId: userId, metadata: { reason: 'wrong_current' } });
+    throw new Errors.Validation('Current password is incorrect.');
+  }
+
+  Password.validatePolicy(newPass, userId, historyType);
+  var newHash = Password.hash(newPass);
+
+  if (row.password_hash) {
+    TursoClient.write(
+      'INSERT INTO password_history (history_id, user_id, user_type, password_hash, created_at) VALUES (?,?,?,?,?)',
+      [uuidv4(), userId, historyType, row.password_hash, nowIso()]
+    );
+  }
+  try {
+    TursoClient.write(
+      'UPDATE ' + table + ' SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE ' + idCol + ' = ?',
+      [newHash, nowIso(), userId]
+    );
+  } catch (_) {
+    TursoClient.write(
+      'UPDATE ' + table + ' SET password_hash = ?, updated_at = ? WHERE ' + idCol + ' = ?',
+      [newHash, nowIso(), userId]
+    );
+  }
+  Audit.log({ actor: userId, action: 'PASSWORD_CHANGED', entity: table,
+              entityId: userId, metadata: { userType: historyType, self: true } });
   return { success: true };
 }
 
@@ -374,7 +482,13 @@ function _authMfaVerify_(ctx, params) {
                 entityId: sessionResult.session_id, ip: ip, ua: ua, metadata: { role: role } });
     return { token: sessionResult.token, role: role, userId: userId, redirectUrl: '?page=staff&token=' + sessionResult.token };
   }
-  throw new Errors.AppError('MFA verify for non-staff not yet implemented.');
+  // AUTH-5: MFA is explicitly disabled for portal contacts. This is consistent
+  // with Mfa.isRequiredFor, which returns false for CUSTOMER, and with the portal
+  // login path, which issues a session directly with no MFA gate. A portal
+  // contact therefore never reaches this branch in the normal flow; if one ever
+  // does (e.g. a hand-crafted challenge), it gets a clean, explicit message
+  // rather than a half-implemented error, and is never left half-blocked.
+  throw new Errors.Validation('Two-factor authentication is not enabled for portal accounts.');
 }
 
 /**
@@ -492,7 +606,12 @@ function _authGetStaffInfo_(ctx, params) {
   register({ service: 'auth', action: 'setNewPassword',       permission: null,          handler: _authSetNewPassword_ });
   register({ service: 'auth', action: 'mfaEnrollStart',       permission: null,          handler: _authMfaEnrollStart_ });
   register({ service: 'auth', action: 'mfaEnrollVerify',      permission: null,          handler: _authMfaEnrollVerify_ });
+  // AUTH-4: aliases matching the names MfaEnroll.html actually calls.
+  register({ service: 'auth', action: 'mfaEnroll',            permission: null,          handler: _authMfaEnrollStart_ });
+  register({ service: 'auth', action: 'mfaVerifyEnroll',      permission: null,          handler: _authMfaEnrollVerify_ });
   register({ service: 'auth', action: 'mfaVerify',            permission: null,          handler: _authMfaVerify_ });
+  // AUTH-3: self-service password change (session required; not public).
+  register({ service: 'auth', action: 'changePassword',       permission: null,          handler: _authChangePassword_ });
   register({ service: 'auth', action: 'me',                   permission: null,          handler: _authMe_ });
   register({ service: 'auth', action: 'getStaffInfo',         permission: 'user.view',   handler: _authGetStaffInfo_ });
 })();

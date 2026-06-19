@@ -1,0 +1,113 @@
+<script>
+// Self-signup review (AUTH-1). Lists PENDING_APPROVAL signup_requests and lets an
+// admin provision (staff user or portal contact) + assign a role, or reject with
+// a reason. Reachable for roles holding user.create (see 40_svc_menu.gs).
+Router.register('signups', function (el) {
+  el.innerHTML =
+    '<div class="filter-bar">' +
+      '<select class="form-control" id="suStatus">' +
+        '<option value="PENDING_APPROVAL">Pending review</option>' +
+        '<option value="APPROVED">Approved</option>' +
+        '<option value="REJECTED">Rejected</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="card"><div class="table-wrapper"><table class="data-table">' +
+      '<thead><tr><th>Email</th><th>Name</th><th>Phone</th><th>Status</th><th>Submitted</th><th></th></tr></thead>' +
+      '<tbody id="suBody"></tbody></table></div></div>';
+
+  function load() {
+    setHTML('suBody', loadingRow(6));
+    var status = document.getElementById('suStatus').value;
+    API.call('signupRequests', 'list', { status: status, limit: 100 }).then(function (rows) {
+      if (!rows.length) { setHTML('suBody', emptyRow(6, 'No sign-up requests.')); return; }
+      setHTML('suBody', rows.map(function (r) {
+        var rid  = esc(r.request_id);
+        var name = ((r.first_name || '') + ' ' + (r.last_name || '')).trim() || '-';
+        return '<tr><td>' + esc(r.email || '-') + '</td>' +
+               '<td>' + esc(name) + '</td>' +
+               '<td>' + esc(r.phone || '-') + '</td>' +
+               '<td>' + statusBadge(r.status) + '</td>' +
+               '<td>' + fmtDate(r.submitted_at || r.created_at) + '</td>' +
+               '<td class="actions">' +
+               (String(r.status).toUpperCase() === 'PENDING_APPROVAL'
+                 ? '<button class="btn btn-danger btn-sm" onclick="signupReject(\'' + rid + '\')">Reject</button>' +
+                   '<button class="btn btn-primary btn-sm" onclick="signupApprove(\'' + rid + '\')">Approve</button>'
+                 : '') +
+               '</td></tr>';
+      }).join(''));
+    }).catch(function (e) { setHTML('suBody', errorRow(6, e, load)); });
+  }
+
+  document.getElementById('suStatus').onchange = load;
+  window._signupReload = load;
+  load();
+});
+
+function signupApprove(requestId) {
+  Modal.open({
+    title: 'Approve sign-up',
+    body:
+      '<div class="form-group"><label class="form-label">Provision as</label>' +
+        '<select class="form-control" id="suProvType" onchange="_signupToggleContact()">' +
+          '<option value="STAFF">Staff user</option>' +
+          '<option value="CONTACT">Portal contact</option>' +
+        '</select></div>' +
+      '<div class="form-group"><label class="form-label">Role code</label>' +
+        '<input class="form-control" id="suRole" value="CS_AGENT" placeholder="e.g. CS_AGENT">' +
+        '<small style="color:#6b7280">Staff role to assign. You can only grant roles within your own permissions.</small></div>' +
+      '<div id="suContactFields" style="display:none">' +
+        '<div class="form-group"><label class="form-label">Customer ID</label>' +
+          '<input class="form-control" id="suCustomerId" placeholder="customer_id the contact belongs to"></div>' +
+        '<div class="form-group"><label class="form-label">Portal role</label>' +
+          '<input class="form-control" id="suPortalRole" placeholder="e.g. PORTAL_ADMIN"></div>' +
+      '</div>' +
+      '<div id="suMsg" style="font-size:12px;color:#dc2626;margin-top:6px"></div>',
+    footer:
+      '<button class="btn btn-secondary" onclick="Modal.close()">Cancel</button>' +
+      '<button class="btn btn-primary" id="suProvisionBtn" onclick="signupDoProvision(\'' + esc(requestId) + '\')">Provision</button>',
+  });
+}
+
+function _signupToggleContact() {
+  var t = document.getElementById('suProvType').value;
+  var isContact = t === 'CONTACT';
+  document.getElementById('suContactFields').style.display = isContact ? 'block' : 'none';
+  // The staff role field only applies to the staff path.
+  document.getElementById('suRole').closest('.form-group').style.display = isContact ? 'none' : 'block';
+}
+
+function signupDoProvision(requestId) {
+  var type = document.getElementById('suProvType').value;
+  var params = { requestId: requestId, provision_as: type };
+  if (type === 'CONTACT') {
+    params.customer_id = document.getElementById('suCustomerId').value.trim();
+    params.portal_role = document.getElementById('suPortalRole').value.trim();
+    if (!params.customer_id || !params.portal_role) {
+      document.getElementById('suMsg').textContent = 'Customer ID and portal role are required.';
+      return;
+    }
+  } else {
+    params.role = document.getElementById('suRole').value.trim() || 'CS_AGENT';
+  }
+  var btn = document.getElementById('suProvisionBtn');
+  if (btn) btn.disabled = true;
+  API.call('signupRequests', 'approve', params)
+    .then(function (r) {
+      Modal.close();
+      Toast.success('Sign-up approved (' + (r.provisioned && r.provisioned.type || 'provisioned') + ').');
+      if (window._signupReload) window._signupReload();
+    })
+    .catch(function (e) {
+      document.getElementById('suMsg').textContent = e.message;
+      if (btn) btn.disabled = false;
+    });
+}
+
+function signupReject(requestId) {
+  var reason = window.prompt('Rejection reason (required):');
+  if (!reason) return;
+  API.call('signupRequests', 'reject', { requestId: requestId, reason: reason })
+    .then(function () { Toast.success('Sign-up rejected.'); if (window._signupReload) window._signupReload(); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+</script>

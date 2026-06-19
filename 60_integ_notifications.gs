@@ -297,6 +297,12 @@ function _resolveRecipientEmail_(recipientId, recipientType) {
     if (type === 'CUSTOMER') {
       return _resolveCustomerEmail_(recipientId);
     }
+    if (type === 'SIGNUP') {
+      // A rejected sign-up applicant has no user/contact yet; resolve their email
+      // straight from the signup_requests row so the step-1 emit can deliver it.
+      var sr = TursoClient.select('SELECT email FROM signup_requests WHERE request_id = ? LIMIT 1', [recipientId]);
+      return (sr.length && sr[0].email) ? sr[0].email : null;
+    }
 
     // Unknown type: try a user, then a contact, before giving up.
     var anyU = TursoClient.select('SELECT email FROM users WHERE user_id = ? LIMIT 1', [recipientId]);

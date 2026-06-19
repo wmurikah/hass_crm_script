@@ -35,6 +35,10 @@
   var btn    = document.getElementById('verifyBtn');
   var inputs = document.querySelectorAll('#otpInputs input');
 
+  // The verify challenge minted at login is injected by the server; the verify
+  // call must carry it so the server can match the pending factor.
+  var challengeId = '<?= challengeId ?>';
+
   // GAS-safe page swap (window.location is blocked inside the sandbox iframe).
   function swapTo(serverFn, arg) {
     google.script.run
@@ -71,7 +75,7 @@
     if (code.length < 6) { errDiv.textContent = 'Enter all 6 digits.'; errDiv.style.display = 'block'; return; }
     errDiv.style.display = 'none';
     btn.disabled = true;
-    API.call('auth', 'mfaVerify', { code: code })
+    API.call('auth', 'mfaVerify', { challengeId: challengeId, code: code })
       .then(function (d) {
         var token = (d && d.token) || API.getToken();
         if (d && d.token) {

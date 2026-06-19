@@ -35,6 +35,7 @@ var _MENU_ITEMS_ = [
   { id: 'audit',       label: 'Audit Log',       icon: 'shield',       route: 'audit',       permission: 'order.view',        group: 'admin' },
   { id: 'rbac',        label: 'Roles & Perms',   icon: 'lock',         route: 'rbac',        permission: 'order.manage',      group: 'admin' },
   { id: 'users',       label: 'Users',           icon: 'user',         route: 'users',       permission: 'user.view',         group: 'admin' },
+  { id: 'signups',     label: 'Sign-up Requests', icon: 'user-plus',   route: 'signups',     permission: 'user.create',       group: 'admin' },
   { id: 'config',      label: 'System Config',   icon: 'settings',     route: 'config',      permission: 'order.manage',      group: 'admin' },
   { id: 'branding',    label: 'Branding',        icon: 'image',        route: 'branding',    permission: 'order.manage',      group: 'admin' },
 ];

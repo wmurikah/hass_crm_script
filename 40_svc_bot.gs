@@ -119,10 +119,10 @@ function _botToolCatalog_() {
 
     // ── Approval requests (inbox / workflow) ─────────────────────────────────
     { service: 'approvalRequests', action: 'list', is_write: 0, permission: 'order.view',
-      description: 'List approval requests, optionally by status.',
+      description: 'List orders in the approval backlog (SUBMITTED/APPROVED/REJECTED), optionally by status.',
       params: { status: STATUS, limit: LIMIT } },
     { service: 'approvalRequests', action: 'inbox', is_write: 0, permission: 'order.approve_low',
-      description: 'Approval requests awaiting the signed-in user (their inbox).',
+      description: 'Orders awaiting the signed-in user to approve (their actionable inbox).',
       params: { limit: LIMIT } },
 
     // ── Documents ──────────────────────────────────────────────────────────

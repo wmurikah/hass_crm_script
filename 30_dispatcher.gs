@@ -6,7 +6,11 @@
 var _PUBLIC_ACTIONS_ = [
   'auth.login', 'auth.signup', 'auth.verifyAccount',
   'auth.requestPasswordReset', 'auth.verifyOtp',
-  'auth.setNewPassword', 'system.health', 'system.ping'
+  'auth.setNewPassword', 'system.health', 'system.ping',
+  // MFA mid-login actions (gated by a valid challengeId, the partial pre-MFA
+  // token). Kept in sync with the auth-service copy of this list.
+  'auth.mfaEnroll', 'auth.mfaVerifyEnroll',
+  'auth.mfaEnrollStart', 'auth.mfaEnrollVerify', 'auth.mfaVerify'
 ];
 
 var _registry_ = {};
