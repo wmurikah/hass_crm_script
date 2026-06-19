@@ -71,6 +71,9 @@ function _clearLoginFails_(table, idCol, id) {
 var _PUBLIC_ACTIONS_ = [
   'auth.login', 'auth.signup', 'auth.verifyAccount',
   'auth.requestPasswordReset', 'auth.verifyOtp', 'auth.setNewPassword',
+  // Customer self-signup (signupRequests.create): writes one pending
+  // signup_requests row pre-session, like login. No user is created here.
+  'signupRequests.create',
   // MFA mid-login actions: a user partway through login has no full session yet,
   // only the challenge minted after the password step. These are gated by
   // possession of a valid, unconsumed, unexpired challengeId (the partial pre-MFA

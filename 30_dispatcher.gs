@@ -7,6 +7,9 @@ var _PUBLIC_ACTIONS_ = [
   'auth.login', 'auth.signup', 'auth.verifyAccount',
   'auth.requestPasswordReset', 'auth.verifyOtp',
   'auth.setNewPassword', 'system.health', 'system.ping',
+  // Customer self-signup: writes one pending signup_requests row pre-session,
+  // exactly like login. Provisioning still happens only on admin approval.
+  'signupRequests.create',
   // MFA mid-login actions (gated by a valid challengeId, the partial pre-MFA
   // token). Kept in sync with the auth-service copy of this list.
   'auth.mfaEnroll', 'auth.mfaVerifyEnroll',

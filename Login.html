@@ -224,6 +224,100 @@
     @media (max-width: 420px) {
       .hl-card { padding: 30px 24px 24px; border-radius: 14px; }
     }
+
+    /* ── Self-signup affordance + modal (brand navy/gold, additive) ──── */
+    /* The login form above is untouched: these styles are scoped under new
+       .hl-signup* / .hl-modal* classes and never restyle the card. */
+    .hl-signup-cta { margin: 16px 0 0; text-align: center; font-size: 13.5px; color: var(--hl-muted); }
+    .hl-signup-link {
+      font: inherit; font-weight: 600; color: var(--hl-gold);
+      background: none; border: none; padding: 2px; cursor: pointer;
+      border-bottom: 1px solid rgba(201,162,39,.45);
+      transition: color .15s ease, border-color .15s ease;
+    }
+    .hl-signup-link:hover { color: #a8851d; border-color: var(--hl-gold); }
+    .hl-signup-link:focus-visible { outline: 2px solid var(--hl-gold); outline-offset: 2px; border-radius: 3px; }
+
+    .hl-modal { position: fixed; inset: 0; z-index: 10000; display: none; }
+    .hl-modal.show { display: block; animation: hl-fade-in .2s ease both; }
+    .hl-modal__backdrop { position: absolute; inset: 0; background: rgba(11,23,51,.62); backdrop-filter: blur(3px); }
+    .hl-modal__dialog {
+      position: relative; z-index: 1;
+      width: min(640px, calc(100% - 32px));
+      max-height: calc(100vh - 48px);
+      margin: 24px auto; display: flex; flex-direction: column;
+      background: #fff; border-radius: 18px; border: 1px solid var(--hl-line);
+      box-shadow: 0 30px 80px rgba(11,23,51,.45); overflow: hidden;
+      animation: hl-fade-up .35s ease both;
+    }
+    .hl-modal__head { position: relative; padding: 26px 30px 18px; border-bottom: 1px solid var(--hl-line); background: linear-gradient(180deg, #fbfcfe, #fff); }
+    .hl-modal__title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 26px; line-height: 1.15; color: var(--hl-navy-900); margin: 2px 0 6px; }
+    .hl-modal__intro { font-size: 13.5px; line-height: 1.5; color: var(--hl-muted); margin: 0; max-width: 56ch; }
+    .hl-modal__x {
+      position: absolute; top: 16px; right: 16px; width: 34px; height: 34px;
+      border-radius: 9px; font-size: 22px; line-height: 1; color: var(--hl-muted);
+      background: #fff; border: 1px solid var(--hl-line); cursor: pointer;
+      transition: background .15s ease, color .15s ease;
+    }
+    .hl-modal__x:hover { background: #f1f3f9; color: var(--hl-ink); }
+    .hl-modal__x:focus-visible { outline: 2px solid var(--hl-gold); outline-offset: 2px; }
+
+    .hl-modal__body { padding: 22px 30px; overflow-y: auto; }
+    .hl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+    .hl-col-2 { grid-column: 1 / -1; }
+    .hl-modal .hl-label { margin-bottom: 6px; }
+    .hl-req { color: var(--hl-gold); }
+    .hl-hint { font-size: 11.5px; color: #97a1b8; font-weight: 400; }
+    .hl-select {
+      display: block; width: 100%; padding: 12px 14px; font-size: 15px; font-family: inherit;
+      color: var(--hl-ink); background: #fbfcfe; border: 1px solid #d8deea; border-radius: 11px; outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+    .hl-select:focus { border-color: var(--hl-gold); background: #fff; box-shadow: 0 0 0 3px rgba(201,162,39,.18); }
+    textarea.hl-input { resize: vertical; min-height: 72px; }
+
+    .hl-checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+    .hl-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: #3a466a; cursor: pointer; }
+    .hl-check input { width: 16px; height: 16px; accent-color: var(--hl-gold); }
+
+    .hl-consent {
+      display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; padding: 12px 14px;
+      background: #fbfaf3; border: 1px solid #ece3c4; border-radius: 11px;
+      font-size: 13px; line-height: 1.45; color: #4a4636; cursor: pointer;
+    }
+    .hl-consent input { margin-top: 2px; width: 16px; height: 16px; accent-color: var(--hl-gold); flex: 0 0 auto; }
+    .hl-consent a { color: #a8851d; font-weight: 600; text-decoration: underline; }
+
+    /* Visually hidden honeypot: kept off-screen rather than display:none, since
+       some bots skip display:none inputs but still autofill positioned ones. */
+    .hl-hp { position: absolute !important; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+
+    .hl-modal__foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 30px 22px; border-top: 1px solid var(--hl-line); }
+    .hl-modal__foot .hl-btn { width: auto; margin: 0; animation: none; }
+    .hl-btn--ghost { color: var(--hl-navy-700); background: #fff; border: 1px solid #d3d9e6; box-shadow: none; }
+    .hl-btn--ghost:hover { background: #f1f3f9; filter: none; box-shadow: none; transform: none; }
+
+    .hl-modal__done { padding: 36px 30px; text-align: center; }
+    .hl-done-badge {
+      width: 60px; height: 60px; margin: 0 auto 16px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--hl-gold-lt), var(--hl-gold)); color: #fff; font-size: 30px;
+    }
+    .hl-modal__done h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 23px; color: var(--hl-navy-900); margin: 0 0 8px; }
+    .hl-modal__done p { font-size: 14px; line-height: 1.55; color: var(--hl-muted); margin: 0 auto 8px; max-width: 46ch; }
+
+    .hl-note { background: #fff8e8; border: 1px solid #f0dca0; color: #8a6d1b; font-size: 13px; padding: 9px 12px; border-radius: 10px; margin-bottom: 14px; }
+
+    @media (max-width: 560px) {
+      .hl-grid { grid-template-columns: 1fr; }
+      .hl-modal__dialog { width: calc(100% - 20px); margin: 12px auto; max-height: calc(100vh - 24px); }
+      .hl-modal__head, .hl-modal__body, .hl-modal__foot { padding-left: 20px; padding-right: 20px; }
+      .hl-modal__foot { flex-direction: column-reverse; }
+      .hl-modal__foot .hl-btn { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hl-modal, .hl-modal__dialog { animation: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -276,6 +370,11 @@
         <button class="hl-btn" type="submit" id="loginBtn">Sign in</button>
       </form>
 
+      <p class="hl-signup-cta">New customer?
+        <button type="button" class="hl-signup-link" id="openSignup"
+                aria-haspopup="dialog" aria-controls="signupModal">Request an account</button>
+      </p>
+
       <div class="hl-foot">Secure staff &amp; customer sign-in · Hass Petroleum Group</div>
     </div>
   </main>
@@ -303,6 +402,127 @@
     </svg>
     <div class="hl-loader__status" id="loaderStatus">Signing you in…</div>
     <div class="hl-loader__sub">Hass CMS</div>
+  </div>
+</div>
+
+<!-- ── Customer self-signup modal (light KYC request) ───────────────────────
+     Opens from the "Request an account" link. Submits to the public
+     signupRequests.create action, which writes ONE pending signup_requests row.
+     No account is created here; an admin approves via the existing flow. -->
+<div class="hl-modal" id="signupModal" aria-hidden="true">
+  <div class="hl-modal__backdrop" data-su-close></div>
+  <div class="hl-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="suTitle" aria-describedby="suIntro">
+    <button type="button" class="hl-modal__x" id="suClose" aria-label="Close request form" data-su-close>&times;</button>
+
+    <div class="hl-modal__head">
+      <p class="hl-eyebrow">New customer</p>
+      <h2 class="hl-modal__title" id="suTitle">Request an account</h2>
+      <p class="hl-modal__intro" id="suIntro">Tell us about your business. After a quick review, approved applicants
+        receive sign-in credentials by email. No account is created until a reviewer approves your request.</p>
+    </div>
+
+    <form id="signupForm" autocomplete="on" novalidate>
+      <div class="hl-modal__body">
+        <!-- Honeypot: hidden from people, tempting to bots. A filled value is rejected server-side. -->
+        <div class="hl-hp" aria-hidden="true">
+          <label>Leave this field empty
+            <input type="text" id="su_website" name="website" tabindex="-1" autocomplete="off">
+          </label>
+        </div>
+
+        <div id="suError" class="hl-error" style="display:none" role="alert"></div>
+        <div id="suNote" class="hl-note" style="display:none" role="status"></div>
+
+        <div class="hl-grid">
+          <div class="hl-field hl-col-2" style="margin-bottom:0">
+            <label class="hl-label" for="su_company">Company or trading name <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="text" id="su_company" name="organization" autocomplete="organization" required>
+          </div>
+
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_name">Contact person name <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="text" id="su_name" name="name" autocomplete="name" required>
+          </div>
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_role">Role <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="text" id="su_role" name="organization-title" autocomplete="organization-title" placeholder="e.g. Procurement Manager" required>
+          </div>
+
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_email">Work email <span class="hl-req" aria-hidden="true">*</span> <span class="hl-hint">(your future login)</span></label>
+            <input class="hl-input" type="email" id="su_email" name="email" autocomplete="email" required>
+          </div>
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_phone">Phone <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="tel" id="su_phone" name="tel" autocomplete="tel" required>
+          </div>
+
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_country">Country or market <span class="hl-req" aria-hidden="true">*</span></label>
+            <select class="hl-select" id="su_country" required>
+              <option value="" disabled selected>Select a market</option>
+              <option value="KE">Kenya</option>
+              <option value="UG">Uganda</option>
+              <option value="TZ">Tanzania</option>
+              <option value="RW">Rwanda</option>
+              <option value="DRC">DR Congo</option>
+              <option value="SS">South Sudan</option>
+              <option value="SO">Somalia</option>
+              <option value="ZM">Zambia</option>
+              <option value="MW">Malawi</option>
+            </select>
+          </div>
+          <div class="hl-field" style="margin-bottom:0">
+            <label class="hl-label" for="su_taxpin">Tax PIN or VAT number <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="text" id="su_taxpin" required>
+          </div>
+
+          <div class="hl-field hl-col-2" style="margin-bottom:0">
+            <label class="hl-label" for="su_reg">Business registration number <span class="hl-req" aria-hidden="true">*</span></label>
+            <input class="hl-input" type="text" id="su_reg" required>
+          </div>
+
+          <div class="hl-field hl-col-2" style="margin-bottom:0">
+            <span class="hl-label" id="su_prod_label">Products of interest <span class="hl-hint">(optional)</span></span>
+            <div class="hl-checks" role="group" aria-labelledby="su_prod_label">
+              <label class="hl-check"><input type="checkbox" name="product" value="AGO"> AGO</label>
+              <label class="hl-check"><input type="checkbox" name="product" value="PMS"> PMS</label>
+              <label class="hl-check"><input type="checkbox" name="product" value="LPG"> LPG</label>
+              <label class="hl-check"><input type="checkbox" name="product" value="LUBRICANTS"> Lubricants</label>
+            </div>
+          </div>
+
+          <div class="hl-field hl-col-2" style="margin-bottom:0">
+            <label class="hl-label" for="su_notes">Notes <span class="hl-hint">(optional: estimated volume, cash vs credit, anything else)</span></label>
+            <textarea class="hl-input" id="su_notes" rows="3"></textarea>
+          </div>
+
+          <div class="hl-col-2">
+            <label class="hl-consent" for="su_consent">
+              <input type="checkbox" id="su_consent" required>
+              <span>I confirm I am authorised to request an account for this business and consent to the
+                processing of these details for verification, as described in the
+                <a href="https://hasspetroleum.com/privacy-policy/" target="_blank" rel="noopener">privacy notice</a>. <span class="hl-req" aria-hidden="true">*</span></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="hl-modal__foot" id="suFoot">
+        <button type="button" class="hl-btn hl-btn--ghost" data-su-close>Cancel</button>
+        <button type="submit" class="hl-btn" id="suSubmit">Submit request</button>
+      </div>
+    </form>
+
+    <div class="hl-modal__done" id="suDone" style="display:none">
+      <div class="hl-done-badge" aria-hidden="true">&#10003;</div>
+      <h3>Request received</h3>
+      <p id="suDoneMsg">Your request is pending review. If it is approved you will receive an email with sign-in credentials.</p>
+      <p>No account exists until a reviewer approves this request.</p>
+      <div style="margin-top:18px">
+        <button type="button" class="hl-btn" id="suDoneClose" data-su-close style="width:auto">Done</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -414,6 +634,158 @@
       })
       .catch(function (err) {
         stopLoader();           // reskin: hide overlay, then surface the error
+        showError(err && err.message);
+      });
+  });
+})();
+</script>
+
+<script>
+// ── Customer self-signup modal ──────────────────────────────────────────────
+// Self-contained: it does NOT touch the login form, its handler, or its flow.
+// Submits to the public signupRequests.create action via API.call (which calls
+// google.script.run.processRequest under the hood), so it works with no session.
+(function () {
+  var openBtn = document.getElementById('openSignup');
+  var modal   = document.getElementById('signupModal');
+  if (!openBtn || !modal || typeof API === 'undefined') return;
+
+  var dialog    = modal.querySelector('.hl-modal__dialog');
+  var form      = document.getElementById('signupForm');
+  var foot      = document.getElementById('suFoot');
+  var errBox    = document.getElementById('suError');
+  var noteBox   = document.getElementById('suNote');
+  var submitBtn = document.getElementById('suSubmit');
+  var doneBox   = document.getElementById('suDone');
+  var lastFocus = null;
+
+  // Tabbable, currently-visible elements inside the dialog (for focus trapping).
+  function focusables() {
+    var sel = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), ' +
+              'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.prototype.slice.call(dialog.querySelectorAll(sel)).filter(function (el) {
+      return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement;
+    });
+  }
+
+  function resetToForm() {
+    if (form)      form.style.display = '';
+    if (doneBox)   doneBox.style.display = 'none';
+    if (errBox)  { errBox.style.display = 'none';  errBox.textContent = ''; }
+    if (noteBox) { noteBox.style.display = 'none'; noteBox.textContent = ''; }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit request'; }
+  }
+
+  function openModal() {
+    lastFocus = document.activeElement;
+    resetToForm();
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    var first = document.getElementById('su_company');
+    if (first) setTimeout(function () { first.focus(); }, 30);
+    document.addEventListener('keydown', onKeydown, true);
+  }
+
+  function closeModal() {
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', onKeydown, true);
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  function onKeydown(e) {
+    if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); closeModal(); return; }
+    if (e.key === 'Tab' || e.keyCode === 9) {
+      var f = focusables();
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  function showError(msg) {
+    if (noteBox) noteBox.style.display = 'none';
+    if (!errBox) return;
+    errBox.textContent = msg || 'Could not submit your request. Please try again.';
+    errBox.style.display = 'block';
+  }
+  function showNote(msg) {
+    if (errBox) errBox.style.display = 'none';
+    if (!noteBox) return;
+    noteBox.textContent = msg;
+    noteBox.style.display = 'block';
+  }
+
+  openBtn.addEventListener('click', openModal);
+  Array.prototype.forEach.call(modal.querySelectorAll('[data-su-close]'), function (el) {
+    el.addEventListener('click', closeModal);
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (errBox)  errBox.style.display = 'none';
+    if (noteBox) noteBox.style.display = 'none';
+
+    // Native constraint validation first (required fields, email shape).
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+
+    var consent = document.getElementById('su_consent');
+    if (consent && !consent.checked) {
+      showError('Please confirm you are authorised and consent to processing.');
+      return;
+    }
+    var country = document.getElementById('su_country').value;
+    if (!country) { showError('Select a valid country or market.'); return; }
+
+    var products = [];
+    Array.prototype.forEach.call(form.querySelectorAll('input[name="product"]:checked'), function (c) {
+      products.push(c.value);
+    });
+
+    var params = {
+      company_name:        document.getElementById('su_company').value.trim(),
+      country_code:        country,
+      tax_pin:             document.getElementById('su_taxpin').value.trim(),
+      registration_number: document.getElementById('su_reg').value.trim(),
+      contact_name:        document.getElementById('su_name').value.trim(),
+      contact_role:        document.getElementById('su_role').value.trim(),
+      email:               document.getElementById('su_email').value.trim(),
+      phone:               document.getElementById('su_phone').value.trim(),
+      products_of_interest: products,
+      notes:               document.getElementById('su_notes').value.trim(),
+      consent:             consent ? consent.checked : false,
+      website:             document.getElementById('su_website').value   // honeypot
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    API.call('signupRequests', 'create', params)
+      .then(function (data) {
+        // A duplicate pending request: quiet, specific message; keep the form so
+        // they can correct the email and retry.
+        if (data && data.duplicate) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit request';
+          showNote(data.message || 'A request for this email is already under review.');
+          return;
+        }
+        // Success: swap the form for the confirmation state.
+        if (form) form.style.display = 'none';
+        if (doneBox) {
+          var msgEl = document.getElementById('suDoneMsg');
+          if (msgEl && data && data.message) msgEl.textContent = data.message;
+          doneBox.style.display = 'block';
+          var dc = document.getElementById('suDoneClose');
+          if (dc) setTimeout(function () { dc.focus(); }, 30);
+        }
+      })
+      .catch(function (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit request';
         showError(err && err.message);
       });
   });
