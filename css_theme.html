@@ -60,18 +60,36 @@ table { border-collapse: collapse; width: 100%; }
                       background: linear-gradient(135deg, var(--clr-gold-lt), var(--clr-gold)); }
 .sidebar-nav        { flex: 1; padding: 10px 0; overflow-y: auto; overflow-x: hidden; }
 
-/* ── Accordion groups (chunking + progressive disclosure) ── */
-.nav-group          { margin-bottom: 2px; }
-.nav-group-label    { display: flex; align-items: center; justify-content: space-between; width: 100%;
-                      padding: 12px 18px 5px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
-                      color: #94a3b8; background: none; border: none; cursor: pointer; font-family: inherit; text-align: left;
-                      transition: color var(--transition); }
-.nav-group-label:hover         { color: #c3cdde; }
-.nav-group-label:focus-visible { outline: 2px solid var(--clr-gold); outline-offset: -2px; border-radius: 4px; }
-.nav-chevron        { flex-shrink: 0; width: 12px; height: 12px; opacity: .8; transition: transform .2s ease; }
+/* ── Sidebar search / jump (optional, additive) ── */
+.nav-search         { position: relative; margin: 2px 12px 8px; }
+.nav-search svg     { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px;
+                      color: #7c89a3; pointer-events: none; }
+.nav-search input   { width: 100%; padding: 7px 10px 7px 30px; border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
+                      background: rgba(255,255,255,.06); color: #e6ebf3; font-family: inherit; font-size: 12.5px; }
+.nav-search input::placeholder { color: #7c89a3; }
+.nav-search input:focus { border-color: var(--clr-gold); background: rgba(255,255,255,.10); }
+.nav-search-empty   { padding: 8px 16px; font-size: 12px; color: #7c89a3; }
+
+/* ── Accordion groups (chunking + single-open progressive disclosure) ──
+   Group headers read at full weight (icon + label + chevron); sub-items sit
+   under a thin rail, lighter and a touch smaller, so the panel scans as a few
+   groups rather than many equal rows. */
+.nav-group          { margin-bottom: 1px; }
+.nav-group-label    { display: flex; align-items: center; gap: 11px; width: calc(100% - 12px); margin: 0 6px;
+                      padding: 10px 12px; font-size: 13px; font-weight: 600; letter-spacing: .005em;
+                      color: #dbe2ee; background: none; border: none; cursor: pointer; font-family: inherit; text-align: left;
+                      border-radius: 8px; transition: background var(--transition), color var(--transition); }
+.nav-group-label:hover         { background: rgba(255,255,255,.06); color: #fff; }
+.nav-group-label:focus-visible { outline: 2px solid var(--clr-gold); outline-offset: -2px; }
+.nav-grp-ico        { flex-shrink: 0; display: inline-flex; width: 18px; height: 18px; }
+.nav-grp-ico svg    { width: 18px; height: 18px; }
+.nav-grp-label      { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-chevron        { flex-shrink: 0; width: 13px; height: 13px; opacity: .7; transition: transform .2s ease; }
 .nav-group.open .nav-chevron { transform: rotate(90deg); }
-.nav-group-items    { max-height: 0; opacity: 0; overflow: hidden; transition: max-height .22s ease, opacity .22s ease; }
-.nav-group.open .nav-group-items { max-height: 640px; opacity: 1; }
+.nav-group-items    { max-height: 0; opacity: 0; overflow: hidden; margin: 1px 0 6px 28px;
+                      border-left: 1px solid rgba(255,255,255,.10);
+                      transition: max-height .22s ease, opacity .22s ease; }
+.nav-group.open .nav-group-items { max-height: 720px; opacity: 1; }
 
 /* ── Nav rows: full-width >=44px targets, icon + label (Fitts + recognition) ──
    Scoped to .sidebar so the .nav-item class reused elsewhere (e.g. the Knowledge
@@ -83,8 +101,22 @@ table { border-collapse: collapse; width: 100%; }
                       transition: background var(--transition), color var(--transition); }
 .sidebar .nav-item:hover         { background: rgba(255,255,255,.08); color: #fff; }
 .sidebar .nav-item:focus-visible { outline: 2px solid var(--clr-gold); outline-offset: -2px; }
+/* Standalone top item (Overview / Dashboard): reads at header weight. */
+.sidebar .nav-item.nav-top { font-weight: 600; color: #dbe2ee; margin-bottom: 4px; }
+/* Sub-items under a group: lighter and a touch smaller than the header. */
+.sidebar .nav-group-items .nav-item { min-height: 38px; margin: 1px 6px; padding: 7px 12px; gap: 10px;
+                      font-size: 12.5px; color: #9aa6bd; }
+.sidebar .nav-group-items .nav-item:hover         { color: #fff; }
+.sidebar .nav-group-items .nav-item .nav-ico      { width: 16px; height: 16px; opacity: .85; }
+.sidebar .nav-group-items .nav-item .nav-ico svg  { width: 16px; height: 16px; }
 .nav-item.active        { background: var(--clr-gold); color: var(--clr-navy-900); font-weight: 600;
                           box-shadow: 0 2px 8px rgba(201,162,39,.35); }
+/* Keep the gold highlight legible over the lighter sub-item / top text styles. */
+.sidebar .nav-item.nav-top.active,
+.sidebar .nav-group-items .nav-item.active { color: var(--clr-navy-900); font-weight: 600; }
+/* Search filter visibility helpers. */
+.nav-item.nav-hidden, .nav-group.nav-hidden { display: none; }
+.sidebar-nav.nav-filtering .nav-group-items { max-height: 720px !important; opacity: 1 !important; }
 .nav-ico            { flex-shrink: 0; display: inline-flex; width: 18px; height: 18px; }
 .nav-ico svg        { width: 18px; height: 18px; }
 .nav-label          { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -111,10 +143,12 @@ table { border-collapse: collapse; width: 100%; }
 .app-shell.nav-collapsed .nav-label,
 .app-shell.nav-collapsed .sidebar-user-name,
 .app-shell.nav-collapsed .nav-group-label { display: none; }
+.app-shell.nav-collapsed .nav-search        { display: none; }
 .app-shell.nav-collapsed .sidebar-head      { justify-content: center; padding: 14px 0; }
 .app-shell.nav-collapsed .nav-group + .nav-group { margin-top: 6px; border-top: 1px solid rgba(255,255,255,.07); padding-top: 6px; }
-.app-shell.nav-collapsed .nav-group-items   { max-height: none !important; opacity: 1 !important; }
+.app-shell.nav-collapsed .nav-group-items   { max-height: none !important; opacity: 1 !important; margin-left: 0; border-left: none; }
 .app-shell.nav-collapsed .sidebar .nav-item { justify-content: center; padding: 8px 0; }
+.app-shell.nav-collapsed .sidebar .nav-group-items .nav-item { margin: 2px 6px; padding: 8px 0; }
 .app-shell.nav-collapsed .nav-collapse-btn  { justify-content: center; padding: 8px 0; }
 .app-shell.nav-collapsed .nav-collapse-btn svg { transform: rotate(180deg); }
 .app-shell.nav-collapsed .sidebar-user      { padding: 8px 6px 4px; }
@@ -270,10 +304,12 @@ table { border-collapse: collapse; width: 100%; }
   .app-shell.nav-collapsed .nav-label,
   .app-shell.nav-collapsed .sidebar-user-name,
   .app-shell.nav-collapsed .nav-group-label    { display: revert; }
+  .app-shell.nav-collapsed .nav-search         { display: revert; }
   .app-shell.nav-collapsed .nav-group + .nav-group { margin-top: 0; border-top: none; padding-top: 0; }
-  .app-shell.nav-collapsed .nav-group-items    { max-height: 0; opacity: 0; }
-  .app-shell.nav-collapsed .nav-group.open .nav-group-items { max-height: 640px; opacity: 1; }
+  .app-shell.nav-collapsed .nav-group-items    { max-height: 0; opacity: 0; margin-left: 28px; border-left: 1px solid rgba(255,255,255,.10); }
+  .app-shell.nav-collapsed .nav-group.open .nav-group-items { max-height: 720px; opacity: 1; }
   .app-shell.nav-collapsed .sidebar .nav-item  { justify-content: flex-start; padding: 8px 14px; }
+  .app-shell.nav-collapsed .sidebar .nav-group-items .nav-item { padding: 7px 12px; margin: 1px 6px; }
   .app-shell.nav-collapsed .sidebar-head       { justify-content: flex-start; padding: 14px 16px; }
   .nav-collapse-btn { display: none; }  /* rail toggle is desktop-only; hamburger drives the drawer */
 }

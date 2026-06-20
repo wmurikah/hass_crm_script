@@ -427,13 +427,53 @@
     }
   }
 
-  // ── Sidebar render (collapsible accordion groups) ───────────────
-  // Open/closed state is held in-memory for the session (NO storage APIs in
-  // GAS artifacts). On the very first render we open only the group that
-  // contains the active route; the user's toggles persist across re-renders
-  // (menu reload, botconfig probe) and across page navigations.
-  var _openGroups   = null;   // { groupKey: bool }  — null until first render
-  var _routeToGroup = {};     // route id → group key, rebuilt each render
+  // ── Sidebar render (single-open accordion, task-based groups) ──────────
+  // Grouping is presentation only. A map in THIS rendering layer assigns each
+  // menu item (by id, which equals its route) to a task-based section. The
+  // server menu.list contract, the routes, and every required_permission stay
+  // untouched. Any item not in the map drops into a default group (More) so a
+  // module can never disappear just because it was not mapped.
+  //
+  // Open/closed state is a single key held in memory for the session (no storage
+  // APIs in GAS artifacts). One group is open at a time. Navigation auto-expands
+  // the group of the current route (see applyActiveGroup); a manual header click
+  // overrides until the next navigation, which re-applies the active-section rule.
+  var _openGroup    = null;    // currently expanded accordion group key, or null
+  var _navSeeded    = false;   // first paint has seeded the open group
+  var _routeToGroup = {};      // route/item id -> group key, rebuilt each render
+
+  // Ordered sections. Overview is a standalone item at the very top (no header).
+  // More is the safety-net catch-all at the very bottom (renders only if used).
+  var NAV_GROUP_ORDER = ['overview', 'sales', 'customers', 'finance', 'support', 'insights', 'admin', 'more'];
+  var NAV_GROUP_META = {
+    overview:  { label: 'Overview',  icon: 'home',        standalone: true },
+    sales:     { label: 'Sales',     icon: 'package' },
+    customers: { label: 'Customers', icon: 'users' },
+    finance:   { label: 'Finance',   icon: 'credit-card' },
+    support:   { label: 'Support',   icon: 'headphones' },
+    insights:  { label: 'Insights',  icon: 'bar-chart-2' },
+    admin:     { label: 'Admin',     icon: 'settings' },
+    more:      { label: 'More',      icon: 'grid' }
+  };
+  // Menu item id -> group key, confirmed against menu.list introspection. Keep
+  // this as the single source of truth for the sidebar grouping.
+  var NAV_ITEM_GROUP = {
+    dashboard: 'overview',
+    orders: 'sales', pricing: 'sales', catalog: 'sales',
+    customers: 'customers', documents: 'customers', signups: 'customers',
+    invoices: 'finance', payments: 'finance', approvals: 'finance', approvalsadmin: 'finance',
+    tickets: 'support', knowledge: 'support', sla: 'support',
+    reports: 'insights',
+    users: 'admin', rbac: 'admin', branding: 'admin', audit: 'admin', botconfig: 'admin', config: 'admin'
+  };
+  var NAV_FALLBACK_GROUP = 'more';   // any unmapped item lands here, never dropped
+
+  function navGroupOf(itemId) {
+    return NAV_ITEM_GROUP[itemId] || NAV_FALLBACK_GROUP;
+  }
+  function isAccordionGroup(key) {
+    return !!(key && NAV_GROUP_META[key] && !NAV_GROUP_META[key].standalone);
+  }
 
   // ── Inline SVG icon set (Feather/Lucide 24x24 stroke) keyed by the menu
   // item's icon name. One consistent set so every row shows icon + label
@@ -460,101 +500,202 @@
     cpu:           '<rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
     _default:      '<circle cx="12" cy="12" r="9"/>'
   };
-  function navIcon(name) {
+  function navSvg(name) {
     var inner = NAV_ICONS[name] || NAV_ICONS._default;
-    return '<span class="nav-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg></span>';
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+           'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
   }
+  function navIcon(name) { return '<span class="nav-ico">' + navSvg(name) + '</span>'; }
 
+  // Build the grouped sidebar from the (already permission-filtered) menu items.
+  // A group renders only if it has at least one visible item, so a limited role
+  // never sees a header that opens into nothing. The active item keeps its gold
+  // highlight on every (re)render so wayfinding survives a menu/botconfig refresh.
   function renderNav(items) {
     var nav = document.getElementById('sidebarNav');
+    if (!nav) return;
+
+    // Bucket items into task-based groups, preserving menu order within each.
     var groups = {};
     _routeToGroup = {};
     items.forEach(function (item) {
-      if (!groups[item.group]) groups[item.group] = [];
-      groups[item.group].push(item);
-      _routeToGroup[item.id] = item.group;
+      var g = navGroupOf(item.id);
+      (groups[g] || (groups[g] = [])).push(item);
+      _routeToGroup[item.id] = g;
     });
-    var groupLabels = { main:'Main', finance:'Finance', ops:'Operations',
-                        catalog:'Catalog', support:'Support', reports:'Reports', admin:'Admin' };
 
-    // First render: initialise open state — only the active route's group opens.
-    if (_openGroups === null) {
-      _openGroups = {};
-      var activeGroup = _routeToGroup[Router.current()] || 'main';
-      Object.keys(groupLabels).forEach(function (g) { _openGroups[g] = (g === activeGroup); });
+    // First paint only: open the active route's group (when it is an accordion
+    // group). Later re-renders preserve whatever is currently open, so a manual
+    // override is never clobbered by a menu refresh or the botconfig probe.
+    if (!_navSeeded) {
+      _navSeeded = true;
+      var ag = _routeToGroup[Router.current()];
+      _openGroup = isAccordionGroup(ag) ? ag : null;
     }
 
+    var current = Router.current();
     var chevron =
       '<svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
       'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
 
-    // Re-mark the active item on every (re)render so the highlight survives a
-    // menu refresh / botconfig probe, keeping wayfinding intact.
-    var current = Router.current();
+    function itemBtn(item, extraClass) {
+      var isActive = (item.id === current);
+      var cls = 'nav-item' + (extraClass ? ' ' + extraClass : '') + (isActive ? ' active' : '');
+      return '<button type="button" class="' + cls + '" ' +
+             'data-route="' + esc(item.id) + '" data-label="' + esc(item.label) + '" ' +
+             'data-search="' + esc(String(item.label).toLowerCase()) + '" ' +
+             'title="' + esc(item.label) + '" aria-label="' + esc(item.label) + '"' +
+             (isActive ? ' aria-current="page"' : '') + '>' +
+             navIcon(item.icon) + '<span class="nav-label">' + esc(item.label) + '</span></button>';
+    }
+
     var html = '';
-    Object.keys(groupLabels).forEach(function (g) {
-      if (!groups[g] || !groups[g].length) return;
-      var open    = !!_openGroups[g];
+
+    // Optional search / jump box (additive; the grouping works without it).
+    html += '<div class="nav-search">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+            '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+            '<input id="navSearchInput" type="text" autocomplete="off" spellcheck="false" ' +
+            'placeholder="Search menu" aria-label="Search menu"></div>';
+
+    NAV_GROUP_ORDER.forEach(function (g) {
+      var list = groups[g];
+      if (!list || !list.length) return;          // hide empty / unused groups
+      var meta = NAV_GROUP_META[g] || { label: g, icon: '' };
+
+      // Overview: render its item(s) directly at the top, no accordion header.
+      if (meta.standalone) {
+        list.forEach(function (item) { html += itemBtn(item, 'nav-top'); });
+        return;
+      }
+
+      var open    = (g === _openGroup);
       var groupId = 'navgrp-' + g;
       html += '<div class="nav-group' + (open ? ' open' : '') + '" data-group="' + g + '">';
       html += '<button type="button" class="nav-group-label" data-group="' + g + '" ' +
               'aria-expanded="' + open + '" aria-controls="' + groupId + '">' +
-              '<span>' + esc(groupLabels[g]) + '</span>' + chevron + '</button>';
+              '<span class="nav-grp-ico">' + navSvg(meta.icon) + '</span>' +
+              '<span class="nav-grp-label">' + esc(meta.label) + '</span>' + chevron + '</button>';
       html += '<div class="nav-group-items" id="' + groupId + '">';
-      groups[g].forEach(function (item) {
-        var isActive = (item.id === current);
-        html += '<button type="button" class="nav-item' + (isActive ? ' active' : '') + '" ' +
-                'data-route="' + esc(item.id) + '" data-label="' + esc(item.label) + '" ' +
-                'title="' + esc(item.label) + '" aria-label="' + esc(item.label) + '"' +
-                (isActive ? ' aria-current="page"' : '') + '>' +
-                navIcon(item.icon) + '<span class="nav-label">' + esc(item.label) + '</span></button>';
-      });
+      list.forEach(function (item) { html += itemBtn(item); });
       html += '</div></div>';
     });
+
     nav.innerHTML = html;
 
-    // Group header toggles only its own group (active group starts open).
+    // Group header: single-open accordion. Clicking a header opens it and
+    // collapses the others; clicking the open one closes it. This manual choice
+    // holds until the next navigation re-applies the active-section rule.
     nav.querySelectorAll('.nav-group-label').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        var g     = btn.dataset.group;
-        var group = btn.closest('.nav-group');
-        var open  = !group.classList.contains('open');
-        group.classList.toggle('open', open);
-        btn.setAttribute('aria-expanded', String(open));
-        _openGroups[g] = open;
+        var g = btn.dataset.group;
+        _openGroup = (_openGroup === g) ? null : g;
+        syncGroupDom();
       });
     });
 
-    // Nav items navigate; on mobile, selecting one closes the off-canvas drawer.
-    // Hovering or focusing an item prefetches that page's data (low priority) so
-    // the click resolves from cache. Prefetch never delays a user action.
+    // Nav items navigate; on mobile, selecting one closes the off-canvas drawer
+    // and clears any active search. Hover/focus warms that page's data (low
+    // priority) so the click resolves from cache. Prefetch never delays a click.
     nav.querySelectorAll('.nav-item').forEach(function (el) {
       el.addEventListener('click', function () {
         document.getElementById('pageTitle').textContent = el.dataset.label;
         Router.navigate(el.dataset.route, {});
+        clearNavSearch();
         closeDrawer();
       });
       var warm = function () { try { if (window.Prefetch) Prefetch.warm(el.dataset.route); } catch (e) {} };
       el.addEventListener('mouseenter', warm);
       el.addEventListener('focus', warm);
     });
+
+    wireNavSearch(nav);
   }
 
-  // Open (and reveal) the group that owns a route — used by drill-down
-  // navigation (e.g. dashboard stat cards) so jumping into a collapsed
-  // group expands it and keeps the active item visible.
-  window._hassOpenNavGroup = function (route) {
-    var g = _routeToGroup[route];
-    if (!g || !_openGroups) return;
-    _openGroups[g] = true;
-    var groupEl = document.querySelector('.nav-group[data-group="' + g + '"]');
-    if (groupEl) {
-      groupEl.classList.add('open');
+  // Reflect _openGroup in the DOM without a full re-render (used by the header
+  // toggle and by navigation-driven active-section expansion).
+  function syncGroupDom() {
+    var nav = document.getElementById('sidebarNav');
+    if (!nav) return;
+    nav.querySelectorAll('.nav-group').forEach(function (groupEl) {
+      var open = (groupEl.getAttribute('data-group') === _openGroup);
+      groupEl.classList.toggle('open', open);
       var btn = groupEl.querySelector('.nav-group-label');
-      if (btn) btn.setAttribute('aria-expanded', 'true');
-    }
-  };
+      if (btn) btn.setAttribute('aria-expanded', String(open));
+    });
+  }
+
+  // Active-section rule: expand the group that owns `route` and collapse the
+  // rest. A standalone route (Overview) collapses every accordion group; a route
+  // that is not a sidebar item (e.g. a drill-down such as contacts) leaves the
+  // current state untouched, which is the calmest fit.
+  function applyActiveGroup(route) {
+    if (!Object.prototype.hasOwnProperty.call(_routeToGroup, route)) return;
+    var g = _routeToGroup[route];
+    _openGroup = isAccordionGroup(g) ? g : null;
+    syncGroupDom();
+  }
+
+  // Re-apply the active-section rule on every navigation. Router fires hass:route
+  // for sidebar clicks, the initial landing, and drill-downs alike, so this keeps
+  // the sidebar reflecting where the user is and resets a manual override back to
+  // the active section on the next navigation.
+  window.addEventListener('hass:route', function (e) {
+    var route = e && e.detail && e.detail.route;
+    if (route) applyActiveGroup(route);
+  });
+
+  // Drill-down helper kept for callers (js_app goRoute): reveal the group that
+  // owns a route. Now single-open via the shared active-section rule.
+  window._hassOpenNavGroup = function (route) { applyActiveGroup(route); };
+
+  // ── Optional search / jump (Fix 5) ──────────────────────────────────────
+  // Filters the visible, permitted items by label. While searching, matching
+  // groups force open so hits are visible and groups with no hit are hidden; an
+  // empty box restores the single-open accordion. Purely additive: the
+  // reorganisation works fully without it, and it never widens permissions
+  // (it only filters items the server already returned for this user).
+  function clearNavSearch() {
+    var nav = document.getElementById('sidebarNav');
+    if (!nav) return;
+    var input = nav.querySelector('#navSearchInput');
+    if (input) input.value = '';
+    nav.classList.remove('nav-filtering');
+    nav.querySelectorAll('.nav-hidden').forEach(function (el) { el.classList.remove('nav-hidden'); });
+    var none = nav.querySelector('.nav-search-empty');
+    if (none) none.remove();
+  }
+  function wireNavSearch(nav) {
+    var input = nav.querySelector('#navSearchInput');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      var q = String(input.value || '').trim().toLowerCase();
+      if (!q) { clearNavSearch(); syncGroupDom(); return; }
+      nav.classList.add('nav-filtering');
+      var anyHit = false;
+      nav.querySelectorAll('.nav-item').forEach(function (el) {
+        var hit = (el.getAttribute('data-search') || '').indexOf(q) !== -1;
+        el.classList.toggle('nav-hidden', !hit);
+        if (hit) anyHit = true;
+      });
+      nav.querySelectorAll('.nav-group').forEach(function (groupEl) {
+        var shown = groupEl.querySelectorAll('.nav-item:not(.nav-hidden)').length;
+        groupEl.classList.toggle('nav-hidden', shown === 0);
+      });
+      var none = nav.querySelector('.nav-search-empty');
+      if (!anyHit && !none) {
+        none = document.createElement('div');
+        none.className = 'nav-search-empty';
+        none.textContent = 'No menu items match.';
+        nav.appendChild(none);
+      } else if (anyHit && none) { none.remove(); }
+    });
+    // Esc clears the filter and restores the single-open accordion.
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { clearNavSearch(); syncGroupDom(); }
+    });
+  }
 })();
 </script>
 </body>
