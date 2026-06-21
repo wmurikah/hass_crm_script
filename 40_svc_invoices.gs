@@ -380,10 +380,10 @@ function _paymentReject_(ctx, params) {
 (function _registerInvoices_() {
   register({ service: 'invoices', action: 'list',     permission: 'invoice.view',     handler: _invoiceList_ });
   register({ service: 'invoices', action: 'get',      permission: 'invoice.view',     handler: _invoiceGet_ });
-  register({ service: 'invoices', action: 'generate', permission: 'invoice.generate', handler: Idempotency.wrap(_invoiceGenerate_) });
-  register({ service: 'invoices', action: 'cancel',   permission: 'invoice.cancel',   handler: Idempotency.wrap(_invoiceCancel_) });
+  register({ service: 'invoices', action: 'generate', permission: 'invoice.generate', handler: _invoiceGenerate_ });
+  register({ service: 'invoices', action: 'cancel',   permission: 'invoice.cancel',   handler: _invoiceCancel_ });
 
-  register({ service: 'payments', action: 'upload',  permission: 'invoice.view',     handler: Idempotency.wrap(_paymentUpload_) });
-  register({ service: 'payments', action: 'approve', permission: 'invoice.generate', handler: Idempotency.wrap(_paymentApprove_) });
-  register({ service: 'payments', action: 'reject',  permission: 'invoice.generate', handler: Idempotency.wrap(_paymentReject_) });
+  register({ service: 'payments', action: 'upload',  permission: 'invoice.view',     handler: _paymentUpload_ });
+  register({ service: 'payments', action: 'approve', permission: 'invoice.generate', handler: _paymentApprove_ });
+  register({ service: 'payments', action: 'reject',  permission: 'invoice.generate', handler: _paymentReject_ });
 })();

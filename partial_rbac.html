@@ -181,7 +181,7 @@ Router.register('rbac', function (el) {
   var cols = canManage ? 4 : 3;   // the Actions column only exists for managers
 
   function loadRoles() {
-    setHTML('rbacRoleTbody', (window.UX ? UX.skel.tableRows(5, cols) : loadingRow(cols)));
+    setHTML('rbacRoleTbody', loadingRow(cols));
     // Catalogue first so the per-category summary can resolve codes, then roles.
     rbacEnsureCatalogue()
       .then(function () { return API.call('rbac', 'listRoles', {}); })
@@ -286,80 +286,74 @@ function rbacBuildMatrix(mount, selected, onDirty) {
     cats[p.category].push(p);
   });
 
-  // Per-category body: a small actions row + the toggle grid. The grant count
-  // ("4 of 9 granted") lives in the section header as scent, so a user can see
-  // where a permission is without opening every category.
-  function bodyHtml(cat) {
-    var toggles = cats[cat].map(function (p) {
-      return '<label class="perm-toggle" title="' + esc(p.description || p.label) + '" ' +
+  var html = '';
+  order.forEach(function (cat) {
+    html +=
+      '<div class="rbac-cat">' +
+        '<div class="rbac-cat-head">' +
+          '<span class="rbac-cat-title">' + esc(cat) +
+            '<span class="rbac-cat-badge">0/0</span></span>' +
+          '<span class="rbac-cat-actions">' +
+            '<button type="button" class="rbac-linkbtn" data-all="' + esc(cat) + '">Select all</button>' +
+            '<button type="button" class="rbac-linkbtn" data-clear="' + esc(cat) + '">Clear</button>' +
+          '</span>' +
+        '</div>' +
+        '<div class="rbac-perms">';
+    cats[cat].forEach(function (p) {
+      html +=
+        '<label class="perm-toggle" title="' + esc(p.description || p.label) + '" ' +
                'data-code="' + esc(p.permission_code) + '" data-text="' + esc((p.label + ' ' + p.permission_code).toLowerCase()) + '">' +
-               '<input type="checkbox" value="' + esc(p.permission_code) + '"' + (initial[p.permission_code] ? ' checked' : '') + '>' +
-               '<span class="perm-sw" aria-hidden="true"></span>' +
-               '<span class="perm-text">' +
-                 '<span class="perm-label">' + esc(p.label) + '</span>' +
-                 '<span class="perm-code">' + esc(p.permission_code) + '</span>' +
-               '</span>' +
-             '</label>';
-    }).join('');
-    return '<div class="rbac-cat-actions" style="padding:8px 8px 0">' +
-             '<button type="button" class="rbac-linkbtn" data-all>Select all</button>' +
-             '<button type="button" class="rbac-linkbtn" data-clear>Clear</button>' +
-           '</div>' +
-           '<div class="rbac-perms">' + toggles + '</div>';
-  }
-  function grantScent(cat) {
-    var total = cats[cat].length, on = 0;
-    cats[cat].forEach(function (p) { if (initial[p.permission_code]) on++; });
-    return on + ' of ' + total + ' granted';
-  }
-
-  // One single-open disclosure section per category (the reusable component).
-  var sections = order.map(function (cat) {
-    return { id: cat, label: cat, scent: grantScent(cat),
-             render: function (body) { body.innerHTML = bodyHtml(cat); } };
+          '<input type="checkbox" value="' + esc(p.permission_code) + '"' + (initial[p.permission_code] ? ' checked' : '') + '>' +
+          '<span class="perm-sw" aria-hidden="true"></span>' +
+          '<span class="perm-text">' +
+            '<span class="perm-label">' + esc(p.label) + '</span>' +
+            '<span class="perm-code">' + esc(p.permission_code) + '</span>' +
+          '</span>' +
+        '</label>';
+    });
+    html += '</div></div>';
   });
-  var ctrl = UX.disclosure(mount, sections, { single: true, open: order[0], lazy: false });
+  html += '<div class="rbac-no-match" style="display:none">No permissions match your search.</div>';
+  mount.innerHTML = html;
 
-  // "No match" line for search, appended after the sections.
-  var none = document.createElement('div');
-  none.className = 'rbac-no-match';
-  none.style.display = 'none';
-  none.textContent = 'No permissions match your search.';
-  mount.appendChild(none);
-
-  function inputsIn(body) { return body.querySelectorAll('input[type=checkbox]'); }
-  function visibleInputsIn(body) {
-    return Array.prototype.filter.call(inputsIn(body), function (i) {
+  function inputs(catEl) { return catEl.querySelectorAll('input[type=checkbox]'); }
+  function visibleInputs(catEl) {
+    return Array.prototype.filter.call(inputs(catEl), function (i) {
       return i.closest('.perm-toggle').style.display !== 'none';
     });
+  }
+  function updateBadge(catEl) {
+    var all = inputs(catEl), on = 0;
+    Array.prototype.forEach.call(all, function (i) { if (i.checked) on++; });
+    var badge = catEl.querySelector('.rbac-cat-badge');
+    if (badge) badge.textContent = on + '/' + all.length;
   }
   function currentSet() {
     var out = [];
     mount.querySelectorAll('input[type=checkbox]:checked').forEach(function (i) { out.push(i.value); });
     return out;
   }
-  function liveScent(cat) {
-    var body = ctrl.body(cat); if (!body) return;
-    var all = inputsIn(body), on = 0;
-    Array.prototype.forEach.call(all, function (i) { if (i.checked) on++; });
-    ctrl.setScent(cat, on + ' of ' + all.length + ' granted');
-  }
   function isDirty() {
-    var cur = currentSet(), curMap = {};
-    cur.forEach(function (c) { curMap[c] = true; });
+    var cur = currentSet();
+    var curMap = {}; cur.forEach(function (c) { curMap[c] = true; });
     if (cur.length !== Object.keys(initial).length) return true;
     for (var k in initial) { if (!curMap[k]) return true; }
     return false;
   }
   function notify() { if (onDirty) onDirty(isDirty(), currentSet().length); }
 
-  // Wire each category's toggles + select-all / clear (operate on visible rows).
-  order.forEach(function (cat) {
-    var body = ctrl.body(cat);
-    body.querySelector('[data-all]').onclick   = function () { visibleInputsIn(body).forEach(function (i) { i.checked = true;  }); liveScent(cat); notify(); };
-    body.querySelector('[data-clear]').onclick = function () { visibleInputsIn(body).forEach(function (i) { i.checked = false; }); liveScent(cat); notify(); };
-    inputsIn(body).forEach(function (i) {
-      i.addEventListener('change', function () { liveScent(cat); notify(); });
+  mount.querySelectorAll('.rbac-cat').forEach(function (catEl) {
+    updateBadge(catEl);
+    catEl.querySelector('[data-all]').onclick = function () {
+      visibleInputs(catEl).forEach(function (i) { i.checked = true; });
+      updateBadge(catEl); notify();
+    };
+    catEl.querySelector('[data-clear]').onclick = function () {
+      visibleInputs(catEl).forEach(function (i) { i.checked = false; });
+      updateBadge(catEl); notify();
+    };
+    inputs(catEl).forEach(function (i) {
+      i.addEventListener('change', function () { updateBadge(catEl); notify(); });
     });
   });
 
@@ -368,32 +362,21 @@ function rbacBuildMatrix(mount, selected, onDirty) {
   return {
     getSelected: currentSet,
     isDirty: isDirty,
-    // Search: filter toggles by label/code. While searching, matching sections
-    // open so hits are visible and empty sections hide; clearing restores the
-    // single-open accordion.
     filter: function (q) {
       q = (q || '').trim().toLowerCase();
       var anyVisible = false;
-      order.forEach(function (cat) {
-        var secEl = ctrl.section(cat); if (!secEl) return;
+      mount.querySelectorAll('.rbac-cat').forEach(function (catEl) {
         var shown = 0;
-        secEl.querySelectorAll('.perm-toggle').forEach(function (t) {
+        catEl.querySelectorAll('.perm-toggle').forEach(function (t) {
           var match = !q || t.dataset.text.indexOf(q) !== -1;
           t.style.display = match ? '' : 'none';
           if (match) shown++;
         });
-        if (q) {
-          secEl.style.display = shown ? '' : 'none';
-          secEl.classList.toggle('open', shown > 0);
-          var head = secEl.querySelector('.ux-disc-head');
-          if (head) head.setAttribute('aria-expanded', String(shown > 0));
-        } else {
-          secEl.style.display = '';
-        }
+        catEl.classList.toggle('is-empty', shown === 0);
         if (shown) anyVisible = true;
       });
-      if (!q) ctrl.open(order[0]);     // restore single-open
-      none.style.display = anyVisible ? 'none' : 'block';
+      var none = mount.querySelector('.rbac-no-match');
+      if (none) none.style.display = anyVisible ? 'none' : 'block';
     },
   };
 }

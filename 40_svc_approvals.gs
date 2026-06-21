@@ -194,6 +194,6 @@ function _approvalsReject_(ctx, params) {
   register({ service: 'approvalRequests', action: 'inbox',   permission: 'order.approve_low', handler: _approvalsInbox_ });
   register({ service: 'approvalRequests', action: 'list',    permission: 'order.view',        handler: _approvalsList_ });
   register({ service: 'approvalRequests', action: 'get',     permission: 'order.view',        handler: _approvalsGet_ });
-  register({ service: 'approvalRequests', action: 'approve', permission: 'order.approve_low', handler: Idempotency.wrap(_approvalsApprove_) });
-  register({ service: 'approvalRequests', action: 'reject',  permission: 'order.approve_low', handler: Idempotency.wrap(_approvalsReject_) });
+  register({ service: 'approvalRequests', action: 'approve', permission: 'order.approve_low', handler: _approvalsApprove_ });
+  register({ service: 'approvalRequests', action: 'reject',  permission: 'order.approve_low', handler: _approvalsReject_ });
 })();

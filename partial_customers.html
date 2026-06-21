@@ -36,14 +36,13 @@ Router.register('customers', function (el) {
     if (s) params.status = s;
     // Stale-while-revalidate: paint last-known instantly, refetch, repaint only
     // if it changed. Falls back to a plain fetch if the perf layer is absent.
-    var skel = function () { return window.UX ? UX.skel.tableRows(6, 7) : loadingRow(7); };
     if (API.swr) {
       API.swr('customers', 'list', params, renderCustomers, {
-        onLoading: function () { setHTML('custBody', skel()); },
+        onLoading: function () { setHTML('custBody', loadingRow(7)); },
         onError:   function (e) { setHTML('custBody', errorRow(7, e, load)); }
       });
     } else {
-      setHTML('custBody', skel());
+      setHTML('custBody', loadingRow(7));
       API.call('customers', 'list', params).then(renderCustomers)
         .catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
     }
@@ -57,51 +56,24 @@ Router.register('customers', function (el) {
   load();
 });
 
-// Customer 360 detail: the modal opens immediately with a layout-matched
-// skeleton (no blank wait), then fills a single-open disclosure (Overview /
-// Commercial) using the shared UX.disclosure component. Presentation only:
-// it reads the same customers.get it always did.
 function viewCustomer(id) {
-  function dl(rows) {
-    return '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin:0">' +
-      rows.map(function (r) {
-        return '<dt style="color:#6b7280">' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>';
-      }).join('') + '</dl>';
-  }
-  Modal.open({
-    title: 'Customer',
-    body: '<div id="cust360"></div>',
-    footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
-            '<button class="btn btn-primary btn-sm" id="cust360Contacts" disabled>View Contacts</button>',
-    onOpen: function (bd) {
-      var mount = bd.querySelector('#cust360');
-      mount.innerHTML = UX.skel.detail(6);
-      API.call('customers', 'get', { customerId: id }).then(function (c) {
-        var titleEl = bd.querySelector('.modal-title');
-        if (titleEl) titleEl.textContent = c.company_name || 'Customer';
-        var cb = bd.querySelector('#cust360Contacts');
-        if (cb) { cb.disabled = false; cb.onclick = function () { Modal.close(); goRoute('contacts', { customerId: c.customer_id }); }; }
-        UX.disclosure(mount, [
-          { id: 'overview', label: 'Overview', render: function (b) {
-            b.innerHTML = dl([
-              ['Account#', esc(c.account_number)],
-              ['Country',  esc(c.country_code)],
-              ['Type',     esc(c.customer_type)],
-              ['Status',   statusBadge(c.status)],
-              ['Created',  fmtDate(c.created_at)],
-            ]);
-          } },
-          { id: 'commercial', label: 'Commercial', render: function (b) {
-            b.innerHTML = dl([
-              ['Credit Limit',  fmtMoney(c.credit_limit, c.currency_code)],
-              ['Currency',      esc(c.currency_code || '-')],
-              ['Payment Terms', esc(c.payment_terms || '-')],
-            ]);
-          } },
-        ], { single: true, open: 'overview', lazy: false });
-      }).catch(function (e) { mount.innerHTML = errorCard(e); });
-    },
-  });
+  var loader = Loader.show();
+  API.call('customers', 'get', { customerId: id }).then(function (c) {
+    Loader.hide(loader);
+    Modal.open({
+      title: c.company_name,
+      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+            '<dt style="color:#6b7280">Account#</dt><dd>' + esc(c.account_number) + '</dd>' +
+            '<dt style="color:#6b7280">Country</dt><dd>' + esc(c.country_code) + '</dd>' +
+            '<dt style="color:#6b7280">Type</dt><dd>' + esc(c.customer_type) + '</dd>' +
+            '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(c.status) + '</dd>' +
+            '<dt style="color:#6b7280">Credit Limit</dt><dd>' + fmtMoney(c.credit_limit, c.currency_code) + '</dd>' +
+            '<dt style="color:#6b7280">Created</dt><dd>' + fmtDate(c.created_at) + '</dd>' +
+            '</dl>',
+      footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
+              '<button class="btn btn-primary btn-sm" onclick="Modal.close();goRoute(\'contacts\',{customerId:\'' + esc(c.customer_id) + '\'})">View Contacts</button>',
+    });
+  }).catch(function (e) { Loader.hide(loader); Toast.error(e.message); });
 }
 
 function newCustomerModal(onSuccess) {

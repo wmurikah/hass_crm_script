@@ -9,7 +9,7 @@ Router.register('config', function (el) {
       '<tbody id="cfgBody"></tbody></table></div></div>';
 
   function load() {
-    setHTML('cfgBody', (window.UX ? UX.skel.tableRows(5, 5) : loadingRow(5)));
+    setHTML('cfgBody', loadingRow(5));
     API.call('configAdmin', 'list', {}).then(function (rows) {
       if (!rows.length) { setHTML('cfgBody', emptyRow(5, 'No config keys.')); return; }
       setHTML('cfgBody', rows.map(function (r) {
