@@ -626,12 +626,12 @@ var Orders = (function () {
 (function _registerOrders_() {
   register({ service: 'orders', action: 'list',            permission: 'order.view',             handler: Orders._listHandler_ });
   register({ service: 'orders', action: 'get',             permission: 'order.view',             handler: Orders._getHandler_ });
-  register({ service: 'orders', action: 'create',          permission: 'order.create',           handler: Idempotency.wrap(Orders._createHandler_) });
-  register({ service: 'orders', action: 'addLine',         permission: 'order.create',           handler: Idempotency.wrap(Orders._addLineHandler_) });
-  register({ service: 'orders', action: 'submit',          permission: 'order.create',           handler: Idempotency.wrap(Orders._submitHandler_) });
-  register({ service: 'orders', action: 'approve',         permission: 'order.approve_low',      handler: Idempotency.wrap(Orders._approveHandler_) });
-  register({ service: 'orders', action: 'reject',          permission: 'order.approve_low',      handler: Idempotency.wrap(Orders._rejectHandler_) });
-  register({ service: 'orders', action: 'cancel',          permission: 'order.cancel',           handler: Idempotency.wrap(Orders._cancelHandler_) });
-  register({ service: 'orders', action: 'dispatch',        permission: 'order.dispatch',         handler: Idempotency.wrap(Orders._dispatchHandler_) });
-  register({ service: 'orders', action: 'confirmDelivery', permission: 'order.confirm_delivery', handler: Idempotency.wrap(Orders._confirmDeliveryHandler_) });
+  register({ service: 'orders', action: 'create',          permission: 'order.create',           handler: Orders._createHandler_ });
+  register({ service: 'orders', action: 'addLine',         permission: 'order.create',           handler: Orders._addLineHandler_ });
+  register({ service: 'orders', action: 'submit',          permission: 'order.create',           handler: Orders._submitHandler_ });
+  register({ service: 'orders', action: 'approve',         permission: 'order.approve_low',      handler: Orders._approveHandler_ });
+  register({ service: 'orders', action: 'reject',          permission: 'order.approve_low',      handler: Orders._rejectHandler_ });
+  register({ service: 'orders', action: 'cancel',          permission: 'order.cancel',           handler: Orders._cancelHandler_ });
+  register({ service: 'orders', action: 'dispatch',        permission: 'order.dispatch',         handler: Orders._dispatchHandler_ });
+  register({ service: 'orders', action: 'confirmDelivery', permission: 'order.confirm_delivery', handler: Orders._confirmDeliveryHandler_ });
 })();

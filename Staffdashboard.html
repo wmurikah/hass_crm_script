@@ -82,11 +82,6 @@
      A transparent speed layer over API.call; loads after js_api/js_app so it can
      wrap API.call and read the Router/HassCache it builds on. -->
 <?!= HtmlService.createHtmlOutputFromFile('js_perf').getContent(); ?>
-<!-- Responsiveness + disclosure layer: pending state, coalescing, debounce,
-     write idempotency, a global working indicator, and the reusable skeleton /
-     disclosure primitives. Loads after js_perf so it wraps the same one request
-     path (and before the partials so they can use UX.* at render time). -->
-<?!= HtmlService.createHtmlOutputFromFile('js_ux').getContent(); ?>
 
 <!-- Load all staff module partials -->
 <?!= HtmlService.createHtmlOutputFromFile('partial_dashboard').getContent(); ?>

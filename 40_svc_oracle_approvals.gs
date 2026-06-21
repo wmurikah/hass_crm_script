@@ -865,7 +865,7 @@ function _oaSyncNow_(ctx, params) {
 // ── Registration ──────────────────────────────────────────────────────────────
 
 (function _registerOracleApprovals_() {
-  register({ service: 'approvals', action: 'upload',                permission: 'order.manage', handler: Idempotency.wrap(_oaUpload_) });
+  register({ service: 'approvals', action: 'upload',                permission: 'order.manage', handler: _oaUpload_ });
   register({ service: 'approvals', action: 'charts',                permission: 'order.view',   handler: _oaCharts_ });
   register({ service: 'approvals', action: 'leaderboard',           permission: 'order.view',   handler: _oaLeaderboard_ });
   register({ service: 'approvals', action: 'list',                  permission: 'order.view',   handler: _oaList_ });
