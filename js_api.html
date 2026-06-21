@@ -157,6 +157,9 @@ var API = (function () {
     getToken: _getToken,
     clearToken: _clearToken,
     loadPersistedToken: _loadPersistedToken,
+    // Exposed so the UX responsiveness layer (js_ux) reuses the SAME write
+    // classification instead of keeping its own divergent copy.
+    isWriteAction: _isWriteAction,
   };
 })();
 </script>
