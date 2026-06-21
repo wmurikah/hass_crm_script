@@ -320,4 +320,55 @@ table { border-collapse: collapse; width: 100%; }
   .page-content    { padding: 14px; }
   .app-header      { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ── Responsiveness feedback (js_feedback.html): progress bar, slow-op chip,
+   in-button spinner, and layout-matched skeletons. Brand tokens only; reuses
+   the existing `spin` keyframe. All decorative, so prefers-reduced-motion stops
+   the animation without changing behaviour. ────────────────────────────────── */
+
+/* Thin top progress bar shown whenever any call is in flight. */
+.ux-progress       { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 10000;
+                     background: transparent; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.ux-progress.on    { opacity: 1; }
+.ux-progress-fill  { position: absolute; top: 0; left: 0; height: 100%; width: 35%;
+                     background: linear-gradient(90deg, transparent, var(--clr-gold), var(--clr-primary));
+                     border-radius: 0 3px 3px 0; animation: ux-indeterminate 1.1s ease-in-out infinite; }
+@keyframes ux-indeterminate { 0% { left: -35%; width: 35%; } 50% { width: 48%; } 100% { left: 100%; width: 32%; } }
+
+/* Corner chip explaining a longer wait (appears after ~600ms). */
+.ux-chip           { position: fixed; right: 16px; bottom: 16px; z-index: 10000; display: inline-flex;
+                     align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px;
+                     background: var(--clr-primary); color: #fff; font-size: 12.5px; font-weight: 600;
+                     box-shadow: 0 6px 18px rgba(0,0,0,.18); opacity: 0; transform: translateY(8px);
+                     transition: opacity .2s ease, transform .2s ease; pointer-events: none; }
+.ux-chip.on        { opacity: 1; transform: translateY(0); }
+.ux-chip-spin      { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.35);
+                     border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+
+/* The control that fired a call: inline spinner in place of its label. */
+.ux-btn-spin       { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor;
+                     border-right-color: transparent; border-radius: 50%; animation: spin .6s linear infinite;
+                     vertical-align: -2px; }
+.ux-pending        { cursor: progress; }
+
+/* Skeleton placeholders: a shimmering block that matches the shape that will
+   replace it (table rows, text lines, cards, label/value pairs). */
+.ux-sk             { display: inline-block; position: relative; overflow: hidden;
+                     background: #e9edf3; border-radius: 6px; }
+.ux-sk::after      { content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+                     background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent);
+                     animation: ux-shimmer 1.3s infinite; }
+@keyframes ux-shimmer { 100% { transform: translateX(100%); } }
+.ux-sk-line        { height: 11px; width: 100%; }
+.ux-sk-row td      { padding: 13px 14px; }
+.ux-sk-stack       { display: flex; flex-direction: column; gap: 10px; }
+.ux-sk-cards       { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.ux-sk-card        { border: 1px solid var(--clr-border); border-radius: var(--radius); padding: 14px;
+                     display: flex; flex-direction: column; gap: 10px; }
+.ux-sk-detail      { display: flex; flex-direction: column; gap: 12px; }
+.ux-sk-pair        { display: flex; justify-content: space-between; gap: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ux-progress-fill, .ux-sk::after, .ux-btn-spin, .ux-chip-spin { animation: none; }
+}
 </style>

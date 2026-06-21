@@ -1,0 +1,217 @@
+<script>
+// -----------------------------------------------------------------
+//  js_feedback.html  -  Hass CMS responsiveness feedback layer
+//
+//  Presentational ONLY. This file never touches API.call and adds NO
+//  second wrapper (that double-wrap is exactly what broke PR #165). It
+//  only LISTENS to the events the single js_perf wrapper already emits
+//  (hass:call:start / hass:call:settle) and reacts in the DOM:
+//
+//    Part 1  instant pending state on the control that fired a call
+//            (disabled + inline spinner), released when that call settles;
+//            a thin top progress bar while any call is in flight; and a
+//            small corner chip (Working / Fetching) once an op passes ~600ms.
+//    Part 2  layout-matched skeleton helpers (UX.skel.*) for content / list
+//            / detail loads, plus UX.tableLoading / UX.panelLoading that fall
+//            back to the app's existing loaders when feedback is off.
+//
+//  Fail-safe by construction: because it does not sit in the request path,
+//  any bug here can change how things LOOK but can never block a call or
+//  blank a screen. With the feedback flag off it adds no listeners and the
+//  skeleton helpers return the app's current loaders, i.e. exactly main.
+// -----------------------------------------------------------------
+(function () {
+  'use strict';
+
+  var _UXOPT = (typeof window !== 'undefined' && window.HASS_UX && typeof window.HASS_UX === 'object')
+    ? window.HASS_UX : {};
+  var FEEDBACK_ON = (_UXOPT.feedback !== false);   // default ON; set false for current-main feel
+
+  var SLOW_MS = 600;   // an op in flight longer than this earns the explanatory chip
+
+  // ---- public toolkit (always defined, even when feedback is off) --------
+  var UX = window.UX || {};
+  UX.enabled = function () { return FEEDBACK_ON; };
+
+  // Layout-matched skeleton fragments. Pure strings; zero request impact.
+  UX.skel = {
+    tableRows: function (rows, cols) {
+      rows = rows || 6; cols = cols || 4;
+      var tds = '';
+      for (var c = 0; c < cols; c++) tds += '<td><span class="ux-sk ux-sk-line" style="width:' + (45 + ((c * 53) % 45)) + '%"></span></td>';
+      var out = '';
+      for (var r = 0; r < rows; r++) out += '<tr class="ux-sk-row">' + tds + '</tr>';
+      return out;
+    },
+    lines: function (n) {
+      n = n || 4; var out = '<div class="ux-sk-stack">';
+      for (var i = 0; i < n; i++) out += '<span class="ux-sk ux-sk-line" style="width:' + (100 - (i % 3) * 18) + '%"></span>';
+      return out + '</div>';
+    },
+    cards: function (n) {
+      n = n || 3; var out = '<div class="ux-sk-cards">';
+      for (var i = 0; i < n; i++) {
+        out += '<div class="ux-sk-card"><span class="ux-sk ux-sk-line" style="width:55%"></span>' +
+               '<span class="ux-sk ux-sk-line" style="width:80%"></span>' +
+               '<span class="ux-sk ux-sk-line" style="width:40%"></span></div>';
+      }
+      return out + '</div>';
+    },
+    detail: function (pairs) {
+      pairs = pairs || 6; var out = '<div class="ux-sk-detail">';
+      for (var i = 0; i < pairs; i++) {
+        out += '<div class="ux-sk-pair"><span class="ux-sk ux-sk-line" style="width:38%"></span>' +
+               '<span class="ux-sk ux-sk-line" style="width:64%"></span></div>';
+      }
+      return out + '</div>';
+    }
+  };
+
+  // Convenience that respects the flag and falls back to the app's loaders, so a
+  // call site reads `UX.tableLoading(7)` and gets a skeleton (on) or loadingRow
+  // (off) with no behavioural change. Safe if the app helpers are absent.
+  UX.tableLoading = function (cols, rows) {
+    if (FEEDBACK_ON && UX.skel) return UX.skel.tableRows(rows || 6, cols || 4);
+    if (typeof loadingRow === 'function') return loadingRow(cols || 4);
+    return '';
+  };
+  UX.panelLoading = function (kind, n) {
+    if (FEEDBACK_ON && UX.skel) {
+      if (kind === 'cards')  return UX.skel.cards(n || 3);
+      if (kind === 'detail') return UX.skel.detail(n || 6);
+      return UX.skel.lines(n || 5);
+    }
+    if (typeof spinnerHTML === 'function') return spinnerHTML(40);
+    return '';
+  };
+
+  // Explicit pending binding for a control that is not the click target; returns
+  // a release function. Usable regardless of the start/settle correlation.
+  UX.pending = function (el) { setPending(el); return function () { clearPending(el); }; };
+
+  window.UX = UX;
+
+  if (!FEEDBACK_ON) return;   // flag off: no listeners, no chrome. Exactly main.
+
+  // ---- pending control feedback -----------------------------------------
+  function setPending(el) {
+    if (!el || el.__uxPending) return;
+    el.__uxPending = true;
+    try { el.setAttribute('aria-busy', 'true'); } catch (e) {}
+    // Freeze the width so swapping the label for a spinner does not reflow.
+    try { var w = el.offsetWidth; if (w) el.style.minWidth = w + 'px'; } catch (e) {}
+    if ('innerHTML' in el) { el.__uxHTML = el.innerHTML; el.innerHTML = '<span class="ux-btn-spin" aria-hidden="true"></span>'; }
+    el.classList.add('ux-pending');
+    try { el.disabled = true; } catch (e) {}
+  }
+  function clearPending(el) {
+    if (!el || !el.__uxPending) return;
+    el.__uxPending = false;
+    try { el.removeAttribute('aria-busy'); } catch (e) {}
+    el.classList.remove('ux-pending');
+    if ('__uxHTML' in el) { el.innerHTML = el.__uxHTML; delete el.__uxHTML; }
+    try { el.style.minWidth = ''; } catch (e) {}
+    try { el.disabled = false; } catch (e) {}
+  }
+
+  // Capture the last clicked ACTION control (primary/danger/submit, or any
+  // [data-ux-pending] opt-in; [data-ux-skip] opts out). Scoped to action buttons
+  // so navigation, tabs, pagination and read-only "View"/"Edit" buttons are not
+  // disabled while a page loads. Capture phase + a freshness window keeps the
+  // correlation tight without each call site passing its button in.
+  var CAND_SEL = '[data-ux-pending], button[type="submit"], .btn-primary, .btn-danger';
+  var FRESH_MS = 1500;
+  var _cand = null;
+  try {
+    document.addEventListener('click', function (e) {
+      try {
+        var t = e.target && e.target.closest && e.target.closest(CAND_SEL);
+        if (t && !t.disabled && t.getAttribute('data-ux-skip') === null) _cand = { el: t, at: Date.now() };
+      } catch (_) {}
+    }, true);
+  } catch (_) {}
+
+  function claim(id) {
+    if (!_cand) return;
+    if ((Date.now() - _cand.at) > FRESH_MS) { _cand = null; return; }
+    var el = _cand.el;
+    if (!el || !el.isConnected || el.__uxPending) return;
+    _ctl[id] = el; setPending(el); _cand = null;
+  }
+
+  // ---- global indicator: top progress bar + slow-op chip -----------------
+  var _bar = null, _chip = null, _chipTxt = null;
+  function ensureUI() {
+    if (_bar || !document.body) return;
+    _bar = document.createElement('div');
+    _bar.className = 'ux-progress';
+    _bar.setAttribute('aria-hidden', 'true');
+    _bar.innerHTML = '<div class="ux-progress-fill"></div>';
+    _chip = document.createElement('div');
+    _chip.className = 'ux-chip';
+    _chip.setAttribute('role', 'status');
+    _chip.setAttribute('aria-live', 'polite');
+    _chip.innerHTML = '<span class="ux-chip-spin" aria-hidden="true"></span><span class="ux-chip-txt">Working</span>';
+    _chipTxt = _chip.querySelector('.ux-chip-txt');
+    document.body.appendChild(_bar);
+    document.body.appendChild(_chip);
+  }
+  function showChip(label) {
+    ensureUI();
+    if (!_chip || _active <= 0) return;
+    if (_chipTxt) _chipTxt.textContent = label || 'Working';
+    _chip.classList.add('on');
+  }
+  function hideChip() { if (_chip) _chip.classList.remove('on'); }
+
+  // ---- in-flight bookkeeping (driven by the wrapper's events) ------------
+  var _meta = {};        // call id -> { write } for every in-flight invocation
+  var _ctl  = {};        // call id -> bound control element (claimed ones only)
+  var _active = 0;       // number of invocations currently in flight
+  var _writes = 0;       // how many of those are writes (drives the chip label)
+  var _slow = null;      // pending slow-op timer
+
+  function _isWriteish(action) {
+    return /^(create|update|delete|submit|approve|reject|assign|cancel|dispatch|upload|set|generate|upsert|deactivate|initiate|save|add|resolve|confirm|sync|reset|change|verify|clear|remove)/
+      .test(String(action || ''));
+  }
+
+  function onStart(d) {
+    try {
+      var id = d && d.id; if (id == null) return;
+      var w = _isWriteish(d.action);
+      _meta[id] = { write: w };
+      _active++; if (w) _writes++;
+      ensureUI();
+      if (_bar) _bar.classList.add('on');
+      if (!_slow) _slow = setTimeout(onSlow, SLOW_MS);
+      claim(id);
+    } catch (_) {}
+  }
+  function onSlow() {
+    _slow = null;
+    if (_active > 0) showChip(_writes > 0 ? 'Working' : 'Fetching');
+  }
+  function onSettle(d) {
+    try {
+      var id = d && d.id; if (id == null) return;
+      var m = _meta[id];
+      if (m) { if (m.write) _writes = Math.max(0, _writes - 1); delete _meta[id]; }
+      _active = Math.max(0, _active - 1);
+      var el = _ctl[id];
+      if (el) { clearPending(el); delete _ctl[id]; }   // always re-enable: never a dead end
+      if (_active <= 0) {
+        _active = 0; _writes = 0;
+        if (_bar) _bar.classList.remove('on');
+        hideChip();
+        if (_slow) { clearTimeout(_slow); _slow = null; }
+      }
+    } catch (_) {}
+  }
+
+  try {
+    window.addEventListener('hass:call:start',  function (e) { onStart(e.detail || {}); });
+    window.addEventListener('hass:call:settle', function (e) { onSettle(e.detail || {}); });
+  } catch (_) {}
+})();
+</script>

@@ -80,12 +80,39 @@ function dispatch(ctx, req) {
   }
 
   try {
-    var result = reg.handler(ctx, params);
+    var result = _invokeHandler(reg, ctx, params);
     return { ok: true, data: result };
   } catch (e) {
     Logger.log('[dispatcher] handler error: ' + e.message + (e.stack ? '\n' + e.stack : ''));
     return { ok: false, error: { code: (e.code || 'HANDLER_ERROR'), message: e.message } };
   }
+}
+
+/**
+ * The SINGLE server-side composition point for write idempotency (Part 4 of the
+ * responsiveness redo). It is deliberately here, around the one handler call,
+ * and NOT at the register() sites: the reverted PR #165 wrapped handlers at
+ * registration, so when its Idempotency module was unavailable at file-load time
+ * the wrap threw and took whole services' registrations down with it (the
+ * "Unknown action: approvals.charts" failure). Running at REQUEST time behind a
+ * typeof guard, after every file has loaded, removes that failure mode entirely.
+ *
+ * Additive and fully backward compatible. The handler runs EXACTLY as before
+ * when any of these hold:
+ *   - FEATURES.WRITE_IDEMPOTENCY is off,
+ *   - the request carries no idempotencyKey (every read; writes when the client
+ *     idempotency flag is off),
+ *   - the Idempotency module is not present.
+ * Only a duplicate (user, key) is short-circuited to the first call's result.
+ */
+function _invokeHandler(reg, ctx, params) {
+  var idemOn = (typeof FEATURES !== 'undefined' && FEATURES && FEATURES.WRITE_IDEMPOTENCY);
+  var hasKey = params && typeof params.idempotencyKey === 'string' && params.idempotencyKey.length > 0;
+  if (idemOn && hasKey &&
+      typeof Idempotency !== 'undefined' && Idempotency && typeof Idempotency.guard === 'function') {
+    return Idempotency.guard(ctx, params, function () { return reg.handler(ctx, params); });
+  }
+  return reg.handler(ctx, params);
 }
 
 function processRequest(requestBody) {

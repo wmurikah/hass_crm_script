@@ -181,7 +181,7 @@ Router.register('rbac', function (el) {
   var cols = canManage ? 4 : 3;   // the Actions column only exists for managers
 
   function loadRoles() {
-    setHTML('rbacRoleTbody', loadingRow(cols));
+    setHTML('rbacRoleTbody', (window.UX ? UX.tableLoading(cols) : loadingRow(cols)));
     // Catalogue first so the per-category summary can resolve codes, then roles.
     rbacEnsureCatalogue()
       .then(function () { return API.call('rbac', 'listRoles', {}); })

@@ -173,17 +173,27 @@
   function _sig(service, action, params) {
     var p = {};
     Object.keys(params || {}).forEach(function (k) {
-      if (k === 'sessionToken') return;  // never part of identity
+      // sessionToken is auth, not identity; idempotencyKey is a write-dedupe
+      // tag derived FROM this signature, so it must never be part of it.
+      if (k === 'sessionToken' || k === 'idempotencyKey') return;
       p[k] = params[k];
     });
     return service + '.' + action + '|' + _stable(p);
   }
   API._sig = _sig;
 
-  // -- foreground tracking + write invalidation wrapper ------------------
-  // We wrap API.call WITHOUT changing what it returns: callers get the exact
-  // same promise. We only (a) count in-flight foreground calls so prefetch can
-  // yield to them, and (b) invalidate the cache after a successful write.
+  // -- the single API.call wrapper ---------------------------------------
+  // This is the ONE composition point on API.call. It wraps the call WITHOUT
+  // changing what a non-coalesced caller receives (the exact same promise) and,
+  // for reads, WITHOUT changing the forwarded request at all. Its jobs:
+  //   (a) count in-flight foreground calls so prefetch can yield to them,
+  //   (b) invalidate the cache after a successful write,
+  //   (c) coalesce/debounce identical requests (Part 3),
+  //   (d) add an optional idempotencyKey to writes (Part 4),
+  //   (e) emit start/settle events so the feedback layer can react (Part 1)
+  //       without ever wrapping the call a second time.
+  // The new behaviour is defined further down; SWR / prefetch / batch keep using
+  // _origCall directly, so they are never double-processed.
   var _origCall = API.call;
   var _inflight = 0;
   function _busy() { return _inflight > 0; }
@@ -252,18 +262,170 @@
     t.forEach(function (svc) { HassStore.removeBySigPrefix(svc + '.'); });
   }
 
-  API.call = function (service, action, params, opts) {
+  // ====================================================================
+  //  Responsiveness redo: coalescing + write idempotency + in-flight
+  //  registry, integrated into THIS one wrapper (the single composition
+  //  point). No second wrapper is ever added on top of API.call.
+  //
+  //  The #165 lesson: a read's forwarded request must stay byte-identical
+  //  to main. So for reads (and whenever a flag is off) we forward the
+  //  ORIGINAL `params` and `opts` arguments untouched, exactly as the old
+  //  wrapper did. Only a WRITE may gain one optional field, idempotencyKey,
+  //  and only when the idempotency flag is on. Everything here fails OPEN:
+  //  if any pre-flight step throws, we fall straight through to the
+  //  underlying call with the caller's original arguments.
+  // ====================================================================
+
+  // Flags (default ON; set window.HASS_UX = { coalesce:false, idempotency:false }
+  // BEFORE this file loads to fall back to current-main behaviour). Independent
+  // of the presentational feedback flag, which lives in js_feedback.html.
+  var _UXOPT = (typeof window !== 'undefined' && window.HASS_UX && typeof window.HASS_UX === 'object')
+    ? window.HASS_UX : {};
+  var FLAG_COALESCE    = (_UXOPT.coalesce    !== false);   // Part 3: request coalescing + debounce
+  var FLAG_IDEMPOTENCY = (_UXOPT.idempotency !== false);   // Part 4: client write idempotency key
+
+  var GRACE_MS      = 450;     // an identical repeat within this of settle reuses the one effective call
+  var IDEM_REUSE_MS = 8000;    // reuse one idempotency key for an identical write within this window
+
+  // Write detection, used ONLY to decide whether to append an idempotencyKey.
+  // startsWith semantics; verified against every action so no read ever matches
+  // (e.g. "charts", "approvals", "previewResolve", "mfaVerify" are NOT writes).
+  var _WRITE_PREFIXES = [
+    'create', 'update', 'delete', 'submit', 'approve', 'reject', 'assign',
+    'cancel', 'dispatch', 'upload', 'set', 'generate', 'upsert', 'deactivate',
+    'initiate', 'save', 'add', 'resolve', 'confirm', 'sync', 'reset', 'change',
+    'verify', 'clear', 'remove'
+  ];
+  function _isWriteAction(action) {
+    var a = String(action || '');
+    for (var i = 0; i < _WRITE_PREFIXES.length; i++) {
+      if (a.indexOf(_WRITE_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  function _uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10) +
+           Math.random().toString(36).slice(2, 6);
+  }
+
+  // In-flight registry (keyed by signature) for coalescing/debounce, plus a
+  // reused-key store for idempotency. Internal only: they decide whether to
+  // reuse an in-flight promise, never what is forwarded.
+  var _coalesce = {};   // sig -> { state:'pending'|'settled', at, promise, ok, value, error }
+  var _idem     = {};   // sig -> { id, at }
+  var _seq      = 0;    // monotonic id per API.call invocation (for feedback events)
+
+  function _idemKey(sig) {
+    var now = Date.now();
+    var r = _idem[sig];
+    if (r && (now - r.at) < IDEM_REUSE_MS) return r.id;   // a double-fire reuses the SAME key
+    var nid = _uid();
+    _idem[sig] = { id: nid, at: now };
+    return nid;
+  }
+
+  function _assignKey(params, key) {
+    return Object.assign({}, params || {}, { idempotencyKey: key });
+  }
+
+  function _evictLater(sig, entry) {
+    if (!sig) return;
+    setTimeout(function () {
+      var e = _coalesce[sig];
+      if (e === entry && e.state === 'settled' && (Date.now() - e.at) >= GRACE_MS) delete _coalesce[sig];
+    }, GRACE_MS + 30);
+  }
+
+  // The wrapper emits these so the presentational feedback layer can disable the
+  // firing control / show the progress bar WITHOUT wrapping the call again. This
+  // is the "single existing wrapper's registry" the feedback layer reads.
+  function _emit(name, detail) {
+    try { window.dispatchEvent(new CustomEvent('hass:call:' + name, { detail: detail })); } catch (e) {}
+  }
+
+  // Fire the real underlying (perf-original) call ONCE and track it for
+  // coalescing + cache invalidation. Returns the underlying promise unchanged,
+  // so a non-coalesced caller receives the exact same promise main would return.
+  function _fire(service, action, fwd, opts, sig) {
     _inflight++;
-    var done = false;
-    function settle() { if (!done) { done = true; _inflight = Math.max(0, _inflight - 1); } }
-    var p = _origCall.call(API, service, action, params, opts);
-    // Attach a side branch that never alters `p`'s settlement seen by callers.
-    p.then(function () {
-      settle();
+    var fired = _origCall.call(API, service, action, fwd, opts);
+    var entry = { state: 'pending', at: Date.now(), promise: fired, ok: false, value: undefined, error: undefined };
+    if (sig) _coalesce[sig] = entry;
+    var settled = false;
+    function dec() { if (!settled) { settled = true; _inflight = Math.max(0, _inflight - 1); } }
+    // Side branch only: never alters `fired` as seen by callers.
+    fired.then(function (val) {
+      dec();
+      entry.state = 'settled'; entry.at = Date.now(); entry.ok = true; entry.value = val;
       try { _invalidate(service, action); } catch (e) {}
-    }, function () {
-      settle();   // do NOT invalidate on a failed write (nothing changed server-side)
+      _evictLater(sig, entry);
+    }, function (err) {
+      dec();
+      entry.state = 'settled'; entry.at = Date.now(); entry.ok = false; entry.error = err;
+      // do NOT invalidate on a failed write (nothing changed server-side)
+      _evictLater(sig, entry);
     });
+    return fired;
+  }
+
+  // Decide coalescing/idempotency, then fire. All decisions are defensive: any
+  // failure degrades to "no coalescing, no key", i.e. a plain single fire.
+  function _dispatchCall(service, action, params, opts) {
+    var write = false;
+    try { write = _isWriteAction(action); } catch (e) { write = false; }
+
+    var sig = null;
+    if (FLAG_COALESCE || (FLAG_IDEMPOTENCY && write)) {
+      try { sig = _sig(service, action, params); } catch (e) { sig = null; }
+    }
+
+    // Coalesce: attach to an identical in-flight call, or to one that settled
+    // within the grace window. Distinct actions/params have distinct sigs and
+    // are never blocked.
+    if (FLAG_COALESCE && sig) {
+      var ex = _coalesce[sig];
+      if (ex) {
+        if (ex.state === 'pending') return ex.promise;
+        if (ex.state === 'settled' && (Date.now() - ex.at) < GRACE_MS) {
+          return ex.ok ? Promise.resolve(ex.value) : Promise.reject(ex.error);
+        }
+      }
+    }
+
+    // Forwarded params: reads (and idempotency off) pass the ORIGINAL params
+    // through untouched, so the request to processRequest is byte-identical to
+    // main. Only a write, with the flag on, gains the optional idempotencyKey.
+    var fwd = params;
+    if (FLAG_IDEMPOTENCY && write && sig) {
+      try { fwd = _assignKey(params, _idemKey(sig)); } catch (e) { fwd = params; }
+    }
+
+    return _fire(service, action, fwd, opts, (FLAG_COALESCE ? sig : null));
+  }
+
+  API.call = function (service, action, params, opts) {
+    var id = ++_seq;
+    _emit('start', { id: id, service: service, action: action });
+
+    var p;
+    try {
+      p = _dispatchCall(service, action, params, opts);
+    } catch (e) {
+      // FAIL OPEN: a bug in coalescing/idempotency must never block a call. Run
+      // the underlying call with the caller's ORIGINAL arguments.
+      try { p = _origCall.call(API, service, action, params, opts); }
+      catch (e2) { p = Promise.reject(e2); }
+    }
+
+    // Settle bookkeeping for the feedback layer. A separate branch: it never
+    // changes the value or rejection the caller sees.
+    if (p && typeof p.then === 'function') {
+      p.then(function () { _emit('settle', { id: id, ok: true }); },
+             function () { _emit('settle', { id: id, ok: false }); });
+    } else {
+      _emit('settle', { id: id, ok: true });
+    }
     return p;
   };
 

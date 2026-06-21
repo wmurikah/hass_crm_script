@@ -38,11 +38,11 @@ Router.register('customers', function (el) {
     // if it changed. Falls back to a plain fetch if the perf layer is absent.
     if (API.swr) {
       API.swr('customers', 'list', params, renderCustomers, {
-        onLoading: function () { setHTML('custBody', loadingRow(7)); },
+        onLoading: function () { setHTML('custBody', (window.UX ? UX.tableLoading(7) : loadingRow(7))); },
         onError:   function (e) { setHTML('custBody', errorRow(7, e, load)); }
       });
     } else {
-      setHTML('custBody', loadingRow(7));
+      setHTML('custBody', (window.UX ? UX.tableLoading(7) : loadingRow(7)));
       API.call('customers', 'list', params).then(renderCustomers)
         .catch(function (e) { setHTML('custBody', errorRow(7, e, load)); });
     }

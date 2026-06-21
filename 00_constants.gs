@@ -189,3 +189,21 @@ var ENV = {
   TIMEZONE:    'Africa/Nairobi',
   LOG_LEVEL:   'INFO',   // DEBUG | INFO | WARN | ERROR
 };
+
+// ============================================================================
+// FEATURES  (server-side feature flags)
+// ============================================================================
+//
+// Independent on/off switches for additive behaviour. Each defaults so that the
+// app behaves EXACTLY as it did before the feature existed when the flag is off.
+//
+// WRITE_IDEMPOTENCY (Part 4 of the responsiveness redo): when on, a write that
+// carries an optional `idempotencyKey` is deduped per (user, key) so a
+// double-fire returns the first call's result instead of running twice. It is
+// applied in ONE place, the dispatcher (see 30_dispatcher.gs `_invokeHandler`),
+// never at the register() sites, so it can never break action registration the
+// way the reverted PR #165 did. Reads never carry a key, so reads are untouched.
+// Set to false for behaviour byte-identical to current main.
+var FEATURES = {
+  WRITE_IDEMPOTENCY: true,
+};

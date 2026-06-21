@@ -80,8 +80,14 @@
 <?!= HtmlService.createHtmlOutputFromFile('js_app').getContent(); ?>
 <!-- Performance layer: per-user SWR cache, prefetch, optimistic writes, batch.
      A transparent speed layer over API.call; loads after js_api/js_app so it can
-     wrap API.call and read the Router/HassCache it builds on. -->
+     wrap API.call and read the Router/HassCache it builds on. This is the ONE
+     and ONLY wrapper on API.call (coalescing + write idempotency live inside it). -->
 <?!= HtmlService.createHtmlOutputFromFile('js_perf').getContent(); ?>
+<!-- Responsiveness feedback layer: instant pending state, top progress bar, slow
+     -op chip, and the skeleton helpers. Presentational ONLY: it LISTENS to the
+     js_perf wrapper's events and never wraps API.call (the #165 mistake). Loads
+     after js_perf and before the partials so they can use UX.* at render time. -->
+<?!= HtmlService.createHtmlOutputFromFile('js_feedback').getContent(); ?>
 
 <!-- Load all staff module partials -->
 <?!= HtmlService.createHtmlOutputFromFile('partial_dashboard').getContent(); ?>
