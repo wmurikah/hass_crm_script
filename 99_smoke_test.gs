@@ -1496,3 +1496,99 @@ function smokeSignupSchema() {
   Logger.log(summary); results.push(summary);
   return results;
 }
+
+// =============================================================================
+// smokeIdempotency  -  responsiveness redo Part 4 (write idempotency)
+// =============================================================================
+
+/**
+ * Verifies the server-side write idempotency in isolation (no DB required): the
+ * Idempotency.guard core and the dispatcher's single composition point
+ * (_invokeHandler). Run from the GAS IDE. Uses CacheService/LockService only.
+ *
+ * Asserts:
+ *   1. No key  -> the handler runs every time (today's behaviour, additive).
+ *   2. Same (user, key) -> the handler runs once; a duplicate returns the
+ *      ORIGINAL result (a double-clicked write makes exactly one record).
+ *   3. A different key  -> the handler runs again (distinct writes never blocked).
+ *   4. A thrown error is NOT cached -> a retry with the same key re-runs.
+ *   5. Keys are namespaced per user -> same key, different user, is independent.
+ *   6. The dispatcher path dedupes a keyed write when the flag is on, and runs
+ *      every time when no key is present.
+ */
+function smokeIdempotency() {
+  var results = [], passed = 0, failed = 0;
+  function check(name, fn) {
+    try { fn(); results.push('PASS  ' + name); Logger.log('PASS  ' + name); passed++; }
+    catch (e) { results.push('FAIL  ' + name + '\n      ' + e.message); Logger.log('FAIL  ' + name + ': ' + e.message); failed++; }
+  }
+
+  var ctx = { session: { user_id: 'idem_smoke_user' } };
+  var run = 'smoke_' + Date.now() + '_';   // unique per run so prior cache entries never bleed in
+
+  check('guard with no key runs fn each call', function () {
+    var n = 0, fn = function () { n++; return n; };
+    var a = Idempotency.guard(ctx, {}, fn);
+    var b = Idempotency.guard(ctx, {}, fn);
+    if (n !== 2) throw new Error('expected fn to run twice, ran ' + n);
+    if (a !== 1 || b !== 2) throw new Error('expected distinct results 1,2 got ' + a + ',' + b);
+  });
+
+  check('guard dedupes identical (user,key): fn runs once, duplicate returns original', function () {
+    var n = 0, fn = function () { n++; return { v: n }; };
+    var key = { idempotencyKey: run + 'A' };
+    var a = Idempotency.guard(ctx, key, fn);
+    var b = Idempotency.guard(ctx, key, fn);
+    if (n !== 1) throw new Error('expected fn to run once, ran ' + n);
+    if (!a || !b || a.v !== 1 || b.v !== 1) throw new Error('duplicate did not return original: ' + JSON.stringify([a, b]));
+  });
+
+  check('guard with a different key runs fn again', function () {
+    var n = 0, fn = function () { n++; return n; };
+    Idempotency.guard(ctx, { idempotencyKey: run + 'B' }, fn);
+    Idempotency.guard(ctx, { idempotencyKey: run + 'C' }, fn);
+    if (n !== 2) throw new Error('expected fn to run twice for two keys, ran ' + n);
+  });
+
+  check('guard does not cache errors (retry still works)', function () {
+    var n = 0, key = { idempotencyKey: run + 'D' }, threw = false;
+    try { Idempotency.guard(ctx, key, function () { n++; throw new Error('boom'); }); }
+    catch (e) { threw = true; }
+    if (!threw) throw new Error('expected the first call to throw');
+    var ok = Idempotency.guard(ctx, key, function () { n++; return 'ok'; });
+    if (n !== 2) throw new Error('expected retry to re-run fn, ran ' + n);
+    if (ok !== 'ok') throw new Error('retry did not return fresh result: ' + ok);
+  });
+
+  check('guard namespaces keys by user', function () {
+    var n = 0, fn = function () { n++; return n; };
+    var key = { idempotencyKey: run + 'E' };
+    var a = Idempotency.guard({ session: { user_id: 'idem_user_1' } }, key, fn);
+    var b = Idempotency.guard({ session: { user_id: 'idem_user_2' } }, key, fn);
+    if (n !== 2) throw new Error('expected fn to run once per user, ran ' + n);
+    if (a !== 1 || b !== 2) throw new Error('users shared a cache entry: ' + a + ',' + b);
+  });
+
+  check('_invokeHandler dedupes a keyed write when FEATURES.WRITE_IDEMPOTENCY on', function () {
+    if (!(typeof FEATURES !== 'undefined' && FEATURES && FEATURES.WRITE_IDEMPOTENCY)) return; // flag off: skip
+    var n = 0, reg = { handler: function (c, p) { n++; return n; } };
+    var key = { idempotencyKey: run + 'F' };
+    var a = _invokeHandler(reg, ctx, key);
+    var b = _invokeHandler(reg, ctx, key);
+    if (n !== 1) throw new Error('expected handler to run once via dispatcher, ran ' + n);
+    if (a !== 1 || b !== 1) throw new Error('dispatcher duplicate did not return original: ' + a + ',' + b);
+  });
+
+  check('_invokeHandler with no key runs the handler every time (additive)', function () {
+    var n = 0, reg = { handler: function (c, p) { n++; return n; } };
+    _invokeHandler(reg, ctx, {});
+    _invokeHandler(reg, ctx, {});
+    if (n !== 2) throw new Error('expected handler to run twice without a key, ran ' + n);
+  });
+
+  var summary = '\n══════════════════════════════════════\n' +
+                'smokeIdempotency: ' + passed + ' PASS  ' + failed + ' FAIL\n' +
+                '══════════════════════════════════════';
+  Logger.log(summary); results.push(summary);
+  return results;
+}

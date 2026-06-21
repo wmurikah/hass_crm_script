@@ -19,7 +19,7 @@ Router.register('settings', function (el) {
   });
 
   function loadTab() {
-    setHTML('cfgPanel', spinnerHTML(40));
+    setHTML('cfgPanel', (window.UX ? UX.panelLoading('lines', 6) : spinnerHTML(40)));
     if (_tab === 'config') {
       API.call('configAdmin', 'list', {}).then(function (rows) {
         setHTML('cfgPanel', '<div class="card"><div class="table-wrapper"><table class="data-table">' +

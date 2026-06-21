@@ -48,9 +48,39 @@ trigger, run `installAllTriggers()` once after deploying.
 - **Sandbox storage.** `HassStore` feature-detects `localStorage`, falling back
   to `sessionStorage` then in-memory, so it degrades gracefully.
 
+## Responsiveness layer (feedback, skeletons, coalescing, idempotency)
+
+A thin layer that makes interactions FEEL instant and safe against
+multi-clicking. It is built on the ONE existing `API.call` wrapper (the
+`js_perf` call path) plus a presentational file that only listens; no second
+wrapper is ever added (that double-wrap was what broke and was reverted in
+PR #165).
+
+| Piece | What | Where |
+|---|---|---|
+| Instant feedback | The control that fires a call is disabled with an inline spinner and released when that call settles; a thin top progress bar shows while any call is in flight; a corner chip (Working / Fetching) explains waits past ~600ms. | `js_feedback.html` listens to `hass:call:start` / `hass:call:settle` emitted by the single `js_perf` wrapper. |
+| Skeletons | Layout-matched placeholders (`UX.skel.*`) for list / content loads (customers list, roles list, settings). Buttons keep spinners / label changes. | `js_feedback.html` (`UX.skel`, `UX.tableLoading`, `UX.panelLoading`); applied in the partials. |
+| Coalescing + debounce | Identical in-flight requests (keyed by a local signature of action + params, excluding the session token) share one promise; an identical repeat within a short grace window after settle reuses the one effective call. Distinct actions / params are never blocked. | `js_perf.html`, inside the one `API.call` wrapper. Decides reuse only; never changes the forwarded request. |
+| Write idempotency | A write may carry one optional `idempotencyKey` (reused for an identical write within 8s) so a double-fire dedupes to one record. Reads never carry a key. | Client key in `js_perf.html`; server dedupe in `20_idempotency.gs`, consulted from the dispatcher's single `_invokeHandler` choke point (never at register() time). |
+
+**Feature flags (all default on; off == current main):**
+
+- Client, set `window.HASS_UX = { coalesce:false, idempotency:false, feedback:false }`
+  before the scripts load (or flip the defaults in `js_perf.html` / `js_feedback.html`).
+  `coalesce` and `feedback` are Parts 1 to 3; `idempotency` is the independent Part 4.
+- Server, `FEATURES.WRITE_IDEMPOTENCY` in `00_constants.gs` gates the dispatcher
+  dedupe. With it off, or with no key on the params, every handler runs exactly
+  as before.
+
+**Fail open.** If anything in the coalescing / idempotency path throws, the
+underlying `API.call` still runs with the caller's original arguments, so a bug
+degrades to current behaviour and can never blank a screen. `node --check`,
+`/tmp` request-capture harnesses, and `smokeIdempotency()` cover it.
+
 ## Not changed
 
-`processRequest`, the dispatcher, RBAC, session validation, `doGet` ALLOWALL, the
-`/exec` URL, and the Cloudflare worker are untouched. Outputs are identical, only
-delivered faster. No new dependencies, no em dashes, navy/gold brand and the
-responsive shell preserved.
+`processRequest`, the dispatcher route table, RBAC, session validation, `doGet`
+ALLOWALL, the `/exec` URL, and the Cloudflare worker are untouched. Read outputs
+and payloads are identical, only delivered faster and with clearer feedback. No
+new dependencies, no em dashes, navy/gold brand and the responsive shell
+preserved.
