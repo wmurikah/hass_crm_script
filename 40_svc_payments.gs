@@ -136,5 +136,5 @@ function introspectPaymentUploads() {
 
 (function _registerPaymentsList_() {
   register({ service: 'payments', action: 'list',          permission: 'invoice.view', handler: _paymentsList_ });
-  register({ service: 'payments', action: 'initiateMpesa', permission: 'invoice.view', handler: _paymentInitiateMpesa_ });
+  register({ service: 'payments', action: 'initiateMpesa', permission: 'invoice.view', handler: Idempotency.wrap(_paymentInitiateMpesa_) });
 })();
