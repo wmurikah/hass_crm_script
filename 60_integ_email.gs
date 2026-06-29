@@ -105,5 +105,8 @@ var EmailInteg = (function () {
     }
   }
 
-  return { send: send };
+  // graphToken exposed so the email-intake scanner can READ the support mailbox
+  // through the same Microsoft Graph app credentials this module already uses to
+  // send. Returns a bearer token string or null when Graph is not configured.
+  return { send: send, graphToken: _graphToken_ };
 })();

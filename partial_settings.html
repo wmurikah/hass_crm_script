@@ -6,6 +6,8 @@ Router.register('settings', function (el) {
       '<button class="btn btn-secondary btn-sm cfgTab" data-t="branding">Branding</button>' +
       '<button class="btn btn-secondary btn-sm cfgTab" data-t="health">Health</button>' +
       (can('order.manage') ? '<button class="btn btn-secondary btn-sm cfgTab" data-t="oracle">Oracle integration</button>' : '') +
+      (can('order.manage') ? '<button class="btn btn-secondary btn-sm cfgTab" data-t="emailIntake">Email intake</button>' : '') +
+      (can('order.manage') ? '<button class="btn btn-secondary btn-sm cfgTab" data-t="whatsappIntake">WhatsApp intake</button>' : '') +
     '</div>' +
     '<div id="cfgPanel"></div>';
 
@@ -45,6 +47,10 @@ Router.register('settings', function (el) {
       }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
     } else if (_tab === 'oracle') {
       renderOraclePanel();
+    } else if (_tab === 'emailIntake') {
+      renderEmailIntakePanel();
+    } else if (_tab === 'whatsappIntake') {
+      renderWhatsappIntakePanel();
     } else {
       API.call('system', 'health', {}).then(function (h) {
         setHTML('cfgPanel', '<div class="card card-body">' +
@@ -271,5 +277,157 @@ function oracleSyncNow() {
     else { Toast.warning((r && r.message) || 'Not connected.'); }
     renderOraclePanel();
   }).catch(function (e) { if (out) out.textContent = ''; Toast.error(e.message); });
+}
+
+// ── Email intake panel (Channel A) ───────────────────────────────────────────
+// Connect the support mailbox (sign in / consent), pick a folder + frequency,
+// optional keyword->priority rules, and scan on demand. Reuses Microsoft Graph.
+function renderEmailIntakePanel() {
+  API.call('emailIntake', 'getConfig', {}).then(function (res) {
+    var c = (res && res.config) || {}, st = (res && res.status) || {}, consent = (res && res.consent_url) || '';
+    setHTML('cfgPanel', _emailIntakeHtml(c, st, consent));
+    var t = document.getElementById('eiConnect'); if (t) t.onclick = emailIntakeConnect;
+    var s = document.getElementById('eiSave');    if (s) s.onclick = emailIntakeSave;
+    var y = document.getElementById('eiScan');    if (y) y.onclick = emailIntakeScan;
+  }).catch(function (e) { setHTML('cfgPanel', errorCard(e, renderEmailIntakePanel)); });
+}
+function _emailIntakeHtml(c, st, consent) {
+  function inp(id, v, ph) { return '<input class="form-control" id="' + id + '" value="' + esc(v || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '>'; }
+  var connBadge = st.connected ? '<span class="badge badge-success">Connected</span>' : '<span class="badge badge-neutral">Not connected</span>';
+  var lastScan = st.last_scan_at ? (fmtDateTime(st.last_scan_at) + ' (' + (st.last_scan_status || '') + ', ' + (st.last_scan_count || 0) + ' new)') : 'never';
+  var kr = (c.keyword_rules || []).map(function (r) { return r.keyword + '=' + r.priority; }).join(', ');
+  return '<div class="card card-body">' +
+    '<div class="rbac-note" style="margin-bottom:14px">Reads the support mailbox through the app\'s Microsoft Graph credentials. The one-time sign-in is the Microsoft admin consent that grants the app mailbox read; click Connect to get the consent link and verify access. New emails become tickets on the schedule below.</div>' +
+    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' + connBadge +
+      '<span style="font-size:12.5px;color:var(--clr-text-light)">Graph configured: ' + (st.graph_configured ? 'yes' : 'no') + ' · Last scan: ' + esc(lastScan) + '</span></div>' +
+    (st.last_scan_error ? '<div style="color:var(--clr-danger);font-size:12px;margin-bottom:8px">Last error: ' + esc(st.last_scan_error) + '</div>' : '') +
+    '<label class="rbac-switch" style="margin:6px 0 10px"><input type="checkbox" id="eiEnabled"' + (c.enabled ? ' checked' : '') + '><span class="rbac-sw"></span><span class="rbac-switch-txt">Email intake enabled</span></label>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Support mailbox</label>' + inp('eiMailbox', c.mailbox, 'support@yourdomain.com') + '</div>' +
+      '<div class="form-group"><label class="form-label">Folder</label>' + inp('eiFolder', c.folder || 'inbox', 'inbox') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Scan every (minutes)</label>' + inp('eiFreq', c.frequency_minutes || 15, '15') + '</div>' +
+      '<div class="form-group"><label class="form-label">Notify admin email</label>' + inp('eiNotify', c.notify_email, 'defaults to the Graph sender') + '</div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Keyword to priority rules (comma separated, e.g. urgent=HIGH, outage=CRITICAL)</label>' + inp('eiRules', kr, 'urgent=HIGH, refund=HIGH') + '</div>' +
+    '<div class="form-group"><label class="form-label">Default customer id for unmatched senders (optional)</label>' + inp('eiDefaultCust', c.default_customer_id, 'leave blank to use the intake bucket') + '</div>' +
+    '<label class="rbac-switch" style="margin:2px 0 12px"><input type="checkbox" id="eiLlm"' + (c.use_llm ? ' checked' : '') + '><span class="rbac-sw"></span><span class="rbac-switch-txt">Use the LLM assistant to refine subject and priority (optional, fail-safe)</span></label>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-secondary btn-sm" id="eiConnect">Connect (sign in) and test</button>' +
+      '<button class="btn btn-secondary btn-sm" id="eiScan">Scan now</button>' +
+      '<button class="btn btn-primary btn-sm" id="eiSave">Save settings</button>' +
+    '</div>' +
+    (consent ? '<p style="font-size:12px;margin-top:8px"><a href="' + esc(consent) + '" target="_blank" rel="noopener">Open Microsoft sign-in / admin consent</a></p>' : '') +
+    '<div id="eiResult" style="font-size:12.5px;margin-top:8px"></div>' +
+  '</div>';
+}
+function _emailIntakeForm() {
+  function v(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+  function chk(id) { var el = document.getElementById(id); return el ? !!el.checked : false; }
+  var rules = v('eiRules').split(',').map(function (p) {
+    var kv = p.split('='); return { keyword: (kv[0] || '').trim(), priority: (kv[1] || '').trim().toUpperCase() };
+  }).filter(function (r) { return r.keyword; });
+  return { config: {
+    enabled: chk('eiEnabled'), mailbox: v('eiMailbox'), folder: v('eiFolder') || 'inbox',
+    frequency_minutes: parseInt(v('eiFreq'), 10) || 15, notify_email: v('eiNotify'),
+    use_llm: chk('eiLlm'), keyword_rules: rules, default_customer_id: v('eiDefaultCust')
+  } };
+}
+function emailIntakeSave() {
+  API.call('emailIntake', 'saveConfig', _emailIntakeForm())
+    .then(function () { Toast.success('Email intake settings saved.'); renderEmailIntakePanel(); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+function emailIntakeConnect() {
+  var out = document.getElementById('eiResult'); if (out) out.textContent = 'Checking access...';
+  API.call('emailIntake', 'connect', {}).then(function (r) {
+    var t = r && r.test;
+    if (out) out.innerHTML = (t && t.ok) ? '<span style="color:#16a34a">' + esc(t.message) + '</span>'
+      : '<span style="color:var(--clr-danger)">' + esc((t && t.message) || 'Not connected') + '</span>';
+  }).catch(function (e) { if (out) out.innerHTML = '<span style="color:var(--clr-danger)">' + esc(e.message) + '</span>'; });
+}
+function emailIntakeScan() {
+  var out = document.getElementById('eiResult'); if (out) out.textContent = 'Scanning...';
+  API.call('emailIntake', 'scanNow', {}).then(function (r) {
+    var res = r && r.result;
+    if (res && res.ran && res.connected !== false) Toast.success('Scan complete: ' + (res.count || 0) + ' new ticket(s).');
+    else Toast.warning((res && res.message) || 'Scan did not run.');
+    renderEmailIntakePanel();
+  }).catch(function (e) { if (out) out.textContent = ''; Toast.error(e.message); });
+}
+
+// ── WhatsApp intake panel (Channel B) ────────────────────────────────────────
+function renderWhatsappIntakePanel() {
+  API.call('whatsappIntake', 'getConfig', {}).then(function (res) {
+    setHTML('cfgPanel', _whatsappIntakeHtml((res && res.config) || {}, (res && res.status) || {}));
+    var s = document.getElementById('wiSave'); if (s) s.onclick = whatsappIntakeSave;
+    var t = document.getElementById('wiTest'); if (t) t.onclick = whatsappIntakeTest;
+  }).catch(function (e) { setHTML('cfgPanel', errorCard(e, renderWhatsappIntakePanel)); });
+}
+function _whatsappIntakeHtml(c, st) {
+  function inp(id, v, ph) { return '<input class="form-control" id="' + id + '" value="' + esc(v || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '>'; }
+  function sec(id, has, ph) { return '<input class="form-control" type="password" id="' + id + '" autocomplete="new-password" placeholder="' + (has ? 'set; leave blank to keep' : esc(ph || 'enter value')) + '">'; }
+  var connBadge = st.connected ? '<span class="badge badge-success">Configured</span>' : '<span class="badge badge-neutral">Not configured</span>';
+  var kr = (c.keyword_rules || []).map(function (r) { return r.keyword + '=' + r.priority; }).join(', ');
+  return '<div class="card card-body">' +
+    '<div class="rbac-note" style="margin-bottom:14px">Inbound WhatsApp messages arrive at a webhook (an external callback, the one exception to the in-app request rule). Register the URL and verify token below with your provider (Meta WhatsApp Cloud API, or a BSP). Messages to the configured number become tickets. Tokens are stored as secrets, never shown back.</div>' +
+    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' + connBadge +
+      '<span style="font-size:12.5px;color:var(--clr-text-light)">Last inbound: ' + (st.last_event_at ? esc(fmtDateTime(st.last_event_at)) : 'never') + ' · Tickets: ' + (st.last_event_count || 0) + '</span></div>' +
+    '<div class="form-group"><label class="form-label">Webhook callback URL (register this with your provider)</label>' +
+      '<input class="form-control" id="wiUrl" readonly value="' + esc(st.webhook_url || '') + '"><p style="font-size:11.5px;color:var(--clr-text-light);margin:4px 0 0">Replace YOUR_WEBHOOK_SECRET with the webhook secret you set below.</p></div>' +
+    '<label class="rbac-switch" style="margin:6px 0 10px"><input type="checkbox" id="wiEnabled"' + (c.enabled ? ' checked' : '') + '><span class="rbac-sw"></span><span class="rbac-switch-txt">WhatsApp intake enabled</span></label>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Provider</label><select class="form-control" id="wiProvider">' +
+        '<option value="META"' + (c.provider === 'META' ? ' selected' : '') + '>Meta WhatsApp Cloud API</option>' +
+        '<option value="TWILIO"' + (c.provider === 'TWILIO' ? ' selected' : '') + '>Twilio (BSP)</option></select></div>' +
+      '<div class="form-group"><label class="form-label">WhatsApp business number</label>' + inp('wiNumber', c.business_number, '+254...') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Phone number id</label>' + inp('wiPhoneId', c.phone_number_id, 'Meta phone_number_id') + '</div>' +
+      '<div class="form-group"><label class="form-label">Notify admin email</label>' + inp('wiNotify', c.notify_email, 'defaults to the Graph sender') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Verify token ' + (st.has_verify_token ? '(set)' : '') + '</label>' + sec('wiVerify', st.has_verify_token, 'hub.verify_token') + '</div>' +
+      '<div class="form-group"><label class="form-label">Webhook secret ' + (st.has_webhook_secret ? '(set)' : '') + '</label>' + sec('wiSecret', st.has_webhook_secret, 'shared URL secret') + '</div>' +
+    '</div>' +
+    '<div class="form-group"><label class="form-label">Provider access token ' + (st.has_access_token ? '(set)' : '') + ' (optional)</label>' + sec('wiToken', st.has_access_token, 'Meta Cloud API token') + '</div>' +
+    '<div class="form-group"><label class="form-label">Keyword to priority rules (comma separated)</label>' + inp('wiRules', kr, 'urgent=HIGH, complaint=HIGH') + '</div>' +
+    '<div class="form-group"><label class="form-label">Default customer id for unmatched senders (optional)</label>' + inp('wiDefaultCust', c.default_customer_id, 'leave blank to use the intake bucket') + '</div>' +
+    '<label class="rbac-switch" style="margin:2px 0 12px"><input type="checkbox" id="wiLlm"' + (c.use_llm ? ' checked' : '') + '><span class="rbac-sw"></span><span class="rbac-switch-txt">Use the LLM assistant to refine subject and priority (optional, fail-safe)</span></label>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-secondary btn-sm" id="wiTest">Check status</button>' +
+      '<button class="btn btn-primary btn-sm" id="wiSave">Save settings</button>' +
+    '</div>' +
+    '<div id="wiResult" style="font-size:12.5px;margin-top:8px"></div>' +
+  '</div>';
+}
+function _whatsappIntakeForm() {
+  function v(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+  function chk(id) { var el = document.getElementById(id); return el ? !!el.checked : false; }
+  var rules = v('wiRules').split(',').map(function (p) {
+    var kv = p.split('='); return { keyword: (kv[0] || '').trim(), priority: (kv[1] || '').trim().toUpperCase() };
+  }).filter(function (r) { return r.keyword; });
+  return {
+    config: {
+      enabled: chk('wiEnabled'), provider: v('wiProvider') || 'META', business_number: v('wiNumber'),
+      phone_number_id: v('wiPhoneId'), notify_email: v('wiNotify'), use_llm: chk('wiLlm'),
+      keyword_rules: rules, default_customer_id: v('wiDefaultCust')
+    },
+    verify_token: v('wiVerify'), webhook_secret: v('wiSecret'), access_token: v('wiToken')
+  };
+}
+function whatsappIntakeSave() {
+  API.call('whatsappIntake', 'saveConfig', _whatsappIntakeForm())
+    .then(function () { Toast.success('WhatsApp intake settings saved.'); renderWhatsappIntakePanel(); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+function whatsappIntakeTest() {
+  var out = document.getElementById('wiResult'); if (out) out.textContent = 'Checking...';
+  API.call('whatsappIntake', 'testWebhook', {}).then(function (r) {
+    if (out) out.innerHTML = (r && r.configured)
+      ? '<span style="color:#16a34a">' + esc(r.message) + '</span>'
+      : '<span style="color:var(--clr-warning,#b45309)">' + esc((r && r.message) || 'Not configured') + '</span>';
+  }).catch(function (e) { if (out) out.innerHTML = '<span style="color:var(--clr-danger)">' + esc(e.message) + '</span>'; });
 }
 </script>
