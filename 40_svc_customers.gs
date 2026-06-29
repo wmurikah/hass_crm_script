@@ -147,6 +147,10 @@ var Customers = (function () {
     var row   = Repo.findById('customers', customerId);
     var scope = _scopeData_(session);
     _assertRowScope_(row, 'customer', customerId, scope, session);
+    // Attach the READ-ONLY Oracle credit/hold mirror when present. Additive and
+    // defensive: the app never edits these fields, and any failure (mirror not
+    // present yet) simply leaves customers.get exactly as before.
+    try { if (row && typeof OracleCustomers !== 'undefined') row.oracle = OracleCustomers.forCustomer(row); } catch (_) {}
     return row;
   }
 
@@ -327,6 +331,8 @@ var Customers = (function () {
         used:      creditUsed,
         available: Math.max(0, creditLimit - creditUsed),
       },
+      // Read-only Oracle credit/hold mirror (null when not synced). Additive.
+      oracle: (function () { try { return OracleCustomers.forCustomer(customer); } catch (_) { return null; } })(),
     };
   }
 
