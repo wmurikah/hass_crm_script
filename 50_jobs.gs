@@ -37,6 +37,10 @@ var Jobs = (function () {
     // interval scheduled pull is the closest equivalent; it no-ops silently
     // unless the integration is enabled and configured (see runOracleApprovalsSync).
     { fn: 'runOracleApprovalsSync',  type: 'minutes', value: 10  },
+    // Scheduled Oracle customer-master pull (credit/balance/hold) into the
+    // read-only mirror. Runs hourly; the function itself honours the configured
+    // cadence (hourly/daily) and no-ops when manual or not configured.
+    { fn: 'runOracleCustomerSync',   type: 'minutes', value: 60  },
     { fn: 'keepWarm',                type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
     // Precompute the heavy GLOBAL aggregate blobs (dashboard + approval
     // leaderboards) so the common case reads a warm cache (Layer 7). Optional:
@@ -450,6 +454,28 @@ function runOracleApprovalsSync() {
       TursoClient.write(
         'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
         [Utilities.getUuid(), 'oracle_approvals', 'sync', 'FAILED', 'scheduled pull', '', String(e && e.message ? e.message : e).substring(0, 300), nowIso()]
+      );
+    } catch (_) {}
+  }
+}
+
+/**
+ * runOracleCustomerSync - scheduled pull of Oracle customer master (credit
+ * limit, balance, on-hold) into the read-only oracle_customers mirror. No-ops
+ * cleanly unless the integration is enabled and configured, and only actually
+ * pulls when the configured cadence (hourly / daily) is due; 'manual' never
+ * pulls here. Never throws (a failure is logged to integration_log).
+ */
+function runOracleCustomerSync() {
+  try {
+    if (typeof OracleCustomers === 'undefined') return;
+    if (!OracleCustomers.isConfigured()) return;   // not enabled / not configured
+    OracleCustomers.scheduledSync('SYSTEM');
+  } catch (e) {
+    try {
+      TursoClient.write(
+        'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'oracle_customers', 'sync', 'FAILED', 'scheduled pull', '', String(e && e.message ? e.message : e).substring(0, 300), nowIso()]
       );
     } catch (_) {}
   }

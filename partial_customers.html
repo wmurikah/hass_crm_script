@@ -6,8 +6,12 @@ Router.register('customers', function (el) {
       '<div class="search-input"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
         '<input type="text" id="custSearch" placeholder="Search customers…"></div>' +
       '<select class="form-control" id="custStatus"><option value="">All statuses</option><option>ACTIVE</option><option>INACTIVE</option></select>' +
-      (can('customers.create') ? '<button class="btn btn-primary btn-sm" id="custNewBtn">+ New Customer</button>' : '') +
+      // Manual entry is now clearly secondary: customer master comes from Oracle.
+      // Kept (not removed) so non-Oracle accounts can still be added; existing
+      // data is untouched. Relabelled and de-emphasised to a secondary button.
+      (can('customers.create') ? '<button class="btn btn-secondary btn-sm" id="custNewBtn" title="Customer master is synced from Oracle. Add manually only for accounts that are not in Oracle.">+ Add non-Oracle customer</button>' : '') +
     '</div>' +
+    '<p style="font-size:12px;color:var(--clr-text-light);margin:-4px 0 12px">Customer credit limit, balance and on-hold status are synced read-only from Oracle and shown on each customer. Manual entry is for non-Oracle accounts only.</p>' +
     '<div class="card"><div class="table-wrapper"><table class="data-table">' +
       '<thead><tr><th>Account</th><th>Company</th><th>Country</th><th>Type</th><th>Status</th><th>Created</th><th></th></tr></thead>' +
       '<tbody id="custBody"></tbody></table></div>' +
@@ -56,20 +60,52 @@ Router.register('customers', function (el) {
   load();
 });
 
+// Oracle credit/hold block for the customer detail modal. These figures come
+// from the read-only Oracle mirror (customers.get attaches c.oracle); Oracle is
+// the source of truth and the app never edits them.
+function _oracleCreditBlock(c) {
+  var o = c && c.oracle;
+  if (!o) {
+    return '<div style="margin-top:14px;border-top:1px solid var(--clr-border);padding-top:10px;font-size:12.5px;color:var(--clr-text-light)">' +
+      'No Oracle credit data for this customer yet. Configure and sync the Oracle integration in Settings &gt; Oracle integration.</div>';
+  }
+  var ccy = o.currency_code || c.currency_code;
+  var holdBadge = o.on_hold
+    ? '<span class="badge badge-danger">ON HOLD' + (o.hold_status ? ' (' + esc(o.hold_status) + ')' : '') + '</span>'
+    : '<span class="badge badge-success">Not on hold</span>';
+  return '<div style="margin-top:14px;border-top:1px solid var(--clr-border);padding-top:10px">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+      '<span style="font-weight:600;font-size:13px">Oracle credit &amp; status</span>' +
+      '<span class="badge badge-neutral">read-only from Oracle</span>' +
+    '</div>' +
+    '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+      '<dt style="color:#6b7280">Credit limit</dt><dd>' + (o.credit_limit == null ? '-' : fmtMoney(o.credit_limit, ccy)) + '</dd>' +
+      '<dt style="color:#6b7280">Balance / exposure</dt><dd>' + (o.balance == null ? '-' : fmtMoney(o.balance, ccy)) + '</dd>' +
+      '<dt style="color:#6b7280">On hold</dt><dd>' + holdBadge + '</dd>' +
+      '<dt style="color:#6b7280">Synced</dt><dd>' + (o.synced_at ? fmtDateTime(o.synced_at) : '-') + '</dd>' +
+    '</dl></div>';
+}
+
 function viewCustomer(id) {
   var loader = Loader.show();
   API.call('customers', 'get', { customerId: id }).then(function (c) {
     Loader.hide(loader);
+    var o = c.oracle;
+    var holdBanner = (o && o.on_hold)
+      ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:8px 12px;border-radius:8px;font-weight:600;font-size:13px;margin-bottom:10px">This customer is ON HOLD in Oracle' + (o.hold_status ? ' (' + esc(o.hold_status) + ')' : '') + '.</div>'
+      : '';
     Modal.open({
       title: c.company_name,
-      body: '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
+      body: holdBanner +
+            '<dl style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">' +
             '<dt style="color:#6b7280">Account#</dt><dd>' + esc(c.account_number) + '</dd>' +
             '<dt style="color:#6b7280">Country</dt><dd>' + esc(c.country_code) + '</dd>' +
             '<dt style="color:#6b7280">Type</dt><dd>' + esc(c.customer_type) + '</dd>' +
             '<dt style="color:#6b7280">Status</dt><dd>' + statusBadge(c.status) + '</dd>' +
-            '<dt style="color:#6b7280">Credit Limit</dt><dd>' + fmtMoney(c.credit_limit, c.currency_code) + '</dd>' +
+            '<dt style="color:#6b7280">Credit limit (local)</dt><dd>' + fmtMoney(c.credit_limit, c.currency_code) + '</dd>' +
             '<dt style="color:#6b7280">Created</dt><dd>' + fmtDate(c.created_at) + '</dd>' +
-            '</dl>',
+            '</dl>' +
+            _oracleCreditBlock(c),
       footer: '<button class="btn btn-secondary" onclick="Modal.close()">Close</button>' +
               '<button class="btn btn-primary btn-sm" onclick="Modal.close();goRoute(\'contacts\',{customerId:\'' + esc(c.customer_id) + '\'})">View Contacts</button>',
     });

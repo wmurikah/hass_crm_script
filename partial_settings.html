@@ -5,6 +5,7 @@ Router.register('settings', function (el) {
       '<button class="btn btn-secondary btn-sm cfgTab active" data-t="config">System Config</button>' +
       '<button class="btn btn-secondary btn-sm cfgTab" data-t="branding">Branding</button>' +
       '<button class="btn btn-secondary btn-sm cfgTab" data-t="health">Health</button>' +
+      (can('order.manage') ? '<button class="btn btn-secondary btn-sm cfgTab" data-t="oracle">Oracle integration</button>' : '') +
     '</div>' +
     '<div id="cfgPanel"></div>';
 
@@ -42,6 +43,8 @@ Router.register('settings', function (el) {
           (can('order.manage') ? '<button class="btn btn-primary" onclick="saveBranding()">Save</button>' : '') +
           '</div>');
       }).catch(function (e) { setHTML('cfgPanel', errorCard(e, loadTab)); });
+    } else if (_tab === 'oracle') {
+      renderOraclePanel();
     } else {
       API.call('system', 'health', {}).then(function (h) {
         setHTML('cfgPanel', '<div class="card card-body">' +
@@ -82,5 +85,191 @@ function saveBranding() {
     primary_color: document.getElementById('brColor').value.trim(),
   }).then(function () { Toast.success('Branding saved.'); })
     .catch(function (e) { Toast.error(e.message); });
+}
+
+// ── Oracle integration panel ────────────────────────────────────────────────
+// User-friendly connection + column mapping for pulling customer master from
+// Oracle. Secrets are write-only (never returned); the form shows whether a
+// secret is set and lets the admin replace it. No column name is hard-coded.
+var _oracleSrcCols = [];   // columns discovered by Test connection, for the mapping pick lists
+
+var ORC_FIELD_LABELS = {
+  customer_id:    'Customer identifier',
+  account_number: 'Account number (match key)',
+  name:           'Customer name',
+  credit_limit:   'Credit limit',
+  balance:        'Current balance / exposure',
+  on_hold:        'On-hold flag / status',
+  currency_code:  'Currency code'
+};
+var ORC_FIELD_ORDER = ['customer_id', 'account_number', 'name', 'credit_limit', 'balance', 'on_hold', 'currency_code'];
+
+function renderOraclePanel() {
+  API.call('oracle', 'getConfig', {}).then(function (res) {
+    setHTML('cfgPanel', _oraclePanelHtml((res && res.config) || {}, (res && res.status) || {}));
+    _oracleWire();
+  }).catch(function (e) { setHTML('cfgPanel', errorCard(e, renderOraclePanel)); });
+}
+
+function _orcColDatalist() {
+  return '<datalist id="orcCols">' + (_oracleSrcCols || []).map(function (c) {
+    return '<option value="' + esc(c) + '"></option>';
+  }).join('') + '</datalist>';
+}
+
+function _oraclePanelHtml(c, st) {
+  var cust = c.customers || {}; var f = cust.fields || {};
+  var connected = !!st.connected;
+  var statusBadgeHtml = connected
+    ? '<span class="badge badge-success">Connected</span>'
+    : '<span class="badge badge-neutral">Not connected</span>';
+  var holdNote = st.last_sync_error ? ('<div style="color:var(--clr-danger);font-size:12px;margin-top:6px">Last error: ' + esc(st.last_sync_error) + '</div>') : '';
+  var lastSync = st.last_sync_at
+    ? (fmtDateTime(st.last_sync_at) + ' (' + (st.last_sync_status || '') + ', ' + (st.last_sync_count || 0) + ' rows)')
+    : 'never';
+
+  function inp(id, val, ph) { return '<input class="form-control" id="' + id + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '>'; }
+  function fieldRow(key) {
+    return '<div class="form-group" style="margin:0">' +
+      '<label class="form-label">' + esc(ORC_FIELD_LABELS[key]) + (key === 'customer_id' ? ' *' : '') + '</label>' +
+      '<input class="form-control" id="orcF_' + key + '" list="orcCols" value="' + esc(f[key] || '') + '" placeholder="source column">' +
+      '</div>';
+  }
+  function opt(v, cur, label) { return '<option value="' + v + '"' + (String(cur) === v ? ' selected' : '') + '>' + label + '</option>'; }
+
+  return '<div class="card card-body">' +
+    // Reachability note (honest).
+    '<div class="rbac-note" style="margin-bottom:14px">Apps Script runs in Google\'s cloud, so it can only reach Oracle through a network-reachable endpoint (Oracle REST Data Services / ORDS, another REST gateway, or a small on-network bridge) with credentials. On-premise Oracle EBS behind a firewall is not reachable directly. The integration is read-only: it only reads from Oracle and writes to a local read-only mirror, never back to Oracle.</div>' +
+
+    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
+      statusBadgeHtml +
+      '<span style="font-size:12.5px;color:var(--clr-text-light)">Last sync: ' + esc(lastSync) + ' · Mirror rows: ' + (st.mirror_count || 0) + '</span>' +
+    '</div>' + holdNote +
+
+    // Connection
+    '<h3 style="font-size:13px;font-weight:700;margin:14px 0 8px">Connection</h3>' +
+    '<label class="rbac-switch" style="margin-bottom:10px"><input type="checkbox" id="orcEnabled"' + (c.enabled ? ' checked' : '') + '><span class="rbac-sw"></span><span class="rbac-switch-txt">Integration enabled</span></label>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Endpoint type</label>' +
+        '<select class="form-control" id="orcSourceType">' + opt('', c.source_type, '(unspecified)') + opt('ORDS', c.source_type, 'Oracle REST Data Services (ORDS)') + opt('REST', c.source_type, 'Other REST gateway') + opt('BRIDGE', c.source_type, 'On-network bridge') + '</select></div>' +
+      '<div class="form-group"><label class="form-label">Base URL / endpoint</label>' + inp('orcBaseUrl', c.base_url, 'https://host/ords/schema/') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Auth</label>' +
+        '<select class="form-control" id="orcAuthType">' + opt('none', c.auth_type, 'None') + opt('token', c.auth_type, 'Bearer token') + opt('basic', c.auth_type, 'Username and password') + opt('apikey', c.auth_type, 'API key header') + '</select></div>' +
+      '<div class="form-group" id="orcUsernameRow"><label class="form-label">Username</label>' + inp('orcUsername', c.username, '') + '</div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group" id="orcApiKeyHeaderRow"><label class="form-label">API key header name</label>' + inp('orcApiKeyHeader', c.api_key_header || 'apikey', 'apikey') + '</div>' +
+      '<div class="form-group" id="orcSecretRow"><label class="form-label">Secret ' + (st.has_secret ? '(set; leave blank to keep)' : '(token / password / API key)') + '</label>' +
+        '<input class="form-control" type="password" id="orcSecret" autocomplete="new-password" placeholder="' + (st.has_secret ? '•••••• stored' : 'enter secret') + '"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;align-items:center;margin:6px 0 4px">' +
+      '<button class="btn btn-secondary btn-sm" id="orcTestBtn">Test connection</button>' +
+      '<span id="orcTestResult" style="font-size:12.5px"></span>' +
+    '</div>' +
+
+    // Source mapping (Customers)
+    '<h3 style="font-size:13px;font-weight:700;margin:18px 0 8px">Source mapping: Customers</h3>' +
+    '<div class="form-group"><label class="form-label">Oracle table or view (or endpoint path)</label>' + inp('orcObject', cust.object, 'e.g. AR_CUSTOMERS or customers') + '</div>' +
+    '<p style="font-size:12px;color:var(--clr-text-light);margin:0 0 8px">Map each app field to a source column. Test connection first to pick from the discovered columns, or type a name. The identifier is required.</p>' +
+    '<div class="form-row">' + ORC_FIELD_ORDER.map(fieldRow).join('') + '</div>' +
+    _orcColDatalist() +
+    '<div class="form-group" style="margin-top:8px"><label class="form-label">Values that mean "on hold" (comma separated)</label>' + inp('orcHoldTrue', cust.on_hold_true_values, 'Y,YES,TRUE,1,HOLD') + '</div>' +
+
+    // Schedule + actions
+    '<h3 style="font-size:13px;font-weight:700;margin:18px 0 8px">Schedule</h3>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label class="form-label">Sync frequency</label>' +
+        '<select class="form-control" id="orcSchedule">' + opt('manual', c.schedule, 'Manual only') + opt('hourly', c.schedule, 'Hourly') + opt('daily', c.schedule, 'Daily') + '</select></div>' +
+      '<div class="form-group" style="display:flex;align-items:flex-end;gap:8px">' +
+        '<button class="btn btn-secondary btn-sm" id="orcSyncBtn" style="margin-bottom:2px">Sync now</button>' +
+        '<span id="orcSyncResult" style="font-size:12.5px"></span>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="margin-top:14px"><button class="btn btn-primary" id="orcSaveBtn">Save settings</button></div>' +
+  '</div>';
+}
+
+function _oracleWire() {
+  var authSel = document.getElementById('orcAuthType');
+  function applyAuthVisibility() {
+    var t = authSel ? authSel.value : 'none';
+    var uRow = document.getElementById('orcUsernameRow');
+    var kRow = document.getElementById('orcApiKeyHeaderRow');
+    var sRow = document.getElementById('orcSecretRow');
+    if (uRow) uRow.style.display = (t === 'basic') ? '' : 'none';
+    if (kRow) kRow.style.display = (t === 'apikey') ? '' : 'none';
+    if (sRow) sRow.style.display = (t === 'none') ? 'none' : '';
+  }
+  if (authSel) authSel.addEventListener('change', applyAuthVisibility);
+  applyAuthVisibility();
+
+  var t = document.getElementById('orcTestBtn'); if (t) t.onclick = oracleTestConn;
+  var s = document.getElementById('orcSaveBtn'); if (s) s.onclick = oracleSaveConfig;
+  var y = document.getElementById('orcSyncBtn'); if (y) y.onclick = oracleSyncNow;
+}
+
+function _oracleReadForm() {
+  function v(id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
+  function chk(id) { var el = document.getElementById(id); return el ? !!el.checked : false; }
+  return {
+    config: {
+      enabled:        chk('orcEnabled'),
+      source_type:    v('orcSourceType'),
+      base_url:       v('orcBaseUrl'),
+      auth_type:      v('orcAuthType'),
+      username:       v('orcUsername'),
+      api_key_header: v('orcApiKeyHeader'),
+      schedule:       v('orcSchedule'),
+      customers: {
+        object: v('orcObject'),
+        on_hold_true_values: v('orcHoldTrue'),
+        fields: {
+          customer_id:    v('orcF_customer_id'),
+          account_number: v('orcF_account_number'),
+          name:           v('orcF_name'),
+          credit_limit:   v('orcF_credit_limit'),
+          balance:        v('orcF_balance'),
+          on_hold:        v('orcF_on_hold'),
+          currency_code:  v('orcF_currency_code')
+        }
+      }
+    },
+    secret: v('orcSecret')   // '' leaves the stored secret unchanged
+  };
+}
+
+function oracleTestConn() {
+  var out = document.getElementById('orcTestResult');
+  if (out) out.textContent = 'Testing...';
+  API.call('oracle', 'testConnection', _oracleReadForm()).then(function (r) {
+    if (r && r.ok) {
+      _oracleSrcCols = r.columns || [];
+      var dl = document.getElementById('orcCols');
+      if (dl) dl.innerHTML = (_oracleSrcCols).map(function (col) { return '<option value="' + esc(col) + '"></option>'; }).join('');
+      if (out) out.innerHTML = '<span style="color:#16a34a">Connected. ' + esc(r.message || '') + '</span>';
+    } else if (out) {
+      out.innerHTML = '<span style="color:var(--clr-danger)">Failed: ' + esc((r && r.message) || 'Unknown error') + '</span>';
+    }
+  }).catch(function (e) { if (out) out.innerHTML = '<span style="color:var(--clr-danger)">Failed: ' + esc(e.message) + '</span>'; });
+}
+
+function oracleSaveConfig() {
+  API.call('oracle', 'saveConfig', _oracleReadForm())
+    .then(function () { Toast.success('Oracle settings saved.'); renderOraclePanel(); })
+    .catch(function (e) { Toast.error(e.message); });
+}
+
+function oracleSyncNow() {
+  var out = document.getElementById('orcSyncResult');
+  if (out) out.textContent = 'Syncing...';
+  API.call('oracle', 'syncNow', {}).then(function (r) {
+    if (out) out.textContent = '';
+    if (r && r.connected) { Toast.success('Synced ' + (r.count || 0) + ' customers from Oracle.'); }
+    else { Toast.warning((r && r.message) || 'Not connected.'); }
+    renderOraclePanel();
+  }).catch(function (e) { if (out) out.textContent = ''; Toast.error(e.message); });
 }
 </script>
