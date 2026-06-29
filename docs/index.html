@@ -4,53 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hass CMS</title>
+
+  <!--
+    First-party redirect to the app.
+
+    This page used to embed the app in a cross-origin <iframe> in order to crop
+    the Google Apps Script banner. That broke on mobile: the embedded Apps
+    Script content runs its session and its google.script.run RPC on
+    script.googleusercontent.com, so the Google session cookie was a THIRD-PARTY
+    cookie relative to this page. Mobile browsers (iOS Safari, Chrome on
+    Android) block third-party cookies by default, so Google could not establish
+    the session and served "Sorry, unable to open the file at present". Desktop,
+    which still allows third-party cookies, kept working.
+
+    Sending the browser to the app at the TOP level (first-party) removes that
+    third-party-cookie dependency, so it loads on mobile. The Apps Script banner
+    is no longer cropped; loading on mobile takes priority over hiding it.
+
+    The destination is the same clean Worker URL as before; the Worker now
+    redirects on to the GAS /exec endpoint (unchanged) instead of being framed.
+  -->
+  <meta http-equiv="refresh" content="0; url=https://hass-cms-proxy.hasspe.workers.dev/">
+  <script>
+    // Use replace() so the redirect does not leave a back-button trap.
+    try { window.location.replace('https://hass-cms-proxy.hasspe.workers.dev/'); } catch (e) {}
+  </script>
   <style>
-    :root {
-      /* Height (px) of the "This application was created by a Google Apps
-         Script user" banner. MEASURE the real value in DevTools and edit this
-         single number — see the README note below. 36px is a starting guess. */
-      --banner: 36px;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;            /* clip the banner we push off-screen */
-      background: #fff;
-    }
-
-    .frame-wrap {
-      position: fixed;
-      inset: 0;                    /* fill the entire viewport */
-      overflow: hidden;
-    }
-
-    .frame-wrap iframe {
-      position: absolute;
-      left: 0;
-      width: 100%;
-      border: 0;
-      /* Pull the iframe UP by --banner so the banner row is clipped above the
-         visible area, and grow its height by the same amount so the bottom of
-         the app still reaches the bottom of the viewport. */
-      top: calc(-1 * var(--banner));
-      height: calc(100% + var(--banner));
-    }
+    html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .msg { display: flex; align-items: center; justify-content: center; height: 100%; color: #1F2A44; }
+    a { color: #1F2A44; }
   </style>
 </head>
 <body>
-  <div class="frame-wrap">
-    <!--
-      src is the CLEAN Cloudflare worker URL. The worker 302-redirects to the
-      GAS /exec endpoint; the iframe follows that redirect transparently. The
-      GAS app must have setXFrameOptionsMode(ALLOWALL) set (see doGet in
-      30_router.gs) or this frame renders blank.
-    -->
-    <iframe
-      src="https://hass-cms-proxy.hasspe.workers.dev/"
-      title="Hass CMS"
-      allow="clipboard-read; clipboard-write"></iframe>
+  <div class="msg">
+    <p>Loading Hass CMS. If you are not redirected automatically,
+       <a href="https://hass-cms-proxy.hasspe.workers.dev/">tap here to continue</a>.</p>
   </div>
 </body>
 </html>
