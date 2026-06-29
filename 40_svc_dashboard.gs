@@ -43,19 +43,13 @@ function _dashScopeClause_(scope, tableAlias) {
   return { clause: ' AND ' + alias + 'country_code IN (' + ph + ')', args: scope.countries.slice() };
 }
 
-// Six month buckets ending with the current month, oldest first, as 'YYYY-MM'.
-// Built in UTC so the labels line up with SQLite's strftime('%Y-%m', created_at),
-// which also evaluates the ISO-UTC timestamps in UTC. Using the first-of-month
-// avoids the day-overflow that plain month arithmetic hits (e.g. Mar 31 -> Feb).
-function _dashLast6Months_() {
-  var out = [];
+// The current calendar month as a single 'YYYY-MM' bucket, built in UTC so the
+// label lines up with SQLite's strftime('%Y-%m', created_at), which also
+// evaluates the ISO-UTC timestamps in UTC. Computed server-side; rolls over into
+// the next month automatically with no code change.
+function _dashCurrentMonth_() {
   var now = new Date();
-  var y = now.getUTCFullYear(), m = now.getUTCMonth();
-  for (var i = 5; i >= 0; i--) {
-    var dt = new Date(Date.UTC(y, m - i, 1));
-    out.push(dt.getUTCFullYear() + '-' + ('0' + (dt.getUTCMonth() + 1)).slice(-2));
-  }
-  return out;
+  return [ now.getUTCFullYear() + '-' + ('0' + (now.getUTCMonth() + 1)).slice(-2) ];
 }
 
 // ── Aggregate-cache helpers (Layer 7) ───────────────────────────────────────
@@ -181,10 +175,11 @@ function _dashTicketsPulse_(ctx, params) {
 // country-scoped via the session (same RBAC as the rest of the dashboard);
 // GLOBAL roles see all, COUNTRY roles see only countryCode + countries_access.
 //
-// Returns:
-//   ordersByMonth:   [{ month:'YYYY-MM', count }]              // last 6 months, line
-//   revenueByMonth:  { months:[...], currencies:[...],          // last 6 months, bar
-//                      series:{ CCY:[..6 numbers..] } }         //   grouped PER currency
+// Every series is bound to the CURRENT CALENDAR MONTH (server-side; see MONTH
+// below). Returns:
+//   ordersByMonth:   [{ month:'YYYY-MM', count }]              // current month, line
+//   revenueByMonth:  { months:[...], currencies:[...],          // current month, bar
+//                      series:{ CCY:[..numbers..] } }           //   grouped PER currency
 //   ordersByCountry: [{ country, label, count }]                // active countries, h-bar
 //   ticketsByStatus: [{ status, count }]                        // five statuses, doughnut
 //
@@ -195,34 +190,44 @@ function _dashTicketsPulse_(ctx, params) {
 function _dashCharts_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _dashScopeData_(ctx.session);
-  return AggCache.getOrSet('dash.charts', _dashSig_(scope), _DASH_CHARTS_TTL_, function () {
+  // Charts are bound to the current calendar month. Fold the month into the
+  // cache signature so the cached series flips cleanly at the month boundary
+  // (rolls over with no code change), not only when the short TTL lapses.
+  var monthKey = _dashCurrentMonth_()[0];
+  return AggCache.getOrSet('dash.charts', _dashSig_(scope) + '|m=' + monthKey, _DASH_CHARTS_TTL_, function () {
     return _dashChartsCompute_(scope);
   });
 }
 
 function _dashChartsCompute_(scope) {
   var sc     = _dashScopeClause_(scope, '');          // orders & tickets both carry country_code
-  var months = _dashLast6Months_();
+  var months = _dashCurrentMonth_();
   // Confirmed revenue only: exclude draft/cancelled/rejected so the bar reflects
   // booked order value, not abandoned or voided orders.
   var REV_EXCLUDE = "status NOT IN ('DRAFT','CANCELLED','REJECTED')";
+  // Every chart is bound to the current calendar month (first of the month at
+  // 00:00 to now), computed server-side in SQL so it rolls over automatically.
+  // date('now','start of month') is the first of the current month in UTC,
+  // matching strftime('%Y-%m', created_at). The detail lists and the stored
+  // rows are NOT bound here; only these chart aggregates are.
+  var MONTH = "date(created_at) >= date('now','start of month')";
 
   var res = TursoClient.batch([
-    // 0: orders created per month (all statuses = order activity)
+    // 0: orders created this month (all statuses = order activity)
     { sql: "SELECT strftime('%Y-%m', created_at) AS ym, COUNT(*) AS n FROM orders " +
-           "WHERE date(created_at) >= date('now','start of month','-5 months')" + sc.clause +
+           "WHERE " + MONTH + sc.clause +
            " GROUP BY ym", args: sc.args },
-    // 1: confirmed revenue per month PER currency (never summed across currencies)
+    // 1: confirmed revenue this month PER currency (never summed across currencies)
     { sql: "SELECT strftime('%Y-%m', created_at) AS ym, UPPER(COALESCE(currency_code,'')) AS ccy, " +
            "COALESCE(SUM(total_amount),0) AS revenue FROM orders " +
-           "WHERE date(created_at) >= date('now','start of month','-5 months') AND " + REV_EXCLUDE + sc.clause +
+           "WHERE " + MONTH + " AND " + REV_EXCLUDE + sc.clause +
            " GROUP BY ym, ccy", args: sc.args },
-    // 2: orders by country
+    // 2: orders by country (this month)
     { sql: "SELECT UPPER(COALESCE(country_code,'')) AS cc, COUNT(*) AS n FROM orders " +
-           "WHERE 1=1" + sc.clause + " GROUP BY cc", args: sc.args },
-    // 3: tickets by status
+           "WHERE " + MONTH + sc.clause + " GROUP BY cc", args: sc.args },
+    // 3: tickets by status (created this month)
     { sql: "SELECT UPPER(COALESCE(status,'')) AS st, COUNT(*) AS n FROM tickets " +
-           "WHERE 1=1" + sc.clause + " GROUP BY st", args: sc.args }
+           "WHERE " + MONTH + sc.clause + " GROUP BY st", args: sc.args }
   ]);
 
   // Country code -> display name, read defensively from the reference table so an

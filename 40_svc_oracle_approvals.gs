@@ -117,6 +117,27 @@ function _oaHas_(v) { return v !== null && v !== undefined && String(v).trim() !
 function _isPoFinal_(s) { return /APPROVED|REJECT|CANCEL|COMPLETE|CLOSED/i.test(String(s || '')); }
 function _isSoApproved_(s) { return /APPROV|COMPLETE|CLOSED|RELEASED/i.test(String(s || '')); }
 
+// ── Current-calendar-month bound for the dashboard charts/leaderboards ────────
+// The PO/SO dates are stored verbatim in many formats and parsed in JS by
+// _oaMs_ (local time), so the month bound is applied in JS too: only documents
+// whose submission date is on or after the first of the current month are
+// counted. Computed server-side; rolls over into the next month automatically.
+// This bounds the CHARTS and LEADERBOARDS only; the drill-down list keeps full
+// history.
+function _oaMonthStartMs_() {
+  var now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+}
+function _oaInCurrentMonth_(raw, monthStartMs) {
+  var t = _oaMs_(raw);
+  return !isNaN(t) && t >= monthStartMs;   // unparseable dates are excluded
+}
+// Current month as 'YYYY-MM' for the aggregate-cache signature (clean rollover).
+function _oaMonthKey_() {
+  var now = new Date();
+  return now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+}
+
 // Minimal server-side HTML escape for the email body (client has its own esc()).
 function _oaEsc_(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -365,18 +386,21 @@ function _oaCharts_(ctx, params) {
   var scope = _oaScope_(ctx.session);
   var stageNo = parseInt(params && params.stage, 10);
   var stageKey = (!isNaN(stageNo) && stageNo >= 1 && stageNo <= 7) ? String(stageNo) : '';
-  return AggCache.getOrSet('oa.charts', _oaSig_(scope) + '|s=' + stageKey, _OA_AGG_TTL_, function () {
+  return AggCache.getOrSet('oa.charts', _oaSig_(scope) + '|s=' + stageKey + '|m=' + _oaMonthKey_(), _OA_AGG_TTL_, function () {
     return _oaChartsCompute_(scope, params || {});
   });
 }
 
 function _oaChartsCompute_(scope, params) {
   var P = _oaCols_().po;
+  var monthStart = _oaMonthStartMs_();   // current-month bound (charts only)
 
   // PO: per-step time per approver (optional stage 1..7), and which stages exist.
+  // Only documents submitted in the current calendar month are counted.
   var poMeas = [], stageSet = {};
   if (P.pk) {
     _poRows_('', [], OA_MAX_SCAN).forEach(function (row) {
+      if (!_oaInCurrentMonth_(P.submission ? row[P.submission] : null, monthStart)) return;
       _poSteps_(row, P).forEach(function (s) {
         stageSet[s.step_no] = true;
         if (!s.is_pending && s.approver_name && s.duration_minutes != null) {
@@ -392,7 +416,10 @@ function _oaChartsCompute_(scope, params) {
   var poStages = Object.keys(stageSet).map(Number).filter(function (n) { return n >= 1 && n <= 7; }).sort(function (a, b) { return a - b; });
 
   // SO: deduped to document level, scope-filtered, finance approval per approver.
-  var soDocs = _soDocsDeduped_('', [], OA_SO_DOC_CAP).filter(function (d) { return _soVisible_(d.affiliate, scope); });
+  // Only documents created (submitted) in the current calendar month are counted.
+  var soDocs = _soDocsDeduped_('', [], OA_SO_DOC_CAP).filter(function (d) {
+    return _soVisible_(d.affiliate, scope) && _oaInCurrentMonth_(d.create_dt, monthStart);
+  });
   var soMeas = [];
   soDocs.forEach(function (d) {
     var fv = _oaNum_(d.finance_var);
@@ -452,7 +479,7 @@ function _rankApprovers_(meas) {
 function _oaLeaderboard_(ctx, params) {
   Rbac.requirePermission(ctx.session, 'order.view');
   var scope = _oaScope_(ctx.session);
-  return AggCache.getOrSet('oa.leaderboard', _oaSig_(scope), _OA_AGG_TTL_, function () {
+  return AggCache.getOrSet('oa.leaderboard', _oaSig_(scope) + '|m=' + _oaMonthKey_(), _OA_AGG_TTL_, function () {
     return _oaLeaderboardCompute_(scope);
   });
 }
@@ -460,10 +487,12 @@ function _oaLeaderboard_(ctx, params) {
 function _oaLeaderboardCompute_(scope) {
   var P = _oaCols_().po;
   var targets = _oaTargetsObj_();
+  var monthStart = _oaMonthStartMs_();   // current-month bound (leaderboards only)
 
   var poMeas = [];
   if (P.pk) {
     _poRows_('', [], OA_MAX_SCAN).forEach(function (row) {
+      if (!_oaInCurrentMonth_(P.submission ? row[P.submission] : null, monthStart)) return;
       _poSteps_(row, P).forEach(function (s) {
         if (s.step_type === 'APPROVAL' && !s.is_pending && s.approver_name && s.duration_minutes != null) {
           poMeas.push({ approver: s.approver_name, minutes: s.duration_minutes, target: _targetFor_(targets, 'PO', s.stage_label, 'APPROVAL') });
@@ -474,6 +503,7 @@ function _oaLeaderboardCompute_(scope) {
   var soMeas = [];
   _soDocsDeduped_('', [], OA_SO_DOC_CAP).forEach(function (d) {
     if (!_soVisible_(d.affiliate, scope)) return;
+    if (!_oaInCurrentMonth_(d.create_dt, monthStart)) return;
     var fv = _oaNum_(d.finance_var);
     if (_oaHas_(d.approver) && fv != null) {
       soMeas.push({ approver: d.approver, minutes: fv, target: _targetFor_(targets, 'SO', 'Approval', 'APPROVAL') });
