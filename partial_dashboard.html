@@ -398,7 +398,7 @@ Router.register('dashboard', function (el) {
 
     // ── Panel bodies (canvas when Chart.js is ready, calm/fallback otherwise) ──
     var ordersBody = ordersTotal === 0
-      ? ovwCalm('No orders in the last 6 months yet.')
+      ? ovwCalm('No orders this month yet.')
       : (chartOk ? '<canvas id="ovwOrdersCv"></canvas>'
                  : ovwFallback(om.map(function (r) { return { label: monthShort(r.month), val: r.count }; })));
 
@@ -409,28 +409,28 @@ Router.register('dashboard', function (el) {
         '</select>'
       : '';
     var revBody = !hasRevenue
-      ? ovwCalm('No revenue in the last 6 months yet.')
+      ? ovwCalm('No revenue this month yet.')
       : (chartOk ? '<canvas id="ovwRevenueCv"></canvas>'
                  : ovwFallback((rev.months || []).map(function (m, i) { return { label: monthShort(m), val: (rev.series[defCcy] || [])[i] || 0 }; }),
                                function (v) { return fmtMoney(v, defCcy); }));
 
     var countryBody = countryTotal === 0
-      ? ovwCalm('No orders by country yet.')
+      ? ovwCalm('No orders by country this month yet.')
       : (chartOk ? '<canvas id="ovwCountryCv"></canvas>'
                  : ovwFallback(oc.map(function (r) { return { label: r.label, val: r.count }; })));
 
     var ticketsBody = ticketTotal === 0
-      ? ovwCalm('No tickets yet.')
+      ? ovwCalm('No tickets this month yet.')
       : (chartOk ? '<canvas id="ovwTicketsCv"></canvas>'
                  : ovwFallback(ts.map(function (r) { return { label: _cap(r.status), val: r.count }; })));
 
-    var revSub = hasRevenue ? ('Confirmed order value per month, ' + defCcy) : 'Confirmed order value per month';
+    var revSub = hasRevenue ? ('Confirmed order value this month, ' + defCcy) : 'Confirmed order value this month';
 
     setHTML('ovwGrid',
-      ovwPanel('Orders over time', 'Orders created per month, last 6 months', ordersBody) +
-      ovwPanel('Revenue by month', revSub, revBody, revHead) +
-      ovwPanel('Orders by country', 'Active countries by order count', countryBody) +
-      ovwPanel('Tickets by status', 'Spread across the five lifecycle statuses', ticketsBody)
+      ovwPanel('Orders this month', 'Orders created in the current month', ordersBody) +
+      ovwPanel('Revenue this month', revSub, revBody, revHead) +
+      ovwPanel('Orders by country', 'Active countries this month by order count', countryBody) +
+      ovwPanel('Tickets by status', 'This month, across the five lifecycle statuses', ticketsBody)
     );
 
     if (!chartOk) return;   // fallbacks already rendered; nothing to instantiate

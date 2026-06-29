@@ -136,7 +136,7 @@ var ApprovalsUI = (function () {
     destroyCharts();
     el.innerHTML =
       '<div class="apx-head">' +
-        '<h2 class="apx-title">Approvals (PO / SO)</h2>' +
+        '<h2 class="apx-title">Approvals (PO / LA)</h2>' +
         '<div class="apx-actions">' +
           '<button class="btn btn-secondary btn-sm" id="apxRefresh">Refresh</button>' +
           (can('order.manage') ? '<button class="btn btn-secondary btn-sm" id="apxTargets">Edit targets</button>' : '') +
@@ -188,7 +188,7 @@ var ApprovalsUI = (function () {
 
     setHTML('apxChartsGrid',
       card('PO approvals by approver', poSub, po.length ? '<canvas id="apxPoCv"></canvas>' : calm('No PO approvals loaded yet.'), stageSel) +
-      card('SO approvals by approver', soSub, so.length ? '<canvas id="apxSoCv"></canvas>' : calm('No SO approvals loaded yet.')));
+      card('LA approvals by approver', soSub, so.length ? '<canvas id="apxSoCv"></canvas>' : calm('No LA approvals loaded yet.')));
 
     var sel = document.getElementById('apxStageSel');
     if (sel) sel.onchange = function () { _dashStage = this.value; loadCharts(); };
@@ -253,10 +253,13 @@ var ApprovalsUI = (function () {
     var sub = configured ? 'Fastest and most on-time first' : 'Fastest first (on-time targets not configured)';
     setHTML('apxLbGrid',
       card('PO leaderboard', sub, lbTable(d.po || [], 'PO', configured), '', 'lb') +
-      card('SO leaderboard', sub, lbTable(d.so || [], 'SO', configured), '', 'lb'));
+      card('LA leaderboard', sub, lbTable(d.so || [], 'SO', configured, 'LA'), '', 'lb'));
   }
-  function lbTable(rows, docType, configured) {
-    if (!rows.length) return calm('No ' + docType + ' approver data yet.');
+  // docType stays the real 'PO'/'SO' (it drives drillApprover -> backend
+  // doc_type); `label` is the display-only name, so the SO views read "LA".
+  function lbTable(rows, docType, configured, label) {
+    label = label || docType;
+    if (!rows.length) return calm('No ' + label + ' approver data yet.');
     var body = rows.map(function (r) {
       var medal = r.rank <= 3 ? '<span class="apx-medal g' + r.rank + '">' + r.rank + '</span>' : String(r.rank);
       var rate;
