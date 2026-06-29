@@ -41,6 +41,10 @@ var Jobs = (function () {
     // read-only mirror. Runs hourly; the function itself honours the configured
     // cadence (hourly/daily) and no-ops when manual or not configured.
     { fn: 'runOracleCustomerSync',   type: 'minutes', value: 60  },
+    // Outlook email intake scan (Channel A). The trigger fires every 5 minutes;
+    // runEmailIntakeScan honours the admin's chosen frequency and no-ops when the
+    // intake is not enabled / not configured. New emails become tickets.
+    { fn: 'runEmailIntakeScan',      type: 'minutes', value: 5   },
     { fn: 'keepWarm',                type: 'minutes', value: 1   },  // anti-cold-start ping (see installKeepWarmTrigger)
     // Precompute the heavy GLOBAL aggregate blobs (dashboard + approval
     // leaderboards) so the common case reads a warm cache (Layer 7). Optional:
@@ -454,6 +458,27 @@ function runOracleApprovalsSync() {
       TursoClient.write(
         'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
         [Utilities.getUuid(), 'oracle_approvals', 'sync', 'FAILED', 'scheduled pull', '', String(e && e.message ? e.message : e).substring(0, 300), nowIso()]
+      );
+    } catch (_) {}
+  }
+}
+
+/**
+ * runEmailIntakeScan - the scheduled Outlook email-intake scan (Channel A).
+ * No-ops cleanly unless enabled and configured, and only scans when the admin's
+ * chosen frequency is due. Each new email becomes a ticket through the shared
+ * Intake pipeline, deduplicated by message id + a receivedDateTime checkpoint.
+ * Never throws (a failure is logged to integration_log).
+ */
+function runEmailIntakeScan() {
+  try {
+    if (typeof EmailIntake === 'undefined') return;
+    EmailIntake.scheduledScan('SYSTEM');
+  } catch (e) {
+    try {
+      TursoClient.write(
+        'INSERT INTO integration_log (log_id,integration,action,status,request_summary,response_summary,error_message,created_at) VALUES (?,?,?,?,?,?,?,?)',
+        [Utilities.getUuid(), 'email_intake', 'scan', 'FAILED', 'scheduled scan', '', String(e && e.message ? e.message : e).substring(0, 300), nowIso()]
       );
     } catch (_) {}
   }

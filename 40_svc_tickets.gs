@@ -606,6 +606,55 @@ var Tickets = (function () {
     return { escalation_level: newLevel, reassigned_to: reassigned };
   }
 
+  // Trusted server-side ticket creation for inbound intake (email / WhatsApp).
+  // Reuses the SAME ticket numbering, SLA stamping, first-comment and audit as
+  // the user-facing create handler, so there is NO second ticket path. It is not
+  // a dispatcher action and is only ever called by the server intake pipeline
+  // (no user request), so it does not run the interactive RBAC/scope gate.
+  function intakeCreate(opts) {
+    opts = opts || {};
+    var customerId = String(opts.customer_id || '');
+    if (!customerId) throw new Errors.Validation('customer_id required for intake ticket.');
+    var custRows = TursoClient.select(
+      'SELECT customer_id, country_code, status FROM customers WHERE customer_id = ? LIMIT 1', [customerId]);
+    if (!custRows.length) throw new Errors.NotFound('Customer not found for intake.');
+    var customer = custRows[0];
+
+    var subject = String(opts.subject || '').trim();
+    if (subject.length < 5) subject = (subject || 'Inbound message') + ' (intake)';
+    subject = subject.slice(0, 200);
+    var priority = String(opts.priority || 'MEDIUM').toUpperCase();
+    if (['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].indexOf(priority) === -1) priority = 'MEDIUM';
+    var category = (String(opts.category || '').trim().toUpperCase()) || 'GENERAL';
+    var actor    = String(opts.actor || 'SYSTEM');
+
+    var ticketId     = genId('TKT');
+    var ticketNumber = _generateTicketNumber_(customer.country_code);
+    var now          = nowIso();
+
+    TursoClient.write(
+      'INSERT INTO tickets ' +
+      '(ticket_id, ticket_number, customer_id, contact_id, category, subcategory, ' +
+      'subject, description, priority, status, assigned_to, assigned_team_id, ' +
+      'country_code, escalation_level, created_by, created_at, updated_at) ' +
+      'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?)',
+      [ ticketId, ticketNumber, customerId, opts.contact_id || null, category,
+        String(opts.subcategory || ''), subject, String(opts.description || ''),
+        priority, 'NEW', null, null, customer.country_code, actor, now, now ]
+    );
+    _stampSlaDeadlines_(ticketId, priority, customer.country_code, now);
+    if (opts.description) {
+      try { _insertComment_({ session: { userId: actor, userType: 'SYSTEM' } }, ticketId, String(opts.description), { now: now }); } catch (_) {}
+    }
+    try {
+      Audit.log({ actor: actor, action: 'TICKET_CREATED', entity: 'tickets', entityId: ticketId,
+        after: { ticket_number: ticketNumber, customer_id: customerId, category: category,
+                 priority: priority, source: opts.source || 'INTAKE' } });
+    } catch (_) {}
+    return { ticket_id: ticketId, ticket_number: ticketNumber, status: 'NEW',
+             priority: priority, customer_id: customerId, country_code: customer.country_code };
+  }
+
   return {
     _listHandler_:      _listHandler_,
     _getHandler_:       _getHandler_,
@@ -619,6 +668,8 @@ var Tickets = (function () {
     _reopenHandler_:    _reopenHandler_,
     // Shared escalation effect, reused by the SLA breach sweep (50_jobs.gs).
     escalateCore:       _escalateTicketCore_,
+    // Trusted creator reused by the inbound intake pipeline (60_integ_intake.gs).
+    intakeCreate:       intakeCreate,
   };
 
 })();

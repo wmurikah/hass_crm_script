@@ -40,6 +40,23 @@ var _PAGE_TEMPLATES_ = {
 
 function doGet(e) {
   var params       = (e && e.parameter) || {};
+
+  // ── Inbound WhatsApp webhook verification handshake (Channel B) ──────────────
+  // Meta verifies a webhook subscription with a GET carrying hub.mode /
+  // hub.verify_token / hub.challenge. Echo the challenge ONLY when the verify
+  // token matches the stored one. This activates only when hub.mode is present
+  // (or hook=whatsapp), so normal page routing below is untouched and doGet keeps
+  // ALLOWALL. It is the read side of the sanctioned external-callback exception.
+  try {
+    if ((params['hub.mode'] !== undefined || params.hub_mode !== undefined || params.hook === 'whatsapp') &&
+        typeof WhatsappIntake !== 'undefined') {
+      var _waChallenge = WhatsappIntake.verifyChallenge(params);
+      return ContentService
+        .createTextOutput(_waChallenge !== null ? _waChallenge : 'Forbidden')
+        .setMimeType(ContentService.MimeType.TEXT);
+    }
+  } catch (_) {}
+
   var page         = String(params.page || 'login').toLowerCase().trim();
   var templateName = _PAGE_TEMPLATES_[page] || 'Login';
 
@@ -126,6 +143,29 @@ function doPost(e) {
     }
   } catch (mpHookErr) {
     return _routerJson_({ ResultCode: 0, ResultDesc: 'Accepted' });
+  }
+
+  // ── Inbound WhatsApp message webhook (Channel B, INTAKE) ─────────────────────
+  // The other sanctioned doPost exception: an external provider callback. Gated
+  // by the shared ?secret= URL gate AND the provider verify token (set at
+  // registration). It accepts messages only for the configured number and
+  // creates tickets ONLY through the shared Intake pipeline. We always reply 200
+  // so the provider stops retrying; a bad secret yields ok:false and creates
+  // nothing. Every other request falls through to processRequest unchanged.
+  try {
+    var wp = (e && e.parameter) || {};
+    if (wp.hook === 'whatsapp') {
+      var waRaw = e && e.postData ? e.postData.contents : '';
+      var ack = { ok: false, processed: 0 };
+      try {
+        if (typeof WhatsappIntake !== 'undefined') ack = WhatsappIntake.handleWebhook(wp, waRaw);
+      } catch (waErr) {
+        try { Log.error({ service: 'router', action: 'whatsappWebhook', msg: waErr.message }); } catch (_) {}
+      }
+      return _routerJson_({ ok: !!ack.ok, processed: ack.processed || 0 });
+    }
+  } catch (waHookErr) {
+    return _routerJson_({ ok: true });
   }
 
   var result = processRequest(e && e.postData ? e.postData.contents : '{}');
