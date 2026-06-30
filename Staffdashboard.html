@@ -467,10 +467,16 @@
     dashboard: 'overview',
     orders: 'sales', pricing: 'sales', catalog: 'sales',
     customers: 'customers', documents: 'customers', signups: 'customers',
-    invoices: 'finance', payments: 'finance', approvals: 'finance', approvalsadmin: 'finance',
+    invoices: 'finance', payments: 'finance', approvals: 'finance',
     tickets: 'support', knowledge: 'support', sla: 'support',
     reports: 'insights',
-    users: 'admin', rbac: 'admin', branding: 'admin', audit: 'admin', botconfig: 'admin', config: 'admin'
+    // Admin: user/role/system administration AND the integration / settings
+    // surfaces. approvalsadmin (the Approvals Oracle PO/SO integration) and
+    // settings (the multi-section Settings surface that holds the Oracle
+    // customer, Email intake and WhatsApp intake panels) live here so every
+    // config/integration panel is reachable under one group.
+    users: 'admin', rbac: 'admin', branding: 'admin', audit: 'admin', botconfig: 'admin', config: 'admin',
+    approvalsadmin: 'admin', settings: 'admin'
   };
   var NAV_FALLBACK_GROUP = 'more';   // any unmapped item lands here, never dropped
 

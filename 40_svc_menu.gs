@@ -38,6 +38,12 @@ var _MENU_ITEMS_ = [
   { id: 'signups',     label: 'Sign-up Requests', icon: 'user-plus',   route: 'signups',     permission: 'user.create',       group: 'admin' },
   { id: 'config',      label: 'System Config',   icon: 'settings',     route: 'config',      permission: 'order.manage',      group: 'admin' },
   { id: 'branding',    label: 'Branding',        icon: 'image',        route: 'branding',    permission: 'order.manage',      group: 'admin' },
+  // The multi-section Settings surface (route 'settings' -> partial_settings.html):
+  // Config, Branding, Health AND the integration panels (Oracle customer
+  // integration, Email intake, WhatsApp intake). It had no menu entry, so those
+  // integration panels were unreachable from the sidebar. Gated by order.manage,
+  // the same code its own tabs/actions require, so visibility and access agree.
+  { id: 'settings',    label: 'Settings & Integrations', icon: 'settings', route: 'settings', permission: 'order.manage',      group: 'admin' },
 ];
 
 // ── menu.list ─────────────────────────────────────────────────────────────────
